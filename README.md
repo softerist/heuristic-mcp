@@ -8,6 +8,8 @@ AI coding assistants work better when they can find relevant code quickly. Tradi
 
 This MCP server solves that by indexing your codebase with AI embeddings. Your AI assistant can search by meaning instead of exact keywords, finding relevant code even when the terminology differs.
 
+![Example](example.png)
+
 ## Why Use This
 
 **Better Code Understanding**
