@@ -38,7 +38,15 @@ npm install -g smart-coding-mcp
 
 ## Configuration
 
-Add to your MCP configuration file (e.g., `~/.config/claude/mcp.json` or similar):
+Add to your MCP configuration file. The location depends on your IDE and OS:
+
+| IDE                  | OS      | Config Path                                                       |
+| -------------------- | ------- | ----------------------------------------------------------------- |
+| **Claude Desktop**   | macOS   | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| **Claude Desktop**   | Windows | `%APPDATA%\Claude\claude_desktop_config.json`                     |
+| **Cascade (Cursor)** | All     | configured via UI settings                                        |
+
+Add the server configuration to the `mcpServers` object in your config file:
 
 ### Option 1: Specific Project (Recommended)
 
