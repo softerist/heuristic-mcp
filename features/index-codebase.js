@@ -166,7 +166,7 @@ export class CodebaseIndexer {
 // MCP Tool definition for this feature
 export function getToolDefinition() {
   return {
-    name: "index_codebase",
+    name: "b_index_codebase",
     description: "Manually trigger a full reindex of the codebase. This will scan all files and update the embeddings cache. Useful after large code changes or if the index seems out of date.",
     inputSchema: {
       type: "object",

@@ -73,7 +73,7 @@ export class HybridSearch {
 // MCP Tool definition for this feature
 export function getToolDefinition(config) {
   return {
-    name: "semantic_search",
+    name: "a_semantic_search",
     description: "Performs intelligent hybrid code search combining semantic understanding with exact text matching. Ideal for finding code by meaning (e.g., 'authentication logic', 'database queries') even with typos or variations. Returns the most relevant code snippets with file locations and line numbers.",
     inputSchema: {
       type: "object",

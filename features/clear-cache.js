@@ -16,7 +16,7 @@ export class CacheClearer {
 
 export function getToolDefinition() {
   return {
-    name: "clear_cache",
+    name: "c_clear_cache",
     description: "Clears the embeddings cache, forcing a complete reindex on next search or manual index operation. Useful when encountering cache corruption or after major codebase changes.",
     inputSchema: {
       type: "object",
