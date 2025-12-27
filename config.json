@@ -1,0 +1,16 @@
+{
+  "searchDirectory": ".",
+  "fileExtensions": ["js", "ts", "jsx", "tsx", "mjs", "cjs", "css", "scss", "sass", "less", "html", "htm", "xml", "svg", "py", "pyw", "java", "kt", "scala", "c", "cpp", "h", "hpp", "cs", "go", "rs", "rb", "php", "swift", "sh", "bash", "json", "yaml", "yml", "toml", "sql"],
+  "excludePatterns": ["**/node_modules/**", "**/dist/**", "**/build/**", "**/.git/**", "**/coverage/**", "**/.next/**", "**/target/**", "**/vendor/**", "**/.smart-coding-cache/**"],
+  "smartIndexing": true,
+  "chunkSize": 15,
+  "chunkOverlap": 3,
+  "maxResults": 5,
+  "enableCache": true,
+  "cacheDirectory": "./.smart-coding-cache",
+  "watchFiles": true,
+  "verbose": false,
+  "embeddingModel": "Xenova/all-MiniLM-L6-v2",
+  "semanticWeight": 0.7,
+  "exactMatchBoost": 1.5
+}
