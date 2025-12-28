@@ -94,12 +94,18 @@ export async function register(filter = null) {
   const binaryPath = process.execPath; // The node binary
   const scriptPath = fileURLToPath(new URL('../index.js', import.meta.url)); // Absolute path to index.js
 
+  // For Antigravity, we MUST use absolute path because ${workspaceFolder} variable expansion
+  // is not supported in the current version, and '.' uses the wrong CWD.
+  // For other IDEs, '.' is usually safer or they support variables.
+  const workspacePath = currentIDE === 'Antigravity' ? process.cwd() : '.';
+
   const serverConfig = {
     command: binaryPath,
-    args: [scriptPath, "--workspace", "."], // Use . (CWD) to avoid variable expansion issues
+    args: [scriptPath, "--workspace", workspacePath],
     disabled: false,
     autoRegistered: true // Marker to know we did this
   };
+
 
   const configPaths = getConfigPaths();
   let registeredCount = 0;
@@ -140,11 +146,17 @@ export async function register(filter = null) {
       if (fileExists) {
         const content = await fs.readFile(configPath, 'utf-8');
         try {
-          config = JSON.parse(content);
+          if (!content || content.trim() === '') {
+             // Empty file - treat as new
+             config = {};
+          } else {
+             config = JSON.parse(content);
+          }
         } catch (e) {
-          forceLog(`[Auto-Register] Error parsing ${name} config: ${e.message}`);
-          continue;
+          forceLog(`[Auto-Register] Warning: Corrupt/empty ${name} config, resetting to default. Error: ${e.message}`);
+          config = {};
         }
+
       }
 
       // Init mcpServers if missing

@@ -5,13 +5,16 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { pipeline } from "@xenova/transformers";
 import fs from "fs/promises";
+import path from "path";
+
 import { createRequire } from "module";
 
 // Import package.json for version
 const require = createRequire(import.meta.url);
 const packageJson = require("./package.json");
 
-import { loadConfig } from "./lib/config.js";
+import { loadConfig, getGlobalCacheDir } from "./lib/config.js";
+
 import { EmbeddingsCache } from "./lib/cache.js";
 import { CodebaseIndexer } from "./features/index-codebase.js";
 import { HybridSearch } from "./features/hybrid-search.js";
@@ -22,6 +25,15 @@ import * as ClearCacheFeature from "./features/clear-cache.js";
 import * as FindSimilarCodeFeature from "./features/find-similar-code.js";
 import * as AnnConfigFeature from "./features/ann-config.js";
 import { register } from "./features/register.js";
+
+// Log cache directory logic for debugging
+try {
+  const globalCache = path.join(getGlobalCacheDir(), 'heuristic-mcp');
+  const localCache = path.join(process.cwd(), '.heuristic-mcp');
+  console.error(`[Server] Cache debug: Global=${globalCache}, Local=${localCache}`);
+  console.error(`[Server] Process CWD: ${process.cwd()}`);
+} catch (e) {}
+
 
 // Parse workspace from command line arguments
 const args = process.argv.slice(2);
