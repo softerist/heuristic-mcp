@@ -15,7 +15,7 @@ export async function stop() {
     } else {
       // Unix: Use pgrep to get all matching PIDs
       try {
-        const { stdout } = await execPromise(`pgrep -f "heuristic-mcp/index.js"`);
+        const { stdout } = await execPromise(`pgrep -f \"heuristic-mcp.*index.js\"`);
         const allPids = stdout.trim().split(/\s+/).filter(p => p && !isNaN(p));
 
         // Filter out current PID and dead processes
@@ -82,7 +82,7 @@ export async function status() {
             pids = stdout.trim().split(/\s+/).filter(p => p && !isNaN(p) && parseInt(p) !== currentPid);
         } else {
             try {
-                const { stdout } = await execPromise(`pgrep -f "heuristic-mcp/index.js"`);
+                const { stdout } = await execPromise(`pgrep -f "heuristic-mcp.*index.js"`);
                 const allPids = stdout.trim().split(/\s+/).filter(p => p && !isNaN(p));
 
                 // Filter out current PID and dead processes (e.g. ephemeral shell wrappers)
