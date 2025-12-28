@@ -86,14 +86,33 @@ Since it runs the **Local LLM** (Xenova) directly on your machine:
 
 For a developer (or an AI agent) working on a confusing or large project, this tool is a massive productivity booster. It essentially turns the entire codebase into a searchable database of knowledge.
 
-**Performance**
+## How This is Different
+
+Most MCP servers and RAG tools are "naive"—they just embed code chunks and run a vector search. **Heuristic MCP** is different because it adds **deterministic intelligence** on top of AI:
+
+| Feature | Generic MCP / RAG Tool | Heuristic MCP |
+| :- | :- | :- |
+| **Ranking** | Pure similarity score | Similarity + **Call Graph Proximity** + **Recency Boost** |
+| **Logic** | "Is this text similar?" | "Is this similar, AND used by this function, AND active?" |
+| **Refactoring** | N/A | **`find_similar_code`** tool to detect duplicates |
+| **Tuning** | Static (hardcoded) | **Runtime Config** (adjust ANN parameters on the fly) |
+
+### Comparison to Cursor
+
+[Cursor](https://cursor.sh) is an excellent AI editor with built-in codebase indexing.
+
+- **Cursor** is an *Editor*: You must use their IDE to get the features.
+- **Heuristic MCP** is a *Protocol*: It brings Cursor-like intelligence to **any** tool (Claude Desktop, multiple IDEs, agentic workflows) without locking you into a specific editor.
+- **Transparency**: This is open-source. You know exactly how your code is indexed and where the data lives (locally).
+
+## Performance
 
 - Pre-indexed embeddings are faster than scanning files at runtime
 - Smart project detection skips dependencies automatically (node_modules, vendor, etc.)
 - Incremental updates - only re-processes changed files
 - Optional ANN search (HNSW) for faster queries on large codebases
 
-**Privacy**
+## Privacy
 
 - Everything runs locally on your machine
 - Your code never leaves your system
@@ -268,13 +287,6 @@ Still finds embedding model initialization code despite multiple typos.
 Query: "error handling and exceptions"
 
 Finds all try/catch blocks and error handling patterns.
-
-## Privacy
-
-- AI model runs entirely on your machine
-- No network requests to external services
-- No telemetry or analytics
-- Cache stored locally in `.smart-coding-cache/`
 
 ## Technical Details
 

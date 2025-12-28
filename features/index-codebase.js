@@ -503,6 +503,7 @@ export class CodebaseIndexer {
         console.error("[Indexer] Force reindex requested: clearing cache");
         this.cache.setVectorStore([]);
         this.cache.fileHashes = new Map();
+        await this.cache.clearCallGraphData({ removeFile: true });
       }
 
       const totalStartTime = Date.now();
@@ -520,9 +521,10 @@ export class CodebaseIndexer {
     // Send progress: discovery complete
     this.sendProgress(5, 100, `Discovered ${files.length} files`);
 
+    const currentFilesSet = new Set(files);
+
     // Step 1.5: Prune deleted or excluded files from cache
     if (!force) {
-      const currentFilesSet = new Set(files);
       const cachedFiles = Array.from(this.cache.fileHashes.keys());
       let prunedCount = 0;
 
@@ -540,10 +542,16 @@ export class CodebaseIndexer {
         }
         // If we pruned files, we should save these changes even if no other files changed
       }
+
+      const prunedCallGraph = this.cache.pruneCallGraphData(currentFilesSet);
+      if (prunedCallGraph > 0 && this.config.verbose) {
+        console.error(`[Indexer] Pruned ${prunedCallGraph} call-graph entries`);
+      }
     }
 
     // Step 2: Pre-filter unchanged files (early hash check)
     const filesToProcess = await this.preFilterFiles(files);
+    const filesToProcessSet = new Set(filesToProcess.map(entry => entry.file));
 
     if (filesToProcess.length === 0) {
       console.error("[Indexer] All files unchanged, nothing to index");
@@ -556,17 +564,37 @@ export class CodebaseIndexer {
 
         const missingCallData = [];
         for (const file of cachedFiles) {
-          if (!callDataFiles.has(file)) {
+          if (!callDataFiles.has(file) && currentFilesSet.has(file)) {
             missingCallData.push(file);
           }
         }
 
         if (missingCallData.length > 0) {
           console.error(`[Indexer] Found ${missingCallData.length} files missing call graph data, re-indexing...`);
-          // Add these files to filesToProcess so they get re-read and re-indexed
-          // We need to filter them to ensure they still exist on disk
-          for (const file of missingCallData) {
-            filesToProcess.push(file);
+          const BATCH_SIZE = 100;
+          for (let i = 0; i < missingCallData.length; i += BATCH_SIZE) {
+            const batch = missingCallData.slice(i, i + BATCH_SIZE);
+            const results = await Promise.all(
+              batch.map(async (file) => {
+                try {
+                  const stats = await fs.stat(file);
+                  if (stats.isDirectory()) return null;
+                  if (stats.size > this.config.maxFileSize) return null;
+                  const content = await fs.readFile(file, "utf-8");
+                  const hash = hashContent(content);
+                  return { file, content, hash };
+                } catch {
+                  return null;
+                }
+              })
+            );
+
+            for (const result of results) {
+              if (!result) continue;
+              if (filesToProcessSet.has(result.file)) continue;
+              filesToProcess.push(result);
+              filesToProcessSet.add(result.file);
+            }
           }
         }
       }
