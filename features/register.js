@@ -147,5 +147,6 @@ export async function register(filter = null) {
 
 \x1b[36mHappy Coding! 🤖\x1b[0m
     `);
+    forceLog(`\n\x1b[90m(Please wait while npm finalizes the installation...)\x1b[0m`);
   }
 }
