@@ -1,4 +1,5 @@
 import fs from 'fs/promises';
+import { writeFileSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
@@ -7,6 +8,7 @@ import { fileURLToPath } from 'url';
 function expandPath(p) {
   if (p.startsWith('~/')) {
     return path.join(os.homedir(), p.slice(2));
+
   }
 
   if (process.platform === 'win32') {
@@ -167,7 +169,8 @@ export async function register(filter = null) {
       config.mcpServers['heuristic-mcp'] = serverConfig;
 
       // Write back synchronously to avoid race conditions
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      writeFileSync(configPath, JSON.stringify(config, null, 2));
+
       forceLog(`\x1b[32m[Auto-Register] ✅ Successfully registered with ${name}\x1b[0m`);
       registeredCount++;
 
