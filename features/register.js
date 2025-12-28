@@ -106,7 +106,7 @@ export async function register(filter = null) {
 
       // Write back
       await fs.writeFile(configPath, JSON.stringify(config, null, 2));
-      console.log(`[Auto-Register] ✅ Successfully registered with ${name}`);
+      console.log(`\x1b[32m[Auto-Register] ✅ Successfully registered with ${name}\x1b[0m`);
       registeredCount++;
 
     } catch (err) {
@@ -117,5 +117,22 @@ export async function register(filter = null) {
   if (registeredCount === 0) {
     console.log(`[Auto-Register] No compatible IDE configurations found to update.`);
     console.log(`[Auto-Register] Manual Config:\n${JSON.stringify({ mcpServers: { "heuristic-mcp": serverConfig } }, null, 2)}`);
+  } else {
+    // Friendly Banner
+    console.log('\n\x1b[36m' + '='.repeat(60));
+    console.log('   🚀 Heuristic MCP Installed & Configured!   ');
+    console.log('='.repeat(60) + '\x1b[0m');
+    console.log(`
+\x1b[33mACTION REQUIRED:\x1b[0m
+1. \x1b[1mRestart your IDE\x1b[0m (or reload the window) to load the new config.
+2. The server will start automatically in the background.
+
+\x1b[32mSTATUS:\x1b[0m
+- \x1b[1mIndexing:\x1b[0m Will begin immediately after restart.
+- \x1b[1mUsage:\x1b[0m You can work while it indexes (it catches up!).
+- \x1b[1mLogs:\x1b[0m Check your IDE's MCP logs if you are curious.
+
+\x1b[36mHappy Coding! 🤖\x1b[0m
+    `);
   }
 }
