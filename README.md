@@ -176,6 +176,22 @@ Add the server configuration to the `mcpServers` object in your config file:
 }
 ```
 
+### Auto-Fix Configuration (New!)
+
+To automatically configure your IDEs (Antigravity, Claude, Cursor) with the correct path:
+
+```bash
+heuristic-mcp --register
+```
+
+This will automatically find your IDE config files and inject the correct absolute path to the server. You can also target a specific IDE:
+
+```bash
+heuristic-mcp --register antigravity
+```
+
+---
+
 ## Environment Variables
 
 Override configuration settings via environment variables in your MCP config:

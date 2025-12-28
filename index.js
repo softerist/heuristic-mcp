@@ -19,10 +19,23 @@ import * as IndexCodebaseFeature from "./features/index-codebase.js";
 import * as HybridSearchFeature from "./features/hybrid-search.js";
 import * as ClearCacheFeature from "./features/clear-cache.js";
 import * as FindSimilarCodeFeature from "./features/find-similar-code.js";
-import * as AnnConfigFeature from "./features/ann-config.js";
+import { register } from "./features/register.js";
 
 // Parse workspace from command line arguments
 const args = process.argv.slice(2);
+
+// Check if --register flag is present
+if (args.includes('--register')) {
+  // Extract optional filter (e.g. --register antigravity)
+  const filterIndex = args.indexOf('--register');
+  const filter = args[filterIndex + 1] && !args[filterIndex + 1].startsWith('-')
+                 ? args[filterIndex + 1]
+                 : null;
+
+  await register(filter);
+  process.exit(0);
+}
+
 const workspaceIndex = args.findIndex(arg => arg.startsWith('--workspace'));
 let workspaceDir = null;
 
