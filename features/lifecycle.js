@@ -213,7 +213,8 @@ export async function logs() {
         const { execSync } = await import('child_process');
         let npmBin = 'unknown';
         try {
-            npmBin = execSync('npm bin -g', { encoding: 'utf-8' }).trim();
+            const prefix = execSync('npm config get prefix', { encoding: 'utf-8' }).trim();
+            npmBin = path.join(prefix, 'bin');
         } catch {}
 
         // Check all known MCP config paths (same as register.js)
