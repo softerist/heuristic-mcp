@@ -143,8 +143,9 @@ export async function logs() {
         if (cacheDirs.length === 0) {
             console.log('[Logs] No cache directories found.');
             console.log(`[Logs] Expected location: ${globalCacheRoot}`);
-            return;
-        }
+            console.log('');
+            // Don't return - fall through to show paths section
+        } else {
 
         console.log(`[Logs] Found ${cacheDirs.length} cache director${cacheDirs.length === 1 ? 'y' : 'ies'} in ${globalCacheRoot}\n`);
 
@@ -203,6 +204,7 @@ export async function logs() {
         }
 
         console.log(`${'─'.repeat(60)}\n`);
+        }
 
         // Show important paths
         console.log('[Paths] Important locations:');
