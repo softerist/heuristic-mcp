@@ -4,19 +4,6 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 
-// Helper to expand ~ and %vars%
-function expandPath(p) {
-  if (p.startsWith('~/')) {
-    return path.join(os.homedir(), p.slice(2));
-
-  }
-
-  if (process.platform === 'win32') {
-    return p.replace(/%([^%]+)%/g, (_, n) => process.env[n] || '%' + n + '%');
-  }
-
-  return p;
-}
 
 // Detect which IDE is running the install
 function detectCurrentIDE() {
