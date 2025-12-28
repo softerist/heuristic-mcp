@@ -118,11 +118,11 @@ export async function register(filter = null) {
     console.log(`[Auto-Register] No compatible IDE configurations found to update.`);
     console.log(`[Auto-Register] Manual Config:\n${JSON.stringify({ mcpServers: { "heuristic-mcp": serverConfig } }, null, 2)}`);
   } else {
-    // Friendly Banner
-    console.log('\n\x1b[36m' + '='.repeat(60));
-    console.log('   🚀 Heuristic MCP Installed & Configured!   ');
-    console.log('='.repeat(60) + '\x1b[0m');
-    console.log(`
+    // Friendly Banner (Using console.error to bypass npm stdout suppression)
+    console.error('\n\x1b[36m' + '='.repeat(60));
+    console.error('   🚀 Heuristic MCP Installed & Configured!   ');
+    console.error('='.repeat(60) + '\x1b[0m');
+    console.error(`
 \x1b[33mACTION REQUIRED:\x1b[0m
 1. \x1b[1mRestart your IDE\x1b[0m (or reload the window) to load the new config.
 2. The server will start automatically in the background.
