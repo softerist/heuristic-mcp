@@ -97,13 +97,14 @@ Override configuration settings via environment variables in your MCP config:
 | `SMART_CODING_VERBOSE`           | boolean | `false`                   | Enable detailed logging               |
 | `SMART_CODING_BATCH_SIZE`        | number  | `100`                     | Files to process in parallel          |
 | `SMART_CODING_MAX_FILE_SIZE`     | number  | `1048576`                 | Max file size in bytes (1MB)          |
-| `SMART_CODING_CHUNK_SIZE`        | number  | `15`                      | Lines of code per chunk               |
+| `SMART_CODING_CHUNK_SIZE`        | number  | `25`                      | Lines of code per chunk               |
 | `SMART_CODING_MAX_RESULTS`       | number  | `5`                       | Max search results                    |
 | `SMART_CODING_SMART_INDEXING`    | boolean | `true`                    | Enable smart project detection        |
 | `SMART_CODING_WATCH_FILES`       | boolean | `false`                   | Enable file watching for auto-reindex |
 | `SMART_CODING_SEMANTIC_WEIGHT`   | number  | `0.7`                     | Weight for semantic similarity (0-1)  |
 | `SMART_CODING_EXACT_MATCH_BOOST` | number  | `1.5`                     | Boost for exact text matches          |
 | `SMART_CODING_EMBEDDING_MODEL`   | string  | `Xenova/all-MiniLM-L6-v2` | AI embedding model to use             |
+| `SMART_CODING_WORKER_THREADS`    | string  | `auto`                    | Worker threads (`auto` or 1-32)       |
 
 **Example with environment variables:**
 

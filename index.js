@@ -95,7 +95,7 @@ async function initialize() {
   await cache.load();
 
   // Initialize features
-  indexer = new CodebaseIndexer(embedder, cache, config);
+  indexer = new CodebaseIndexer(embedder, cache, config, server);
   hybridSearch = new HybridSearch(embedder, cache, config);
   const cacheClearer = new ClearCacheFeature.CacheClearer(embedder, cache, config);
 
