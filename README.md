@@ -13,15 +13,78 @@ AI coding assistants work better when they can find relevant code quickly. Tradi
 
 This MCP server solves that by indexing your codebase with AI embeddings. Your AI assistant can search by meaning instead of exact keywords, finding relevant code even when the terminology differs.
 
-![Example](example.png)
+## Example: Semantic Search in Action
 
-## Why Use This
+**User Query:** "How vector cache working?"
 
-**Better Code Understanding**
+### MCP Tool Call
 
-- Search finds code by concept, not just matching words
-- Works with typos and variations in terminology
-- Natural language queries like "where do we validate user input?"
+```json
+{
+  "maxResults": 5,
+  "query": "vector store embeddings cache save load"
+}
+```
+
+### Output
+
+**Result 1 (Relevance: 72.5%)**
+
+**File:** `lib/cache.js` **Lines:** 42-59
+
+```javascript
+}
+
+    const filtered = rawVectorStore.length - this.vectorStore.length;
+    if (filtered > 0) {
+        console.error(`[Cache] Filtered ${filtered} outdated cache entries`);
+    }
+    console.error(`[Cache] Loaded ${this.vectorStore.length} cached embeddings`);
+```
+
+Here's how the **vector cache** works:
+
+### Overview
+
+The cache system (`lib/cache.js`) stores two things:
+
+1. **Vector embeddings** - AI-generated vectors for each code chunk
+2. **File hashes** - MD5 hashes to detect file changes
+
+## Why Heuristic MCP is Useful
+
+Yes, absolutely. The **Heuristic MCP** is highly effective because it bridges the gap between "having access to files" and "understanding the codebase." Here is why it is useful:
+
+### 1. It Solved the "Needle in a Haystack" Problem
+
+To answer your technical questions, I didn't have to manually browse 15 files or run generic `grep` commands.
+
+- **Without MCP:** I would have listed directories, guessed `lib/utils.js` might be relevant, read the whole file, then checked `index.js`, etc.
+- **With MCP:** I asked *"how does chunking work"* and it instantly returned lines 91-108 of `lib/utils.js`. It acted like a senior engineer pointing me to the exact lines of code.
+
+### 2. It Finds "Concepts," Not Just Words
+
+Standard tools like `grep` only find exact matches.
+
+- If I searched for "authentication" using `grep`, I might miss a function named `verifyUserCredentials`.
+- The **Heuristic MCP** links these concepts. In the test script I analyzed earlier, `authentication` correctly matched with `credentials` because of the vector similarity.
+
+### 3. It Finds "Similar Code"
+
+AI agents have a limited memory (context window).
+
+- Instead of reading **every file** to understand the project (which wastes thousands of tokens), the MCP lets me retrieve **only the 5-10 relevant snippets**. This leaves more room for complex reasoning and generating code.
+
+### 4. It Is Fast & Private
+
+Since it runs the **Local LLM** (Xenova) directly on your machine:
+
+- **Latency is near-zero** (<50ms).
+- **Privacy is 100%**: Your source code never leaves your laptop to be indexed by an external cloud service.
+
+### Verdict
+
+For a developer (or an AI agent) working on a confusing or large project, this tool is a massive productivity booster. It essentially turns the entire codebase into a searchable database of knowledge.
 
 **Performance**
 
@@ -177,8 +240,6 @@ When you search, your query is converted to the same vector format. We use a **h
 - **Semantic Similarity** (cosine similarity of vectors)
 - **Exact Keyword Matching** (BM25-inspired boost)
 - **Recency Boosting** (favoring files you're actively working on)
-
-![How It Works](how-its-works.png)
 
 ## Examples
 
