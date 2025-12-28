@@ -1,6 +1,6 @@
 {
   "name": "@softerist/heuristic-mcp",
-  "version": "2.1.42",
+  "version": "2.1.43",
   "description": "An enhanced MCP server providing intelligent semantic code search with find-similar-code, recency ranking, and improved chunking. Fork of smart-coding-mcp.",
   "type": "module",
   "main": "index.js",
@@ -40,7 +40,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/softerist/heuristic-mcp"
+    "url": "git+https://github.com/softerist/heuristic-mcp.git"
   },
   "homepage": "https://github.com/softerist/heuristic-mcp#readme",
   "license": "MIT",

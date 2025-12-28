@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { stop, start, status, logs } from "./features/lifecycle.js";
+import { stop, start, status } from "./features/lifecycle.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { pipeline } from "@xenova/transformers";
@@ -36,7 +36,13 @@ try {
 
 
 // Parse workspace from command line arguments
-const args = process.argv.slice(2);
+let args = process.argv.slice(2);
+const hadLogs = args.includes('--logs');
+if (hadLogs) {
+  process.env.SMART_CODING_VERBOSE = 'true';
+  args = args.filter(arg => arg !== '--logs');
+  console.log('[Logs] Starting server with verbose console output (Ctrl+C to stop)...');
+}
 
 if (args.includes('--stop')) {
   await stop();
@@ -53,10 +59,6 @@ if (args.includes('--status')) {
   process.exit(0);
 }
 
-if (args.includes('--logs')) {
-  await logs();
-  process.exit(0);
-}
 
 // Check if --register flag is present
 if (args.includes('--register')) {
