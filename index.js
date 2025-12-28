@@ -248,6 +248,11 @@ process.on('SIGINT', async () => {
     console.error("[Server] File watcher stopped");
   }
 
+  // Terminate workers to avoid native crashes on exit
+  if (indexer && indexer.terminateWorkers) {
+    await indexer.terminateWorkers();
+  }
+
   // Save cache
   if (cache) {
     await cache.save();
@@ -265,6 +270,11 @@ process.on('SIGTERM', async () => {
   if (indexer && indexer.watcher) {
     await indexer.watcher.close();
     console.error("[Server] File watcher stopped");
+  }
+
+  // Terminate workers to avoid native crashes on exit
+  if (indexer && indexer.terminateWorkers) {
+    await indexer.terminateWorkers();
   }
 
   // Save cache

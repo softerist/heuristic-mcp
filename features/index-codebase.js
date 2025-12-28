@@ -150,17 +150,21 @@ export class CodebaseIndexer {
       }
     } catch (err) {
       console.error(`[Indexer] Worker initialization failed: ${err.message}, falling back to single-threaded`);
-      this.terminateWorkers();
+      await this.terminateWorkers();
     }
   }
 
   /**
    * Terminate all worker threads
    */
-  terminateWorkers() {
-    for (const worker of this.workers) {
-      worker.postMessage({ type: "shutdown" });
-    }
+  async terminateWorkers() {
+    const terminations = this.workers.map((worker) => {
+      try {
+        worker.postMessage({ type: "shutdown" });
+      } catch {}
+      return worker.terminate().catch(() => null);
+    });
+    await Promise.all(terminations);
     this.workers = [];
     this.workerReady = [];
   }
@@ -730,7 +734,7 @@ export class CodebaseIndexer {
 
     // Cleanup workers
     if (useWorkers) {
-      this.terminateWorkers();
+      await this.terminateWorkers();
     }
 
     const totalTime = ((Date.now() - totalStartTime) / 1000).toFixed(1);
