@@ -100,22 +100,35 @@ export async function register(filter = null) {
     }
 
     try {
-      // Check if file exists
+      // Check if file exists - for Antigravity, create it if it doesn't
+      let config = {};
+      let fileExists = true;
+
       try {
         await fs.access(configPath);
       } catch {
-        // forceLog(`[Auto-Register] Skipped ${name}: Config file not found at ${configPath}`);
-        continue;
+        fileExists = false;
+
+        // Create config file for all supported IDEs
+        try {
+          // Create parent directory
+          await fs.mkdir(path.dirname(configPath), { recursive: true });
+          forceLog(`[Auto-Register] Creating ${name} config at ${configPath}`);
+        } catch (mkdirErr) {
+          forceLog(`[Auto-Register] Skipped ${name}: Cannot create config directory: ${mkdirErr.message}`);
+          continue;
+        }
       }
 
-      // Read config
-      const content = await fs.readFile(configPath, 'utf-8');
-      let config = {};
-      try {
-        config = JSON.parse(content);
-      } catch (e) {
-        forceLog(`[Auto-Register] Error parsing ${name} config: ${e.message}`);
-        continue;
+      // Read existing config if file exists
+      if (fileExists) {
+        const content = await fs.readFile(configPath, 'utf-8');
+        try {
+          config = JSON.parse(content);
+        } catch (e) {
+          forceLog(`[Auto-Register] Error parsing ${name} config: ${e.message}`);
+          continue;
+        }
       }
 
       // Init mcpServers if missing
