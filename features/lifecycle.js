@@ -214,12 +214,35 @@ export async function logs() {
             npmBin = execSync('npm bin -g', { encoding: 'utf-8' }).trim();
         } catch {}
 
-        // MCP config
-        const geminiConfig = path.join(os.homedir(), '.gemini', 'antigravity', 'mcp_config.json');
-        const configExists = await fs.access(geminiConfig).then(() => true).catch(() => false);
+        // Check all known MCP config paths (same as register.js)
+        const home = os.homedir();
+        const mcpConfigs = [];
+
+        // Antigravity
+        const antigravityConfig = process.platform === 'win32'
+            ? path.join(home, '.gemini', 'antigravity', 'mcp_config.json')
+            : path.join(home, '.gemini', 'antigravity', 'mcp_config.json');
+        const antigravityExists = await fs.access(antigravityConfig).then(() => true).catch(() => false);
+        mcpConfigs.push({ name: 'Antigravity', path: antigravityConfig, exists: antigravityExists });
+
+        // Claude Desktop
+        let claudeConfig = null;
+        if (process.platform === 'darwin') {
+            claudeConfig = path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+        } else if (process.platform === 'win32') {
+            claudeConfig = path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json');
+        }
+        if (claudeConfig) {
+            const claudeExists = await fs.access(claudeConfig).then(() => true).catch(() => false);
+            mcpConfigs.push({ name: 'Claude Desktop', path: claudeConfig, exists: claudeExists });
+        }
 
         console.log(`   📦 Global npm bin: ${npmBin}`);
-        console.log(`   ⚙️  MCP config: ${geminiConfig} ${configExists ? '(exists)' : '(not found)'}`);
+        console.log(`   ⚙️  MCP configs:`);
+        for (const cfg of mcpConfigs) {
+            const status = cfg.exists ? '\x1b[32m(exists)\x1b[0m' : '\x1b[90m(not found)\x1b[0m';
+            console.log(`      - ${cfg.name}: ${cfg.path} ${status}`);
+        }
         console.log(`   💾 Cache root: ${globalCacheRoot}`);
         console.log(`   📁 Current dir: ${process.cwd()}`);
         console.log('');
