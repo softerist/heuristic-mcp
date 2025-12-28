@@ -30,63 +30,62 @@ function detectCurrentIDE() {
 }
 
 // Known config paths for different IDEs
-function getConfigPaths(filterToCurrentIDE = true) {
+function getConfigPaths() {
   const platform = process.platform;
   const home = os.homedir();
+  const currentIDE = detectCurrentIDE();
   const allPaths = [];
 
-  // Antigravity
+  // Antigravity - dedicated mcp_config.json
   allPaths.push({
     name: 'Antigravity',
-    path: path.join(home, '.gemini', 'antigravity', 'mcp_config.json'),
-    canCreate: true // Dedicated MCP config, safe to create
+    path: path.join(home, '.gemini', 'antigravity', 'mcp_config.json')
   });
 
-  // Claude Desktop
+  // Claude Desktop - dedicated config file
   if (platform === 'darwin') {
     allPaths.push({
       name: 'Claude Desktop',
-      path: path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json'),
-      canCreate: true // Dedicated config file
+      path: path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
     });
   } else if (platform === 'win32') {
     allPaths.push({
       name: 'Claude Desktop',
-      path: path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json'),
-      canCreate: true
+      path: path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json')
     });
   }
 
-  // Cursor (uses settings.json with mcpServers key)
+  // Cursor - settings.json with mcpServers key
   if (platform === 'darwin') {
     allPaths.push({
       name: 'Cursor',
-      path: path.join(home, 'Library', 'Application Support', 'Cursor', 'User', 'settings.json'),
-      canCreate: false // Shared settings file, only update if exists
+      path: path.join(home, 'Library', 'Application Support', 'Cursor', 'User', 'settings.json')
     });
   } else if (platform === 'win32') {
     allPaths.push({
       name: 'Cursor',
-      path: path.join(process.env.APPDATA || '', 'Cursor', 'User', 'settings.json'),
-      canCreate: false
+      path: path.join(process.env.APPDATA || '', 'Cursor', 'User', 'settings.json')
     });
   } else {
     allPaths.push({
       name: 'Cursor',
-      path: path.join(home, '.config', 'Cursor', 'User', 'settings.json'),
-      canCreate: false
+      path: path.join(home, '.config', 'Cursor', 'User', 'settings.json')
     });
   }
 
-  // Filter to current IDE if detected and requested
-  if (filterToCurrentIDE) {
-    const currentIDE = detectCurrentIDE();
-    if (currentIDE) {
-      return allPaths.filter(p => p.name === currentIDE);
-    }
-  }
+  // CONSISTENT LOGIC:
+  // - If IDE is detected via env var → return ONLY that IDE, canCreate: true
+  // - If no IDE detected → return ALL, canCreate: false (only update existing configs)
 
-  return allPaths;
+  if (currentIDE) {
+    // IDE detected - return only that IDE with permission to create
+    return allPaths
+      .filter(p => p.name === currentIDE)
+      .map(p => ({ ...p, canCreate: true }));
+  } else {
+    // No IDE detected - return all but don't create new configs
+    return allPaths.map(p => ({ ...p, canCreate: false }));
+  }
 }
 
 // Helper to force output to terminal, bypassing npm's silence
