@@ -237,19 +237,7 @@ export async function logs() {
             mcpConfigs.push({ name: 'Claude Desktop', path: claudeConfig, exists: claudeExists });
         }
 
-        // VS Code (MCP extension uses settings.json or dedicated config)
-        let vscodeConfig = null;
-        if (process.platform === 'darwin') {
-            vscodeConfig = path.join(home, 'Library', 'Application Support', 'Code', 'User', 'settings.json');
-        } else if (process.platform === 'win32') {
-            vscodeConfig = path.join(process.env.APPDATA || '', 'Code', 'User', 'settings.json');
-        } else {
-            vscodeConfig = path.join(home, '.config', 'Code', 'User', 'settings.json');
-        }
-        const vscodeExists = await fs.access(vscodeConfig).then(() => true).catch(() => false);
-        mcpConfigs.push({ name: 'VS Code', path: vscodeConfig, exists: vscodeExists });
-
-        // Cursor (uses similar structure to VS Code)
+        // Cursor (uses settings.json with mcpServers key)
         let cursorConfig = null;
         if (process.platform === 'darwin') {
             cursorConfig = path.join(home, 'Library', 'Application Support', 'Cursor', 'User', 'settings.json');

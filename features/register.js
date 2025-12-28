@@ -16,53 +16,77 @@ function expandPath(p) {
   return p;
 }
 
+// Detect which IDE is running the install
+function detectCurrentIDE() {
+  // Check environment variables to determine which IDE is running
+  if (process.env.ANTIGRAVITY_AGENT) {
+    return 'Antigravity';
+  }
+  if (process.env.CURSOR_AGENT) {
+    return 'Cursor';
+  }
+  // Claude Desktop doesn't have a known env var, so we rely on existing config detection
+  return null;
+}
+
 // Known config paths for different IDEs
-function getConfigPaths() {
+function getConfigPaths(filterToCurrentIDE = true) {
   const platform = process.platform;
   const home = os.homedir();
-  const paths = [];
+  const allPaths = [];
 
   // Antigravity
-  paths.push({
+  allPaths.push({
     name: 'Antigravity',
-    path: path.join(home, '.gemini', 'antigravity', 'mcp_config.json')
+    path: path.join(home, '.gemini', 'antigravity', 'mcp_config.json'),
+    canCreate: true // Dedicated MCP config, safe to create
   });
 
   // Claude Desktop
   if (platform === 'darwin') {
-    paths.push({
+    allPaths.push({
       name: 'Claude Desktop',
-      path: path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
+      path: path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json'),
+      canCreate: true // Dedicated config file
     });
   } else if (platform === 'win32') {
-    paths.push({
+    allPaths.push({
       name: 'Claude Desktop',
-      path: path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json')
+      path: path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json'),
+      canCreate: true
     });
   }
 
-  // Note: VS Code support is shown in --logs but NOT auto-registered
-  // because settings.json is a general config file that should not be auto-modified.
-
-  // Cursor (has MCP support, uses settings.json key)
+  // Cursor (uses settings.json with mcpServers key)
   if (platform === 'darwin') {
-    paths.push({
+    allPaths.push({
       name: 'Cursor',
-      path: path.join(home, 'Library', 'Application Support', 'Cursor', 'User', 'settings.json')
+      path: path.join(home, 'Library', 'Application Support', 'Cursor', 'User', 'settings.json'),
+      canCreate: false // Shared settings file, only update if exists
     });
   } else if (platform === 'win32') {
-    paths.push({
+    allPaths.push({
       name: 'Cursor',
-      path: path.join(process.env.APPDATA || '', 'Cursor', 'User', 'settings.json')
+      path: path.join(process.env.APPDATA || '', 'Cursor', 'User', 'settings.json'),
+      canCreate: false
     });
   } else {
-    paths.push({
+    allPaths.push({
       name: 'Cursor',
-      path: path.join(home, '.config', 'Cursor', 'User', 'settings.json')
+      path: path.join(home, '.config', 'Cursor', 'User', 'settings.json'),
+      canCreate: false
     });
   }
 
-  return paths;
+  // Filter to current IDE if detected and requested
+  if (filterToCurrentIDE) {
+    const currentIDE = detectCurrentIDE();
+    if (currentIDE) {
+      return allPaths.filter(p => p.name === currentIDE);
+    }
+  }
+
+  return allPaths;
 }
 
 // Helper to force output to terminal, bypassing npm's silence
@@ -94,13 +118,13 @@ export async function register(filter = null) {
 
   forceLog(`[Auto-Register] Detecting IDE configurations...`);
 
-  for (const { name, path: configPath } of configPaths) {
+  for (const { name, path: configPath, canCreate } of configPaths) {
     if (filter && name.toLowerCase() !== filter.toLowerCase()) {
       continue;
     }
 
     try {
-      // Check if file exists - for Antigravity, create it if it doesn't
+      // Check if file exists - create if canCreate is true for this IDE
       let config = {};
       let fileExists = true;
 
@@ -109,13 +133,17 @@ export async function register(filter = null) {
       } catch {
         fileExists = false;
 
-        // Create config file for all supported IDEs
-        try {
-          // Create parent directory
-          await fs.mkdir(path.dirname(configPath), { recursive: true });
-          forceLog(`[Auto-Register] Creating ${name} config at ${configPath}`);
-        } catch (mkdirErr) {
-          forceLog(`[Auto-Register] Skipped ${name}: Cannot create config directory: ${mkdirErr.message}`);
+        // Only create config if this IDE allows it (has dedicated MCP config file)
+        if (canCreate) {
+          try {
+            await fs.mkdir(path.dirname(configPath), { recursive: true });
+            forceLog(`[Auto-Register] Creating ${name} config at ${configPath}`);
+          } catch (mkdirErr) {
+            forceLog(`[Auto-Register] Skipped ${name}: Cannot create config directory: ${mkdirErr.message}`);
+            continue;
+          }
+        } else {
+          // Skip IDEs that use shared settings files if they don't exist
           continue;
         }
       }
