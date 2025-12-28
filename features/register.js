@@ -135,6 +135,15 @@ export async function register(filter = null) {
     forceLog('\n\x1b[36m' + '='.repeat(60));
     forceLog('   🚀 Heuristic MCP Installed & Configured!   ');
     forceLog('='.repeat(60) + '\x1b[0m');
+
+    // Show important paths
+    const home = os.homedir();
+    const cacheRoot = process.platform === 'win32'
+        ? path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'heuristic-mcp')
+        : process.platform === 'darwin'
+        ? path.join(home, 'Library', 'Caches', 'heuristic-mcp')
+        : path.join(process.env.XDG_CACHE_HOME || path.join(home, '.cache'), 'heuristic-mcp');
+
     forceLog(`
 \x1b[33mACTION REQUIRED:\x1b[0m
 1. \x1b[1mRestart your IDE\x1b[0m (or reload the window) to load the new config.
@@ -144,6 +153,11 @@ export async function register(filter = null) {
 - \x1b[1mConfig:\x1b[0m Updated ${registeredCount} config file(s).
 - \x1b[1mIndexing:\x1b[0m Will begin immediately after restart.
 - \x1b[1mUsage:\x1b[0m You can work while it indexes (it catches up!).
+
+\x1b[90mPATHS:\x1b[0m
+- \x1b[1mMCP Config:\x1b[0m ${configPaths.map(p => p.path).join(', ')}
+- \x1b[1mCache:\x1b[0m ${cacheRoot}
+- \x1b[1mCheck status:\x1b[0m heuristic-mcp --logs
 
 \x1b[36mHappy Coding! 🤖\x1b[0m
     `);

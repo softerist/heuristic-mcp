@@ -204,6 +204,26 @@ export async function logs() {
 
         console.log(`${'─'.repeat(60)}\n`);
 
+        // Show important paths
+        console.log('[Paths] Important locations:');
+
+        // Global npm bin
+        const { execSync } = await import('child_process');
+        let npmBin = 'unknown';
+        try {
+            npmBin = execSync('npm bin -g', { encoding: 'utf-8' }).trim();
+        } catch {}
+
+        // MCP config
+        const geminiConfig = path.join(os.homedir(), '.gemini', 'antigravity', 'mcp_config.json');
+        const configExists = await fs.access(geminiConfig).then(() => true).catch(() => false);
+
+        console.log(`   📦 Global npm bin: ${npmBin}`);
+        console.log(`   ⚙️  MCP config: ${geminiConfig} ${configExists ? '(exists)' : '(not found)'}`);
+        console.log(`   💾 Cache root: ${globalCacheRoot}`);
+        console.log(`   📁 Current dir: ${process.cwd()}`);
+        console.log('');
+
     } catch (error) {
         console.error(`[Logs] Error reading cache: ${error.message}`);
     }
