@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
-import { writeFileSync } from 'fs';
+import { writeFileSync, existsSync, statSync } from 'fs';
+
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
@@ -14,9 +15,19 @@ function detectCurrentIDE() {
   if (process.env.CURSOR_AGENT) {
     return 'Cursor';
   }
+
+  // Fallback: Check for Antigravity directory presence
+  try {
+     const agPath = path.join(os.homedir(), '.gemini', 'antigravity');
+     if (existsSync(agPath) || (statSync && statSync(agPath).isDirectory())) {
+        return 'Antigravity';
+     }
+  } catch (e) {}
+
   // Claude Desktop doesn't have a known env var, so we rely on existing config detection
   return null;
 }
+
 
 // Known config paths for different IDEs
 function getConfigPaths() {
