@@ -107,7 +107,7 @@ export async function register(filter = null) {
 
   const serverConfig = {
     command: binaryPath,
-    args: [scriptPath, "--workspace", "${workspaceFolder}"],
+    args: [scriptPath, "--workspace", "."], // Use . (CWD) to avoid variable expansion issues
     disabled: false,
     autoRegistered: true // Marker to know we did this
   };
@@ -166,8 +166,8 @@ export async function register(filter = null) {
       // Inject configuration
       config.mcpServers['heuristic-mcp'] = serverConfig;
 
-      // Write back
-      await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+      // Write back synchronously to avoid race conditions
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
       forceLog(`\x1b[32m[Auto-Register] ✅ Successfully registered with ${name}\x1b[0m`);
       registeredCount++;
 
