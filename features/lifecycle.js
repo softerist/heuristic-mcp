@@ -21,12 +21,14 @@ export async function stop() {
     await execPromise(command);
     console.log('[Lifecycle] ✅ Stopped all running instances.');
   } catch (error) {
-    // pkill returns non-zero if no process found, which is fine
-    if (error.code === 1 || error.message.includes('No Instance(s) Available')) {
-      console.log('[Lifecycle] No running instances found.');
+    // pkill (Linux/Mac) returns exit code 1 if no process matched.
+    // wmic (Windows) might throw specific errors if none found.
+    // We treat exit code 1 as "Success, nothing was running".
+    if (error.code === 1 || error.code === '1' || error.message.includes('No Instance(s) Available')) {
+      console.log('[Lifecycle] No running instances found (already stopped).');
     } else {
       // Don't fail hard, just warn
-      console.warn(`[Lifecycle] Note: Could not stop server (it might not be running). Detail: ${error.message}`);
+      console.warn(`[Lifecycle] Warning: Stop command finished with unexpected result: ${error.message}`);
     }
   }
 }
