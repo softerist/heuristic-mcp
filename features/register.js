@@ -108,8 +108,8 @@ export async function register(filter = null) {
 
   // For Antigravity, we MUST use absolute path because ${workspaceFolder} variable expansion
   // is not supported in the current version, and '.' uses the wrong CWD.
-  // For other IDEs, '.' is usually safer or they support variables.
-  const workspacePath = currentIDE === 'Antigravity' ? process.cwd() : '.';
+  // Use INIT_CWD (where npm install was run) if available, otherwise cwd.
+  const workspacePath = currentIDE === 'Antigravity' ? (process.env.INIT_CWD || process.cwd()) : '.';
 
   const serverConfig = {
     command: binaryPath,
