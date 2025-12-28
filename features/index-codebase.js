@@ -440,6 +440,28 @@ export class CodebaseIndexer {
     // Send progress: discovery complete
     this.sendProgress(5, 100, `Discovered ${files.length} files`);
 
+    // Step 1.5: Prune deleted or excluded files from cache
+    if (!force) {
+      const currentFilesSet = new Set(files);
+      const cachedFiles = Array.from(this.cache.fileHashes.keys());
+      let prunedCount = 0;
+
+      for (const cachedFile of cachedFiles) {
+        if (!currentFilesSet.has(cachedFile)) {
+          this.cache.removeFileFromStore(cachedFile);
+          this.cache.deleteFileHash(cachedFile);
+          prunedCount++;
+        }
+      }
+      
+      if (prunedCount > 0) {
+        if (this.config.verbose) {
+          console.error(`[Indexer] Pruned ${prunedCount} deleted/excluded files from index`);
+        }
+        // If we pruned files, we should save these changes even if no other files changed
+      }
+    }
+
     // Step 2: Pre-filter unchanged files (early hash check)
     const filesToProcess = await this.preFilterFiles(files);
     
