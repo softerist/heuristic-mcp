@@ -20,6 +20,7 @@ import * as IndexCodebaseFeature from "./features/index-codebase.js";
 import * as HybridSearchFeature from "./features/hybrid-search.js";
 import * as ClearCacheFeature from "./features/clear-cache.js";
 import * as FindSimilarCodeFeature from "./features/find-similar-code.js";
+import * as AnnConfigFeature from "./features/ann-config.js";
 import { register } from "./features/register.js";
 
 // Parse workspace from command line arguments
