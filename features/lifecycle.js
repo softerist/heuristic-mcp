@@ -7,24 +7,38 @@ export async function stop() {
   try {
     const platform = process.platform;
     let command = '';
+    const currentPid = process.pid;
 
     if (platform === 'win32') {
-      // Windows: Use wmic to find node processes running our script
-      command = `wmic process where "CommandLine like '%heuristic-mcp/index.js%'" delete`;
+      // Windows: Use wmic to find node processes running our script, excluding the current one
+      command = `wmic process where "CommandLine like '%heuristic-mcp/index.js%' and ProcessId != ${currentPid}" delete`;
     } else {
       // Unix/Linux/Mac: Use pkill to find the process matching the script path
-      // We exclude the current process to avoid suicide if we are running from the same script
-      // however, usually the CLI runner is a different PID than the server.
-      command = `pkill -f "heuristic-mcp/index.js"`;
+      // We explicitly exclude the current process PID to avoid suicide
+      command = `pkill -f "heuristic-mcp/index.js" --exclude-pids ${currentPid}`;
+
+      // Some pkill versions don't support --exclude-pids, fallback to a more complex pattern
+      // that matches the index.js but doesn't match the current command line flags if possible,
+      // or just use pgrep to get PIDs and kill them manually.
     }
 
-    await execPromise(command);
+    try {
+      await execPromise(command);
+    } catch (e) {
+      // If pkill failed because of --exclude-pids, try a safer approach
+      if (platform !== 'win32') {
+        const fallbackCommand = `pgrep -f "heuristic-mcp/index.js" | grep -v "^${currentPid}$" | xargs -r kill`;
+        await execPromise(fallbackCommand);
+      } else {
+        throw e;
+      }
+    }
+
     console.log('[Lifecycle] ✅ Stopped all running instances.');
   } catch (error) {
     // pkill (Linux/Mac) returns exit code 1 if no process matched.
-    // wmic (Windows) might throw specific errors if none found.
     // We treat exit code 1 as "Success, nothing was running".
-    if (error.code === 1 || error.code === '1' || error.message.includes('No Instance(s) Available')) {
+    if (error.code === 1 || error.code === '1' || error.message?.includes('No Instance(s) Available')) {
       console.log('[Lifecycle] No running instances found (already stopped).');
     } else {
       // Don't fail hard, just warn
@@ -50,12 +64,13 @@ export async function status() {
     try {
         const platform = process.platform;
         let command = '';
+        const currentPid = process.pid;
 
         if (platform === 'win32') {
-            command = `wmic process where "CommandLine like '%heuristic-mcp/index.js%'" get ProcessId`;
+            command = `wmic process where "CommandLine like '%heuristic-mcp/index.js%' and ProcessId != ${currentPid}" get ProcessId`;
         } else {
-            // pgrep -f matches the full command line
-            command = `pgrep -f "heuristic-mcp/index.js"`;
+            // pgrep -f matches the full command line, we exclude the current PID
+            command = `pgrep -f "heuristic-mcp/index.js" | grep -v "^${currentPid}$"`;
         }
 
         const { stdout } = await execPromise(command);
@@ -68,7 +83,7 @@ export async function status() {
         }
     } catch (error) {
         // pgrep returns exit code 1 if no process found
-        if (error.code === 1 || error.code === '1' || error.message.includes('No Instance(s) Available')) {
+        if (error.code === 1 || error.code === '1' || error.message?.includes('No Instance(s) Available')) {
              console.log('[Lifecycle] ⚪ Server is STOPPED.');
         } else {
              console.error(`[Lifecycle] Failed to check status: ${error.message}`);
