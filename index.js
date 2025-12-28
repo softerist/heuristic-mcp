@@ -134,6 +134,7 @@ async function initialize() {
 
   // Initialize cache
   cache = new EmbeddingsCache(config);
+  console.error(`[Server] Cache directory: ${config.cacheDirectory}`);
   await cache.load();
 
   // Initialize features
