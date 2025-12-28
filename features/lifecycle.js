@@ -198,8 +198,25 @@ export async function logs() {
                     console.log(`   Indexing: ⚠️  INCOMPLETE or UNKNOWN`);
                 }
 
-            } catch (e) {
-                console.log(`   Status: ❌ Invalid or corrupted (${e.message})`);
+            } catch (err) {
+                if (err.code === 'ENOENT') {
+                    // Meta file missing - check if directory is fresh (indexing in progress)
+                    try {
+                        const stats = await fs.stat(cacheDir);
+                        const ageMs = new Date() - stats.mtime;
+                        // If less than 10 minutes old, assume indexing
+                        if (ageMs < 10 * 60 * 1000) {
+                             console.log(`   Status: ⏳ Initializing / Indexing in progress...`);
+                             console.log(`   (Metadata file has not been written yet using ID ${dir})`);
+                        } else {
+                             console.log(`   Status: ⚠️  Incomplete cache (stale)`);
+                        }
+                    } catch {
+                         console.log(`   Status: ❌ Invalid cache directory`);
+                    }
+                } else {
+                    console.log(`   Status: ❌ Invalid or corrupted (${err.message})`);
+                }
             }
         }
 
