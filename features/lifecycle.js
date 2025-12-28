@@ -16,7 +16,18 @@ export async function stop() {
       // Unix: Use pgrep to get all matching PIDs
       try {
         const { stdout } = await execPromise(`pgrep -f "heuristic-mcp/index.js"`);
-        pids = stdout.trim().split(/\s+/).filter(p => p && !isNaN(p) && parseInt(p) !== currentPid);
+        const allPids = stdout.trim().split(/\s+/).filter(p => p && !isNaN(p));
+
+        // Filter out current PID and dead processes
+        pids = [];
+        for (const p of allPids) {
+            const pid = parseInt(p);
+            if (pid === currentPid) continue;
+            try {
+                process.kill(pid, 0);
+                pids.push(p);
+            } catch (e) {}
+        }
       } catch (e) {
         // pgrep returns code 1 if no processes found, which is fine
         if (e.code === 1) pids = [];
@@ -72,7 +83,23 @@ export async function status() {
         } else {
             try {
                 const { stdout } = await execPromise(`pgrep -f "heuristic-mcp/index.js"`);
-                pids = stdout.trim().split(/\s+/).filter(p => p && !isNaN(p) && parseInt(p) !== currentPid);
+                const allPids = stdout.trim().split(/\s+/).filter(p => p && !isNaN(p));
+
+                // Filter out current PID and dead processes (e.g. ephemeral shell wrappers)
+                const validPids = [];
+                for (const p of allPids) {
+                    const pid = parseInt(p);
+                    if (pid === currentPid) continue;
+
+                    try {
+                        // Check if process is still alive
+                        process.kill(pid, 0);
+                        validPids.push(p);
+                    } catch (e) {
+                         // Process is dead or access denied
+                    }
+                }
+                pids = validPids;
             } catch (e) {
                 if (e.code === 1) pids = [];
                 else throw e;
