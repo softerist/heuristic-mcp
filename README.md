@@ -196,6 +196,14 @@ heuristic-mcp --start
 
 *(This re-runs the configuration step to ensure it is enabled in your IDE)*
 
+**Check Status:**
+
+```bash
+heuristic-mcp --status
+```
+
+*(Shows if the server is running and its PID)*
+
 ---
 
 ## Environment Variables
@@ -278,6 +286,7 @@ The server indexes your code in four steps:
 4. **Storage**: Saves embeddings to `.smart-coding-cache/` for fast startup
 
 When you search, your query is converted to the same vector format. We use a **hybrid ranking algorithm** that combines:
+
 - **Semantic Similarity** (cosine similarity of vectors)
 - **Exact Keyword Matching** (BM25-inspired boost)
 - **Recency Boosting** (favoring files you're actively working on)
@@ -332,7 +341,7 @@ Finds all try/catch blocks and error handling patterns.
 
 This project builds on research from Cursor showing that semantic search improves AI coding agent performance by 12.5% on average across question-answering tasks. The key insight is that AI assistants benefit more from relevant context than from large amounts of context.
 
-See: https://cursor.com/blog/semsearch
+See: <https://cursor.com/blog/semsearch>
 
 ## Acknowledgements
 

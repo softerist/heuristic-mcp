@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { stop, start } from "./features/lifecycle.js";
+import { stop, start, status } from "./features/lifecycle.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { pipeline } from "@xenova/transformers";
@@ -33,6 +33,11 @@ if (args.includes('--stop')) {
 
 if (args.includes('--start')) {
   await start();
+  process.exit(0);
+}
+
+if (args.includes('--status')) {
+  await status();
   process.exit(0);
 }
 

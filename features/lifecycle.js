@@ -45,3 +45,33 @@ export async function start() {
         console.error(`[Lifecycle] Failed to configure server: ${err.message}`);
     }
 }
+
+export async function status() {
+    try {
+        const platform = process.platform;
+        let command = '';
+
+        if (platform === 'win32') {
+            command = `wmic process where "CommandLine like '%heuristic-mcp/index.js%'" get ProcessId`;
+        } else {
+            // pgrep -f matches the full command line
+            command = `pgrep -f "heuristic-mcp/index.js"`;
+        }
+
+        const { stdout } = await execPromise(command);
+        const pids = stdout.trim().split(/\s+/).filter(pid => pid && !isNaN(pid));
+
+        if (pids.length > 0) {
+            console.log(`[Lifecycle] 🟢 Server is RUNNING. PID(s): ${pids.join(', ')}`);
+        } else {
+            console.log('[Lifecycle] ⚪ Server is STOPPED.');
+        }
+    } catch (error) {
+        // pgrep returns exit code 1 if no process found
+        if (error.code === 1 || error.code === '1' || error.message.includes('No Instance(s) Available')) {
+             console.log('[Lifecycle] ⚪ Server is STOPPED.');
+        } else {
+             console.error(`[Lifecycle] Failed to check status: ${error.message}`);
+        }
+    }
+}
