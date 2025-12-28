@@ -126,15 +126,7 @@ Install globally via npm:
 npm install -g @softerist/heuristic-mcp
 ```
 
-To update to the latest version:
-
-```bash
-npm update -g @softerist/heuristic-mcp
-```
-
-## Configuration
-
-Add to your MCP configuration file. The location depends on your IDE and OS:
+That's it! The installer will automatically detect your IDE (Antigravity, Claude, Cursor) and configure it for you.
 
 | IDE                  | OS      | Config Path                                                       |
 | -------------------- | ------- | ----------------------------------------------------------------- |
@@ -176,19 +168,33 @@ Add the server configuration to the `mcpServers` object in your config file:
 }
 ```
 
-### Auto-Fix Configuration (New!)
+### Troubleshooting
 
-To automatically configure your IDEs (Antigravity, Claude, Cursor) with the correct path:
+If for some reason the server isn't detected automatically, you can trigger the registration manually:
 
 ```bash
 heuristic-mcp --register
 ```
 
-This will automatically find your IDE config files and inject the correct absolute path to the server. You can also target a specific IDE:
+### Starting and Stopping
+
+If you need to restart the server or kill a zombie process:
+
+**Stop the server:**
 
 ```bash
-heuristic-mcp --register antigravity
+heuristic-mcp --stop
 ```
+
+*(This kills any running instances of the server)*
+
+**Start/Enable the server:**
+
+```bash
+heuristic-mcp --start
+```
+
+*(This re-runs the configuration step to ensure it is enabled in your IDE)*
 
 ---
 

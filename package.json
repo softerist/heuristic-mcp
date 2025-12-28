@@ -12,7 +12,8 @@
     "dev": "node --watch index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clear-cache": "node scripts/clear-cache.js"
+    "clear-cache": "node scripts/clear-cache.js",
+    "postinstall": "node index.js --register"
   },
   "keywords": [
     "mcp",

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { stop, start } from "./features/lifecycle.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { pipeline } from "@xenova/transformers";
@@ -23,6 +24,16 @@ import { register } from "./features/register.js";
 
 // Parse workspace from command line arguments
 const args = process.argv.slice(2);
+
+if (args.includes('--stop')) {
+  await stop();
+  process.exit(0);
+}
+
+if (args.includes('--start')) {
+  await start();
+  process.exit(0);
+}
 
 // Check if --register flag is present
 if (args.includes('--register')) {

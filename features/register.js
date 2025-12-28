@@ -62,7 +62,7 @@ export async function register(filter = null) {
 
   const serverConfig = {
     command: binaryPath,
-    args: [scriptPath, "--workspace", process.cwd()],
+    args: [scriptPath, "--workspace", "${workspaceFolder}"],
     disabled: false,
     autoRegistered: true // Marker to know we did this
   };
