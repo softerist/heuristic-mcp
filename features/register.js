@@ -93,6 +93,7 @@ function forceLog(message) {
 export async function register(filter = null) {
   const binaryPath = process.execPath; // The node binary
   const scriptPath = fileURLToPath(new URL('../index.js', import.meta.url)); // Absolute path to index.js
+  const currentIDE = detectCurrentIDE();
 
   // For Antigravity, we MUST use absolute path because ${workspaceFolder} variable expansion
   // is not supported in the current version, and '.' uses the wrong CWD.
