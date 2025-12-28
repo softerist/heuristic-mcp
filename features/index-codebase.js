@@ -547,17 +547,44 @@ export class CodebaseIndexer {
 
     if (filesToProcess.length === 0) {
       console.error("[Indexer] All files unchanged, nothing to index");
-      this.sendProgress(100, 100, "All files up to date");
-      await this.cache.save();
-      const vectorStore = this.cache.getVectorStore();
-      return {
-        skipped: false,
-        filesProcessed: 0,
-        chunksCreated: 0,
-        totalFiles: new Set(vectorStore.map(v => v.file)).size,
-        totalChunks: vectorStore.length,
-        message: "All files up to date"
-      };
+
+      // If we have no call graph data but we have cached files, we should try to rebuild it
+      if (this.config.callGraphEnabled && this.cache.getVectorStore().length > 0) {
+        // Check for files that are in cache but missing from call graph data
+        const cachedFiles = new Set(this.cache.getVectorStore().map(c => c.file));
+        const callDataFiles = new Set(this.cache.fileCallData.keys());
+
+        const missingCallData = [];
+        for (const file of cachedFiles) {
+          if (!callDataFiles.has(file)) {
+            missingCallData.push(file);
+          }
+        }
+
+        if (missingCallData.length > 0) {
+          console.error(`[Indexer] Found ${missingCallData.length} files missing call graph data, re-indexing...`);
+          // Add these files to filesToProcess so they get re-read and re-indexed
+          // We need to filter them to ensure they still exist on disk
+          for (const file of missingCallData) {
+            filesToProcess.push(file);
+          }
+        }
+      }
+
+      // If still empty after checking for missing call data, then we are truly done
+      if (filesToProcess.length === 0) {
+        this.sendProgress(100, 100, "All files up to date");
+        await this.cache.save();
+        const vectorStore = this.cache.getVectorStore();
+        return {
+          skipped: false,
+          filesProcessed: 0,
+          chunksCreated: 0,
+          totalFiles: new Set(vectorStore.map(v => v.file)).size,
+          totalChunks: vectorStore.length,
+          message: "All files up to date"
+        };
+      }
     }
 
     // Send progress: filtering complete
