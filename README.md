@@ -148,7 +148,7 @@ Returns: Relevant validation code with file paths and line numbers
 **find_similar_code** - Find duplicates or patterns
 
 ```
-Input: A snippet of code or a file path
+Input: A code snippet (paste the code directly)
 Returns: Other code in the project that looks or functions similarly
 ```
 
