@@ -23,35 +23,59 @@ function getConfigPaths() {
   const paths = [];
 
   // Antigravity
-  if (platform === 'win32') {
-    paths.push({
-      name: 'Antigravity',
-      path: expandPath('%USERPROFILE%\\.gemini\\antigravity\\mcp_config.json')
-    });
-  } else {
-    paths.push({
-      name: 'Antigravity',
-      path: expandPath('~/.gemini/antigravity/mcp_config.json')
-    });
-  }
+  paths.push({
+    name: 'Antigravity',
+    path: path.join(home, '.gemini', 'antigravity', 'mcp_config.json')
+  });
 
   // Claude Desktop
   if (platform === 'darwin') {
     paths.push({
       name: 'Claude Desktop',
-      path: expandPath('~/Library/Application Support/Claude/claude_desktop_config.json')
+      path: path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
     });
   } else if (platform === 'win32') {
     paths.push({
       name: 'Claude Desktop',
-      path: expandPath('%APPDATA%\\Claude\\claude_desktop_config.json')
+      path: path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json')
     });
   }
 
-  // Cursor (Cascade) - Settings are usually in settings.json but MCP might have a specific spot?
-  // Cursor often uses VS Code's settings.json for some things, but explicit MCP support varies.
-  // For now, we'll stick to Antigravity and Claude as confirmed targets.
-  // NOTE: If Cursor adds a specific mcp_config, add it here.
+  // VS Code (MCP extension config in settings.json)
+  if (platform === 'darwin') {
+    paths.push({
+      name: 'VS Code',
+      path: path.join(home, 'Library', 'Application Support', 'Code', 'User', 'settings.json')
+    });
+  } else if (platform === 'win32') {
+    paths.push({
+      name: 'VS Code',
+      path: path.join(process.env.APPDATA || '', 'Code', 'User', 'settings.json')
+    });
+  } else {
+    paths.push({
+      name: 'VS Code',
+      path: path.join(home, '.config', 'Code', 'User', 'settings.json')
+    });
+  }
+
+  // Cursor (uses similar structure to VS Code)
+  if (platform === 'darwin') {
+    paths.push({
+      name: 'Cursor',
+      path: path.join(home, 'Library', 'Application Support', 'Cursor', 'User', 'settings.json')
+    });
+  } else if (platform === 'win32') {
+    paths.push({
+      name: 'Cursor',
+      path: path.join(process.env.APPDATA || '', 'Cursor', 'User', 'settings.json')
+    });
+  } else {
+    paths.push({
+      name: 'Cursor',
+      path: path.join(home, '.config', 'Cursor', 'User', 'settings.json')
+    });
+  }
 
   return paths;
 }

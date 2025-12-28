@@ -219,9 +219,7 @@ export async function logs() {
         const mcpConfigs = [];
 
         // Antigravity
-        const antigravityConfig = process.platform === 'win32'
-            ? path.join(home, '.gemini', 'antigravity', 'mcp_config.json')
-            : path.join(home, '.gemini', 'antigravity', 'mcp_config.json');
+        const antigravityConfig = path.join(home, '.gemini', 'antigravity', 'mcp_config.json');
         const antigravityExists = await fs.access(antigravityConfig).then(() => true).catch(() => false);
         mcpConfigs.push({ name: 'Antigravity', path: antigravityConfig, exists: antigravityExists });
 
@@ -236,6 +234,30 @@ export async function logs() {
             const claudeExists = await fs.access(claudeConfig).then(() => true).catch(() => false);
             mcpConfigs.push({ name: 'Claude Desktop', path: claudeConfig, exists: claudeExists });
         }
+
+        // VS Code (MCP extension uses settings.json or dedicated config)
+        let vscodeConfig = null;
+        if (process.platform === 'darwin') {
+            vscodeConfig = path.join(home, 'Library', 'Application Support', 'Code', 'User', 'settings.json');
+        } else if (process.platform === 'win32') {
+            vscodeConfig = path.join(process.env.APPDATA || '', 'Code', 'User', 'settings.json');
+        } else {
+            vscodeConfig = path.join(home, '.config', 'Code', 'User', 'settings.json');
+        }
+        const vscodeExists = await fs.access(vscodeConfig).then(() => true).catch(() => false);
+        mcpConfigs.push({ name: 'VS Code', path: vscodeConfig, exists: vscodeExists });
+
+        // Cursor (uses similar structure to VS Code)
+        let cursorConfig = null;
+        if (process.platform === 'darwin') {
+            cursorConfig = path.join(home, 'Library', 'Application Support', 'Cursor', 'User', 'settings.json');
+        } else if (process.platform === 'win32') {
+            cursorConfig = path.join(process.env.APPDATA || '', 'Cursor', 'User', 'settings.json');
+        } else {
+            cursorConfig = path.join(home, '.config', 'Cursor', 'User', 'settings.json');
+        }
+        const cursorExists = await fs.access(cursorConfig).then(() => true).catch(() => false);
+        mcpConfigs.push({ name: 'Cursor', path: cursorConfig, exists: cursorExists });
 
         console.log(`   📦 Global npm bin: ${npmBin}`);
         console.log(`   ⚙️  MCP configs:`);
