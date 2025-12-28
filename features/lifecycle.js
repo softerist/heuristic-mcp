@@ -4,6 +4,7 @@ import util from 'util';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
+import { fileURLToPath } from 'url';
 
 const execPromise = util.promisify(exec);
 
@@ -84,6 +85,21 @@ function getGlobalCacheDir() {
         return path.join(os.homedir(), 'Library', 'Caches');
     }
     return process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
+}
+
+function quoteArg(value) {
+    const safe = value ? String(value).replace(/"/g, '\\"') : '';
+    return `"${safe}"`;
+}
+
+function buildConsoleCommand(workspaceDir = null) {
+    const nodeBin = process.execPath;
+    const scriptPath = fileURLToPath(new URL('../index.js', import.meta.url));
+    const workspace = workspaceDir || process.cwd();
+    const envPrefix = process.platform === 'win32'
+        ? 'set SMART_CODING_VERBOSE=true &&'
+        : 'SMART_CODING_VERBOSE=true';
+    return `${envPrefix} ${quoteArg(nodeBin)} ${quoteArg(scriptPath)} --workspace ${quoteArg(workspace)}`;
 }
 
 export async function status() {
@@ -257,4 +273,9 @@ export async function status() {
     } catch (error) {
          console.error(`[Lifecycle] Failed to check status: ${error.message}`);
     }
+}
+
+export async function logs() {
+    console.log(`[Logs] Console logs: ${buildConsoleCommand()}`);
+    await status();
 }
