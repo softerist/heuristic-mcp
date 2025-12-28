@@ -56,7 +56,6 @@
   "maxFileSize": 1048576,
   "maxResults": 5,
   "enableCache": true,
-  "cacheDirectory": "./.smart-coding-cache",
   "watchFiles": false,
   "verbose": false,
   "embeddingModel": "Xenova/all-MiniLM-L6-v2",
