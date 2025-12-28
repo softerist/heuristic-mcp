@@ -41,25 +41,10 @@ function getConfigPaths() {
     });
   }
 
-  // VS Code (MCP extension config in settings.json)
-  if (platform === 'darwin') {
-    paths.push({
-      name: 'VS Code',
-      path: path.join(home, 'Library', 'Application Support', 'Code', 'User', 'settings.json')
-    });
-  } else if (platform === 'win32') {
-    paths.push({
-      name: 'VS Code',
-      path: path.join(process.env.APPDATA || '', 'Code', 'User', 'settings.json')
-    });
-  } else {
-    paths.push({
-      name: 'VS Code',
-      path: path.join(home, '.config', 'Code', 'User', 'settings.json')
-    });
-  }
+  // Note: VS Code support is shown in --logs but NOT auto-registered
+  // because settings.json is a general config file that should not be auto-modified.
 
-  // Cursor (uses similar structure to VS Code)
+  // Cursor (has MCP support, uses settings.json key)
   if (platform === 'darwin') {
     paths.push({
       name: 'Cursor',
