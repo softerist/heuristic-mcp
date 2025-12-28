@@ -1,11 +1,11 @@
-# Project Structure
+# Architecture Overview
 
-This document outlines the modular architecture of Smart Coding MCP.
+This document outlines the modular architecture of Heuristic MCP.
 
 ## Directory Structure
 
 ```
-smart-coding-mcp/
+heuristic-mcp/
 ├── index.js                    # Main entry point, MCP server setup
 ├── package.json                # Package configuration
 ├── config.json                 # User configuration
@@ -49,6 +49,7 @@ smart-coding-mcp/
 - Manages persistence of embedding vectors
 - File hash tracking for change detection
 - Load/save operations for disk cache
+- Optional ANN (HNSW) index build/load/save for fast search
 
 ### lib/utils.js
 
@@ -173,6 +174,8 @@ smartChunk() - split into chunks
 embedder - generate vectors
     ↓
 EmbeddingsCache - store in memory + disk
+    ↓
+ANN index (optional) - build/load from cache
 ```
 
 ### Search Flow
@@ -182,7 +185,9 @@ User query
     ↓
 embedder - query to vector
     ↓
-cosineSimilarity() - score all chunks
+ANN candidate search (optional)
+    ↓
+cosineSimilarity() - score candidates
     ↓
 exact match boost - adjust scores
     ↓

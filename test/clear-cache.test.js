@@ -25,7 +25,7 @@ describe('CacheClearer', () => {
   let fixtures;
   
   beforeAll(async () => {
-    fixtures = await createTestFixtures({ workerThreads: 2 });
+    fixtures = await createTestFixtures({ workerThreads: 1 });
   });
   
   afterAll(async () => {
@@ -90,9 +90,6 @@ describe('CacheClearer', () => {
       fixtures.cache.fileHashes = new Map();
       
       const indexPromise = fixtures.indexer.indexAll(true);
-      
-      // Wait for indexing to start
-      await new Promise(resolve => setTimeout(resolve, 100));
       expect(fixtures.indexer.isIndexing).toBe(true);
       
       // Try to clear - should fail
@@ -207,7 +204,7 @@ describe('Clear Cache Tool Handler', () => {
   let fixtures;
   
   beforeAll(async () => {
-    fixtures = await createTestFixtures({ workerThreads: 2 });
+    fixtures = await createTestFixtures({ workerThreads: 1 });
   });
   
   afterAll(async () => {
@@ -250,7 +247,7 @@ describe('Clear Cache Tool Handler', () => {
       fixtures.cache.fileHashes = new Map();
       
       const indexPromise = fixtures.indexer.indexAll(true);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(fixtures.indexer.isIndexing).toBe(true);
       
       const request = createMockRequest('c_clear_cache', {});
       const result = await ClearCacheFeature.handleToolCall(request, fixtures.cacheClearer);

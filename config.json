@@ -62,5 +62,15 @@
   "embeddingModel": "Xenova/all-MiniLM-L6-v2",
   "semanticWeight": 0.7,
   "exactMatchBoost": 1.5,
-  "workerThreads": "auto"
+  "workerThreads": "auto",
+  "annEnabled": true,
+  "annMinChunks": 5000,
+  "annMinCandidates": 50,
+  "annMaxCandidates": 200,
+  "annCandidateMultiplier": 20,
+  "annEfConstruction": 200,
+  "annEfSearch": 64,
+  "annM": 16,
+  "annIndexCache": true,
+  "annMetric": "cosine"
 }

@@ -23,7 +23,7 @@ describe('HybridSearch', () => {
   let fixtures;
   
   beforeAll(async () => {
-    fixtures = await createTestFixtures({ workerThreads: 2 });
+    fixtures = await createTestFixtures({ workerThreads: 1 });
     
     // Ensure we have indexed content
     await clearTestCache(fixtures.config);
@@ -164,7 +164,7 @@ describe('Hybrid Search Tool Handler', () => {
   let fixtures;
   
   beforeAll(async () => {
-    fixtures = await createTestFixtures({ workerThreads: 2 });
+    fixtures = await createTestFixtures({ workerThreads: 1 });
     
     // Ensure indexed content
     await fixtures.indexer.indexAll(false);

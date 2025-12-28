@@ -22,7 +22,7 @@ describe('Concurrent Indexing', () => {
   let fixtures;
   
   beforeAll(async () => {
-    fixtures = await createTestFixtures({ workerThreads: 2 });
+    fixtures = await createTestFixtures({ workerThreads: 1, useRealEmbedder: true });
   });
   
   afterAll(async () => {
@@ -110,7 +110,7 @@ describe('Clear Cache Operations', () => {
   let fixtures;
   
   beforeAll(async () => {
-    fixtures = await createTestFixtures({ workerThreads: 2 });
+    fixtures = await createTestFixtures({ workerThreads: 1, useRealEmbedder: true });
   });
   
   afterAll(async () => {
@@ -197,7 +197,7 @@ describe('Tool Handler Response Quality', () => {
   let fixtures;
   
   beforeAll(async () => {
-    fixtures = await createTestFixtures({ workerThreads: 2 });
+    fixtures = await createTestFixtures({ workerThreads: 1, useRealEmbedder: true });
   });
   
   afterAll(async () => {

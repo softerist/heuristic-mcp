@@ -6,6 +6,69 @@ import os from "os";
 import { Worker } from "worker_threads";
 import { fileURLToPath } from "url";
 import { smartChunk, hashContent } from "../lib/utils.js";
+import { extractCallData } from "../lib/call-graph.js";
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function globToRegExp(pattern) {
+  let regex = "^";
+  for (let i = 0; i < pattern.length; ) {
+    const char = pattern[i];
+    if (char === "*") {
+      if (pattern[i + 1] === "*") {
+        if (pattern[i + 2] === "/") {
+          regex += "(?:.*/)?";
+          i += 3;
+        } else {
+          regex += ".*";
+          i += 2;
+        }
+      } else {
+        regex += "[^/]*";
+        i += 1;
+      }
+      continue;
+    }
+    if (char === "?") {
+      regex += "[^/]";
+      i += 1;
+      continue;
+    }
+    regex += escapeRegExp(char);
+    i += 1;
+  }
+  regex += "$";
+  return new RegExp(regex);
+}
+
+function normalizePath(filePath) {
+  return filePath.split(path.sep).join("/");
+}
+
+function buildExcludeMatchers(patterns) {
+  return [...new Set(patterns)]
+    .filter(Boolean)
+    .map(pattern => ({
+      matchBase: !pattern.includes("/"),
+      regex: globToRegExp(pattern)
+    }));
+}
+
+function matchesExcludePatterns(filePath, matchers) {
+  if (matchers.length === 0) return false;
+  const normalized = normalizePath(filePath);
+  const basename = path.posix.basename(normalized);
+
+  for (const matcher of matchers) {
+    const target = matcher.matchBase ? basename : normalized;
+    if (matcher.regex.test(target)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -19,14 +82,15 @@ export class CodebaseIndexer {
     this.workers = [];
     this.workerReady = [];
     this.isIndexing = false;
+    this.excludeMatchers = buildExcludeMatchers(this.config.excludePatterns || []);
   }
 
   /**
    * Initialize worker thread pool for parallel embedding
    */
   async initializeWorkers() {
-    const numWorkers = this.config.workerThreads === "auto" 
-      ? Math.max(1, os.cpus().length - 1) 
+    const numWorkers = this.config.workerThreads === "auto"
+      ? Math.min(4, Math.max(1, os.cpus().length - 1)) // Cap 'auto' at 4 workers
       : (this.config.workerThreads || 1);
 
     // Only use workers if we have more than 1 CPU
@@ -40,13 +104,13 @@ export class CodebaseIndexer {
     }
 
     console.error(`[Indexer] Initializing ${numWorkers} worker threads...`);
-    
+
     const workerPath = path.join(__dirname, "../lib/embedding-worker.js");
-    
+
     for (let i = 0; i < numWorkers; i++) {
       try {
         const worker = new Worker(workerPath, {
-          workerData: { 
+          workerData: {
             embeddingModel: this.config.embeddingModel,
             verbose: this.config.verbose
           }
@@ -54,7 +118,7 @@ export class CodebaseIndexer {
 
         const readyPromise = new Promise((resolve, reject) => {
           const timeout = setTimeout(() => reject(new Error("Worker init timeout")), 120000);
-          
+
           worker.once("message", (msg) => {
             clearTimeout(timeout);
             if (msg.type === "ready") {
@@ -63,7 +127,7 @@ export class CodebaseIndexer {
               reject(new Error(msg.error));
             }
           });
-          
+
           worker.once("error", (err) => {
             clearTimeout(timeout);
             reject(err);
@@ -99,6 +163,10 @@ export class CodebaseIndexer {
     }
     this.workers = [];
     this.workerReady = [];
+  }
+
+  isExcluded(filePath) {
+    return matchesExcludePatterns(filePath, this.excludeMatchers);
   }
 
   /**
@@ -148,7 +216,7 @@ export class CodebaseIndexer {
       const promise = new Promise((resolve, reject) => {
         const worker = this.workers[i];
         const batchId = `batch-${i}-${Date.now()}`;
-        
+
         // Timeout handler
         const timeout = setTimeout(() => {
           worker.off("message", handler);
@@ -188,7 +256,7 @@ export class CodebaseIndexer {
 
     // Wait for all workers with error recovery
     const workerResults = await Promise.all(workerPromises.map(p => p.promise));
-    
+
     // Collect results and identify failed chunks that need retry
     const failedChunks = [];
     for (let i = 0; i < workerResults.length; i++) {
@@ -215,7 +283,7 @@ export class CodebaseIndexer {
    */
   async processChunksSingleThreaded(chunks) {
     const results = [];
-    
+
     for (const chunk of chunks) {
       try {
         const output = await this.embedder(chunk.text, { pooling: "mean", normalize: true });
@@ -243,29 +311,35 @@ export class CodebaseIndexer {
 
   async indexFile(file) {
     const fileName = path.basename(file);
+    if (this.isExcluded(file)) {
+      if (this.config.verbose) {
+        console.error(`[Indexer] Skipped ${fileName} (excluded by pattern)`);
+      }
+      return 0;
+    }
     if (this.config.verbose) {
       console.error(`[Indexer] Processing: ${fileName}...`);
     }
-    
+
     try {
       // Check file size first
       const stats = await fs.stat(file);
-      
+
       // Skip directories
       if (stats.isDirectory()) {
         return 0;
       }
-      
+
       if (stats.size > this.config.maxFileSize) {
         if (this.config.verbose) {
           console.error(`[Indexer] Skipped ${fileName} (too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB)`);
         }
         return 0;
       }
-      
+
       const content = await fs.readFile(file, "utf-8");
       const hash = hashContent(content);
-      
+
       // Skip if file hasn't changed
       if (this.cache.getFileHash(file) === hash) {
         if (this.config.verbose) {
@@ -277,17 +351,18 @@ export class CodebaseIndexer {
       if (this.config.verbose) {
         console.error(`[Indexer] Indexing ${fileName}...`);
       }
-      
+
       // Remove old chunks for this file
       this.cache.removeFileFromStore(file);
-      
+
       const chunks = smartChunk(content, file, this.config);
       let addedChunks = 0;
+      let failedChunks = 0;
 
       for (const chunk of chunks) {
         try {
           const output = await this.embedder(chunk.text, { pooling: "mean", normalize: true });
-          
+
           this.cache.addToStore({
             file,
             startLine: chunk.startLine,
@@ -297,11 +372,16 @@ export class CodebaseIndexer {
           });
           addedChunks++;
         } catch (embeddingError) {
+          failedChunks++;
           console.error(`[Indexer] Failed to embed chunk in ${fileName}:`, embeddingError.message);
         }
       }
 
-      this.cache.setFileHash(file, hash);
+      if (chunks.length === 0 || failedChunks === 0) {
+        this.cache.setFileHash(file, hash);
+      } else if (this.config.verbose) {
+        console.error(`[Indexer] Skipped hash update for ${fileName} (${addedChunks}/${chunks.length} chunks embedded)`);
+      }
       if (this.config.verbose) {
         console.error(`[Indexer] Completed ${fileName} (${addedChunks} chunks)`);
       }
@@ -318,10 +398,10 @@ export class CodebaseIndexer {
    */
   async discoverFiles() {
     const startTime = Date.now();
-    
+
     // Build extension filter from config
     const extensions = new Set(this.config.fileExtensions.map(ext => `.${ext}`));
-    
+
     // Extract directory names from glob patterns in config.excludePatterns
     // Patterns like "**/node_modules/**" -> "node_modules"
     const excludeDirs = new Set();
@@ -337,10 +417,10 @@ export class CodebaseIndexer {
         excludeDirs.add(match2[1]);
       }
     }
-    
+
     // Always exclude cache directory
     excludeDirs.add(".smart-coding-cache");
-    
+
     if (this.config.verbose) {
       console.error(`[Indexer] Using ${excludeDirs.size} exclude directories from config`);
     }
@@ -348,11 +428,11 @@ export class CodebaseIndexer {
     const api = new fdir()
       .withFullPaths()
       .exclude((dirName) => excludeDirs.has(dirName))
-      .filter((filePath) => extensions.has(path.extname(filePath)))
+      .filter((filePath) => extensions.has(path.extname(filePath)) && !this.isExcluded(filePath))
       .crawl(this.config.searchDirectory);
 
     const files = await api.withPromise();
-    
+
     console.error(`[Indexer] File discovery: ${files.length} files in ${Date.now() - startTime}ms`);
     return files;
   }
@@ -367,32 +447,32 @@ export class CodebaseIndexer {
 
     // Process in parallel batches for speed
     const BATCH_SIZE = 500;
-    
+
     for (let i = 0; i < files.length; i += BATCH_SIZE) {
       const batch = files.slice(i, i + BATCH_SIZE);
-      
+
       const results = await Promise.all(
         batch.map(async (file) => {
           try {
             const stats = await fs.stat(file);
-            
+
             if (stats.isDirectory()) {
               return null;
             }
-            
+
             if (stats.size > this.config.maxFileSize) {
               skippedCount.tooLarge++;
               return null;
             }
-            
+
             const content = await fs.readFile(file, "utf-8");
             const hash = hashContent(content);
-            
+
             if (this.cache.getFileHash(file) === hash) {
               skippedCount.unchanged++;
               return null;
             }
-            
+
             return { file, content, hash };
           } catch (error) {
             skippedCount.error++;
@@ -427,10 +507,10 @@ export class CodebaseIndexer {
 
       const totalStartTime = Date.now();
     console.error(`[Indexer] Starting optimized indexing in ${this.config.searchDirectory}...`);
-    
+
     // Step 1: Fast file discovery with fdir
     const files = await this.discoverFiles();
-    
+
     if (files.length === 0) {
       console.error("[Indexer] No files found to index");
       this.sendProgress(100, 100, "No files found to index");
@@ -453,7 +533,7 @@ export class CodebaseIndexer {
           prunedCount++;
         }
       }
-      
+
       if (prunedCount > 0) {
         if (this.config.verbose) {
           console.error(`[Indexer] Pruned ${prunedCount} deleted/excluded files from index`);
@@ -464,19 +544,19 @@ export class CodebaseIndexer {
 
     // Step 2: Pre-filter unchanged files (early hash check)
     const filesToProcess = await this.preFilterFiles(files);
-    
+
     if (filesToProcess.length === 0) {
       console.error("[Indexer] All files unchanged, nothing to index");
       this.sendProgress(100, 100, "All files up to date");
       await this.cache.save();
       const vectorStore = this.cache.getVectorStore();
-      return { 
-        skipped: false, 
-        filesProcessed: 0, 
-        chunksCreated: 0, 
+      return {
+        skipped: false,
+        filesProcessed: 0,
+        chunksCreated: 0,
         totalFiles: new Set(vectorStore.map(v => v.file)).size,
         totalChunks: vectorStore.length,
-        message: "All files up to date" 
+        message: "All files up to date"
       };
     }
 
@@ -485,14 +565,14 @@ export class CodebaseIndexer {
 
     // Step 3: Determine batch size based on project size
     const adaptiveBatchSize = files.length > 10000 ? 500 :
-                              files.length > 1000 ? 200 : 
+                              files.length > 1000 ? 200 :
                               this.config.batchSize || 100;
 
     console.error(`[Indexer] Processing ${filesToProcess.length} files (batch size: ${adaptiveBatchSize})`);
 
     // Step 4: Initialize worker threads (always use when multi-core available)
     const useWorkers = os.cpus().length > 1;
-    
+
     if (useWorkers) {
       await this.initializeWorkers();
       console.error(`[Indexer] Multi-threaded mode: ${this.workers.length} workers active`);
@@ -506,24 +586,41 @@ export class CodebaseIndexer {
     // Step 5: Process files in adaptive batches
     for (let i = 0; i < filesToProcess.length; i += adaptiveBatchSize) {
       const batch = filesToProcess.slice(i, i + adaptiveBatchSize);
-      
+
       // Generate all chunks for this batch
       const allChunks = [];
-      
+      const fileStats = new Map();
+
       for (const { file, content, hash } of batch) {
         // Remove old chunks for this file
         this.cache.removeFileFromStore(file);
-        
+
+        // Extract call graph data if enabled
+        if (this.config.callGraphEnabled) {
+          try {
+            const callData = extractCallData(content, file);
+            this.cache.setFileCallData(file, callData);
+          } catch (err) {
+            if (this.config.verbose) {
+              console.error(`[Indexer] Call graph extraction failed for ${path.basename(file)}: ${err.message}`);
+            }
+          }
+        }
+
         const chunks = smartChunk(content, file, this.config);
-        
+        fileStats.set(file, { hash, totalChunks: 0, successChunks: 0 });
+
         for (const chunk of chunks) {
           allChunks.push({
             file,
             text: chunk.text,
             startLine: chunk.startLine,
-            endLine: chunk.endLine,
-            hash
+            endLine: chunk.endLine
           });
+          const stats = fileStats.get(file);
+          if (stats) {
+            stats.totalChunks++;
+          }
         }
       }
 
@@ -536,8 +633,8 @@ export class CodebaseIndexer {
       }
 
       // Store successful results
-      const fileHashes = new Map();
       for (const result of results) {
+        const stats = fileStats.get(result.file);
         if (result.success) {
           this.cache.addToStore({
             file: result.file,
@@ -547,17 +644,19 @@ export class CodebaseIndexer {
             vector: result.vector
           });
           totalChunks++;
-        }
-        // Track hash for each file
-        const chunkInfo = allChunks.find(c => c.file === result.file);
-        if (chunkInfo) {
-          fileHashes.set(result.file, chunkInfo.hash);
+          if (stats) {
+            stats.successChunks++;
+          }
         }
       }
 
       // Update file hashes
-      for (const [file, hash] of fileHashes) {
-        this.cache.setFileHash(file, hash);
+      for (const [file, stats] of fileStats) {
+        if (stats.totalChunks === 0 || stats.successChunks === stats.totalChunks) {
+          this.cache.setFileHash(file, stats.hash);
+        } else if (this.config.verbose) {
+          console.error(`[Indexer] Skipped hash update for ${path.basename(file)} (${stats.successChunks}/${stats.totalChunks} chunks embedded)`);
+        }
       }
 
       processedFiles += batch.length;
@@ -567,7 +666,7 @@ export class CodebaseIndexer {
         const elapsed = ((Date.now() - totalStartTime) / 1000).toFixed(1);
         const rate = (processedFiles / parseFloat(elapsed)).toFixed(0);
         console.error(`[Indexer] Progress: ${processedFiles}/${filesToProcess.length} files (${rate} files/sec)`);
-        
+
         // Send MCP progress notification (10-95% range for batch processing)
         const progressPercent = Math.floor(10 + (processedFiles / filesToProcess.length) * 85);
         this.sendProgress(progressPercent, 100, `Indexed ${processedFiles}/${filesToProcess.length} files (${rate}/sec)`);
@@ -581,12 +680,23 @@ export class CodebaseIndexer {
 
     const totalTime = ((Date.now() - totalStartTime) / 1000).toFixed(1);
     console.error(`[Indexer] Complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`);
-    
+
     // Send completion progress
     this.sendProgress(100, 100, `Complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`);
-    
+
     await this.cache.save();
-    
+
+    // Rebuild call graph in background
+    if (this.config.callGraphEnabled) {
+      this.cache.rebuildCallGraph();
+    }
+
+    void this.cache.ensureAnnIndex().catch((error) => {
+      if (this.config.verbose) {
+        console.error(`[ANN] Background ANN build failed: ${error.message}`);
+      }
+    });
+
     const vectorStore = this.cache.getVectorStore();
     return {
       skipped: false,
@@ -606,7 +716,7 @@ export class CodebaseIndexer {
     if (!this.config.watchFiles) return;
 
     const pattern = this.config.fileExtensions.map(ext => `**/*.${ext}`);
-    
+
     this.watcher = chokidar.watch(pattern, {
       cwd: this.config.searchDirectory,
       ignored: this.config.excludePatterns,
@@ -618,18 +728,36 @@ export class CodebaseIndexer {
       .on("add", async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.error(`[Indexer] New file detected: ${filePath}`);
+
+        // Invalidate recency cache
+        if (this.server && this.server.hybridSearch) {
+          this.server.hybridSearch.clearFileModTime(fullPath);
+        }
+
         await this.indexFile(fullPath);
         await this.cache.save();
       })
       .on("change", async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.error(`[Indexer] File changed: ${filePath}`);
+
+        // Invalidate recency cache
+        if (this.server && this.server.hybridSearch) {
+          this.server.hybridSearch.clearFileModTime(fullPath);
+        }
+
         await this.indexFile(fullPath);
         await this.cache.save();
       })
       .on("unlink", (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.error(`[Indexer] File deleted: ${filePath}`);
+
+        // Invalidate recency cache
+        if (this.server && this.server.hybridSearch) {
+          this.server.hybridSearch.clearFileModTime(fullPath);
+        }
+
         this.cache.removeFileFromStore(fullPath);
         this.cache.deleteFileHash(fullPath);
         this.cache.save();
@@ -668,7 +796,7 @@ export function getToolDefinition() {
 export async function handleToolCall(request, indexer) {
   const force = request.params.arguments?.force || false;
   const result = await indexer.indexAll(force);
-  
+
   // Handle case when indexing was skipped due to concurrent request
   if (result?.skipped) {
     return {
@@ -678,7 +806,7 @@ export async function handleToolCall(request, indexer) {
       }]
     };
   }
-  
+
   // Get current stats from cache
   const vectorStore = indexer.cache.getVectorStore();
   const stats = {
@@ -687,17 +815,17 @@ export async function handleToolCall(request, indexer) {
     filesProcessed: result?.filesProcessed ?? 0,
     chunksCreated: result?.chunksCreated ?? 0
   };
-  
-  let message = result?.message 
+
+  let message = result?.message
     ? `Codebase reindexed successfully.\n\n${result.message}`
     : `Codebase reindexed successfully.`;
-  
+
   message += `\n\nStatistics:\n- Total files in index: ${stats.totalFiles}\n- Total code chunks: ${stats.totalChunks}`;
-  
+
   if (stats.filesProcessed > 0) {
     message += `\n- Files processed this run: ${stats.filesProcessed}\n- Chunks created this run: ${stats.chunksCreated}`;
   }
-  
+
   return {
     content: [{
       type: "text",

@@ -1,11 +1,11 @@
 {
-  "name": "smart-coding-mcp",
-  "version": "1.3.2",
-  "description": "An extensible MCP server that enhances coding productivity with AI-powered features including semantic code search, intelligent indexing, and more, using local LLMs",
+  "name": "@softerist/heuristic-mcp",
+  "version": "2.0.0",
+  "description": "An enhanced MCP server providing intelligent semantic code search with find-similar-code, recency ranking, and improved chunking. Fork of smart-coding-mcp.",
   "type": "module",
   "main": "index.js",
   "bin": {
-    "smart-coding-mcp": "index.js"
+    "heuristic-mcp": "index.js"
   },
   "scripts": {
     "start": "node index.js",
@@ -29,20 +29,19 @@
     "codex",
     "openai",
     "gemini",
-    "anthropic"
+    "anthropic",
+    "antigravity",
+    "heuristic"
   ],
   "author": {
-    "name": "Omar Haris",
-    "url": "https://www.linkedin.com/in/omarharis/"
+    "name": "Softerist",
+    "url": "https://github.com/softerist"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/omar-haris/smart-coding-mcp.git"
+    "url": "https://github.com/softerist/heuristic-mcp"
   },
-  "bugs": {
-    "url": "https://github.com/omar-haris/smart-coding-mcp/issues"
-  },
-  "homepage": "https://github.com/omar-haris/smart-coding-mcp#readme",
+  "homepage": "https://github.com/softerist/heuristic-mcp#readme",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
@@ -50,6 +49,9 @@
     "chokidar": "^3.5.3",
     "fdir": "^6.5.0",
     "glob": "^10.3.10"
+  },
+  "optionalDependencies": {
+    "hnswlib-node": "^3.0.0"
   },
   "engines": {
     "node": ">=18.0.0"

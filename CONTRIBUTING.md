@@ -1,4 +1,4 @@
-# Contributing to Smart Coding MCP
+# Contributing to Heuristic MCP
 
 Thank you for your interest in contributing! This document provides guidelines for contributing to the project.
 
@@ -14,8 +14,8 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 ```bash
 # Fork and clone the repository
-git clone https://github.com/omar-haris/smart-coding-mcp.git
-cd smart-coding-mcp
+git clone https://github.com/softerist/heuristic-mcp.git
+cd heuristic-mcp
 
 # Install dependencies
 npm install
@@ -233,7 +233,7 @@ git push origin feature/your-feature-name
 ```bash
 # Test with a sample project
 cd /path/to/test/project
-node /path/to/smart-coding-mcp/index.js
+node /path/to/heuristic-mcp/index.js
 
 # In another terminal, send MCP requests
 ```
@@ -297,7 +297,7 @@ Looking for ideas? Consider implementing:
 
 - **Issues**: Use GitHub Issues for bugs and feature requests
 - **Discussions**: Use GitHub Discussions for questions
-- **Email**: Contact Omar Haris via LinkedIn
+- **Email**: Contact Softerist via website
 
 ## License
 
@@ -305,4 +305,4 @@ By contributing, you agree that your contributions will be licensed under the MI
 
 ---
 
-Thank you for contributing to Smart Coding MCP!
+Thank you for contributing to Heuristic MCP!

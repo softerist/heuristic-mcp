@@ -18,6 +18,8 @@ import { HybridSearch } from "./features/hybrid-search.js";
 import * as IndexCodebaseFeature from "./features/index-codebase.js";
 import * as HybridSearchFeature from "./features/hybrid-search.js";
 import * as ClearCacheFeature from "./features/clear-cache.js";
+import * as FindSimilarCodeFeature from "./features/find-similar-code.js";
+import * as AnnConfigFeature from "./features/ann-config.js";
 
 // Parse workspace from command line arguments
 const args = process.argv.slice(2);
@@ -27,13 +29,13 @@ let workspaceDir = null;
 if (workspaceIndex !== -1) {
   const arg = args[workspaceIndex];
   let rawWorkspace = null;
-  
+
   if (arg.includes('=')) {
     rawWorkspace = arg.split('=')[1];
   } else if (workspaceIndex + 1 < args.length) {
     rawWorkspace = args[workspaceIndex + 1];
   }
-  
+
   // Check if IDE variable wasn't expanded (contains ${})
   if (rawWorkspace && rawWorkspace.includes('${')) {
     console.error(`[Server] IDE variable not expanded: ${rawWorkspace}, using current directory`);
@@ -41,7 +43,7 @@ if (workspaceIndex !== -1) {
   } else if (rawWorkspace) {
     workspaceDir = rawWorkspace;
   }
-  
+
   if (workspaceDir) {
     console.error(`[Server] Workspace mode: ${workspaceDir}`);
   }
@@ -70,6 +72,16 @@ const features = [
     module: ClearCacheFeature,
     instance: null,
     handler: ClearCacheFeature.handleToolCall
+  },
+  {
+    module: FindSimilarCodeFeature,
+    instance: null,
+    handler: FindSimilarCodeFeature.handleToolCall
+  },
+  {
+    module: AnnConfigFeature,
+    instance: null,
+    handler: AnnConfigFeature.handleToolCall
   }
 ];
 
@@ -77,7 +89,7 @@ const features = [
 async function initialize() {
   // Load configuration with workspace support
   config = await loadConfig(workspaceDir);
-  
+
   // Ensure search directory exists
   try {
     await fs.access(config.searchDirectory);
@@ -98,11 +110,18 @@ async function initialize() {
   indexer = new CodebaseIndexer(embedder, cache, config, server);
   hybridSearch = new HybridSearch(embedder, cache, config);
   const cacheClearer = new ClearCacheFeature.CacheClearer(embedder, cache, config, indexer);
+  const findSimilarCode = new FindSimilarCodeFeature.FindSimilarCode(embedder, cache, config);
+  const annConfig = new AnnConfigFeature.AnnConfigTool(cache, config);
 
   // Store feature instances (matches features array order)
   features[0].instance = hybridSearch;
   features[1].instance = indexer;
   features[2].instance = cacheClearer;
+  features[3].instance = findSimilarCode;
+  features[4].instance = annConfig;
+
+  // Attach hybridSearch to server for cross-feature access (e.g. cache invalidation)
+  server.hybridSearch = hybridSearch;
 
   // Start indexing in background (non-blocking)
   console.error("[Server] Starting background indexing...");
@@ -118,21 +137,21 @@ async function initialize() {
 
 // Setup MCP server
 const server = new Server(
-  { 
-    name: "smart-coding-mcp", 
-    version: packageJson.version 
+  {
+    name: "heuristic-mcp",
+    version: packageJson.version
   },
-  { 
-    capabilities: { 
-      tools: {} 
-    } 
+  {
+    capabilities: {
+      tools: {}
+    }
   }
 );
 
 // Register tools from all features
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   const tools = [];
-  
+
   for (const feature of features) {
     const toolDef = feature.module.getToolDefinition(config);
     tools.push(toolDef);
@@ -145,7 +164,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   for (const feature of features) {
     const toolDef = feature.module.getToolDefinition(config);
-    
+
     if (request.params.name === toolDef.name) {
       return await feature.handler(request, feature.instance);
     }
@@ -162,29 +181,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // Main entry point
 async function main() {
   await initialize();
-  
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  
-  console.error("[Server] Smart Coding MCP server ready!");
+
+  console.error("[Server] Heuristic MCP server ready!");
 }
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.error("\n[Server] Shutting down gracefully...");
-  
+
   // Stop file watcher
   if (indexer && indexer.watcher) {
     await indexer.watcher.close();
     console.error("[Server] File watcher stopped");
   }
-  
+
   // Save cache
   if (cache) {
     await cache.save();
     console.error("[Server] Cache saved");
   }
-  
+
   console.error("[Server] Goodbye!");
   process.exit(0);
 });

@@ -24,7 +24,7 @@ describe('CodebaseIndexer', () => {
   let fixtures;
   
   beforeAll(async () => {
-    fixtures = await createTestFixtures({ workerThreads: 2 });
+    fixtures = await createTestFixtures({ workerThreads: 1 });
   });
   
   afterAll(async () => {
@@ -91,9 +91,6 @@ describe('CodebaseIndexer', () => {
       
       // Start first indexing
       const promise1 = fixtures.indexer.indexAll(true);
-      
-      // Wait for it to start
-      await new Promise(resolve => setTimeout(resolve, 100));
       expect(fixtures.indexer.isIndexing).toBe(true);
       
       // Second call should be skipped
@@ -114,9 +111,6 @@ describe('CodebaseIndexer', () => {
       expect(fixtures.indexer.isIndexing).toBe(false);
       
       const promise = fixtures.indexer.indexAll(true);
-      
-      // Should be set during indexing
-      await new Promise(resolve => setTimeout(resolve, 100));
       expect(fixtures.indexer.isIndexing).toBe(true);
       
       await promise;
@@ -170,7 +164,7 @@ describe('Index Codebase Tool Handler', () => {
   let fixtures;
   
   beforeAll(async () => {
-    fixtures = await createTestFixtures({ workerThreads: 2 });
+    fixtures = await createTestFixtures({ workerThreads: 1 });
   });
   
   afterAll(async () => {
@@ -212,8 +206,7 @@ describe('Index Codebase Tool Handler', () => {
         createMockRequest('b_index_codebase', { force: true }), 
         fixtures.indexer
       );
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(fixtures.indexer.isIndexing).toBe(true);
       
       // Second concurrent call
       const result2 = await IndexCodebaseFeature.handleToolCall(

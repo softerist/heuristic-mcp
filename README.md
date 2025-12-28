@@ -1,7 +1,7 @@
-# Smart Coding MCP
+# Heuristic MCP
 
-[![npm version](https://img.shields.io/npm/v/smart-coding-mcp.svg)](https://www.npmjs.com/package/smart-coding-mcp)
-[![npm downloads](https://img.shields.io/npm/dm/smart-coding-mcp.svg)](https://www.npmjs.com/package/smart-coding-mcp)
+[![npm version](https://img.shields.io/npm/v/@softerist/heuristic-mcp.svg)](https://www.npmjs.com/package/@softerist/heuristic-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/@softerist/heuristic-mcp.svg)](https://www.npmjs.com/package/@softerist/heuristic-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org/)
 
@@ -28,6 +28,7 @@ This MCP server solves that by indexing your codebase with AI embeddings. Your A
 - Pre-indexed embeddings are faster than scanning files at runtime
 - Smart project detection skips dependencies automatically (node_modules, vendor, etc.)
 - Incremental updates - only re-processes changed files
+- Optional ANN search (HNSW) for faster queries on large codebases
 
 **Privacy**
 
@@ -40,13 +41,13 @@ This MCP server solves that by indexing your codebase with AI embeddings. Your A
 Install globally via npm:
 
 ```bash
-npm install -g smart-coding-mcp
+npm install -g @softerist/heuristic-mcp
 ```
 
 To update to the latest version:
 
 ```bash
-npm update -g smart-coding-mcp
+npm update -g @softerist/heuristic-mcp
 ```
 
 ## Configuration
@@ -68,8 +69,8 @@ Add the server configuration to the `mcpServers` object in your config file:
 ```json
 {
   "mcpServers": {
-    "smart-coding-mcp": {
-      "command": "smart-coding-mcp",
+    "heuristic-mcp": {
+      "command": "heuristic-mcp",
       "args": ["--workspace", "/absolute/path/to/your/project"]
     }
   }
@@ -81,12 +82,12 @@ Add the server configuration to the `mcpServers` object in your config file:
 ```json
 {
   "mcpServers": {
-    "smart-coding-mcp-project-a": {
-      "command": "smart-coding-mcp",
+    "heuristic-mcp-project-a": {
+      "command": "heuristic-mcp",
       "args": ["--workspace", "/path/to/project-a"]
     },
-    "smart-coding-mcp-project-b": {
-      "command": "smart-coding-mcp",
+    "heuristic-mcp-project-b": {
+      "command": "heuristic-mcp",
       "args": ["--workspace", "/path/to/project-b"]
     }
   }
@@ -108,21 +109,25 @@ Override configuration settings via environment variables in your MCP config:
 | `SMART_CODING_WATCH_FILES`       | boolean | `false`                   | Enable file watching for auto-reindex |
 | `SMART_CODING_SEMANTIC_WEIGHT`   | number  | `0.7`                     | Weight for semantic similarity (0-1)  |
 | `SMART_CODING_EXACT_MATCH_BOOST` | number  | `1.5`                     | Boost for exact text matches          |
+| `SMART_CODING_RECENCY_BOOST`     | number  | `0.1`                     | Boost for recently modified files     |
+| `SMART_CODING_RECENCY_DECAY_DAYS`| number  | `30`                      | Days until recency boost fades to 0   |
 | `SMART_CODING_EMBEDDING_MODEL`   | string  | `Xenova/all-MiniLM-L6-v2` | AI embedding model to use             |
 | `SMART_CODING_WORKER_THREADS`    | string  | `auto`                    | Worker threads (`auto` or 1-32)       |
+| `SMART_CODING_ANN_ENABLED`       | boolean | `true`                    | Enable ANN search (HNSW)              |
+
+**ANN note**: HNSW support uses optional `hnswlib-node`. If it isn't installed, the server falls back to exact (linear) search automatically.
 
 **Example with environment variables:**
 
 ```json
 {
   "mcpServers": {
-    "smart-coding-mcp": {
-      "command": "smart-coding-mcp",
+    "heuristic-mcp": {
+      "command": "heuristic-mcp",
       "args": ["--workspace", "/path/to/project"],
       "env": {
         "SMART_CODING_VERBOSE": "true",
-        "SMART_CODING_BATCH_SIZE": "200",
-        "SMART_CODING_MAX_FILE_SIZE": "2097152"
+        "SMART_CODING_RECENCY_BOOST": "0.2"
       }
     }
   }
@@ -138,6 +143,13 @@ Override configuration settings via environment variables in your MCP config:
 ```
 Query: "Where do we validate user input?"
 Returns: Relevant validation code with file paths and line numbers
+```
+
+**find_similar_code** - Find duplicates or patterns
+
+```
+Input: A snippet of code or a file path
+Returns: Other code in the project that looks or functions similarly
 ```
 
 **index_codebase** - Manually trigger reindexing
@@ -156,12 +168,15 @@ Useful when cache becomes corrupted or outdated
 
 The server indexes your code in four steps:
 
-1. **Discovery**: Scans your project for source files
+1. **Discovery**: Scans your project for source files (smartly ignoring build/vendor folders)
 2. **Chunking**: Breaks code into meaningful pieces (respecting function boundaries)
 3. **Embedding**: Converts each chunk to a vector using a local AI model
 4. **Storage**: Saves embeddings to `.smart-coding-cache/` for fast startup
 
-When you search, your query is converted to the same vector format and compared against all code chunks using cosine similarity. The most relevant matches are returned.
+When you search, your query is converted to the same vector format. We use a **hybrid ranking algorithm** that combines:
+- **Semantic Similarity** (cosine similarity of vectors)
+- **Exact Keyword Matching** (BM25-inspired boost)
+- **Recency Boosting** (favoring files you're actively working on)
 
 ![How It Works](how-its-works.png)
 
@@ -224,11 +239,15 @@ This project builds on research from Cursor showing that semantic search improve
 
 See: https://cursor.com/blog/semsearch
 
+## Acknowledgements
+
+This project is a fork of [smart-coding-mcp](https://github.com/omar-haris/smart-coding-mcp) by [Omar Haris](https://www.linkedin.com/in/omarharis/). We thank him for the original implementation.
+
 ## License
 
 MIT License
 
-Copyright (c) 2025 Omar Haris
+Copyright (c) 2025 Softerist
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
