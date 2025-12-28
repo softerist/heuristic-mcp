@@ -1,6 +1,6 @@
 {
   "name": "@softerist/heuristic-mcp",
-    "version": "2.1.35",
+    "version": "2.1.36",
     "description": "An enhanced MCP server providing intelligent semantic code search with find-similar-code, recency ranking, and improved chunking. Fork of smart-coding-mcp.",
     "type": "module",
     "main": "index.js",
@@ -12,8 +12,8 @@
       "dev": "node --watch index.js",
       "test": "vitest run",
       "test:watch": "vitest",
-      "clear-cache": "node scripts/clear-cache.js",
-      "postinstall": "node scripts/postinstall.js"
+      "clean": "node scripts/clear-cache.js",
+      "postinstall": "node scripts/postinstall.js && node scripts/download-model.js"
     },
   "keywords": [
     "mcp",
