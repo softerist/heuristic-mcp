@@ -1,5 +1,10 @@
+
 import { exec } from 'child_process';
 import util from 'util';
+import path from 'path';
+import os from 'os';
+import fs from 'fs/promises';
+
 const execPromise = util.promisify(exec);
 
 export async function stop() {
@@ -15,7 +20,7 @@ export async function stop() {
     } else {
       // Unix: Use pgrep to get all matching PIDs
       try {
-        const { stdout } = await execPromise(`pgrep -f \"heuristic-mcp.*index.js\"`);
+        const { stdout } = await execPromise(`pgrep -f "heuristic-mcp.*index.js"`);
         const allPids = stdout.trim().split(/\s+/).filter(p => p && !isNaN(p));
 
         // Filter out current PID and dead processes
@@ -71,213 +76,185 @@ export async function start() {
     }
 }
 
+// Helper to get global cache dir
+function getGlobalCacheDir() {
+    if (process.platform === 'win32') {
+        return process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    } else if (process.platform === 'darwin') {
+        return path.join(os.homedir(), 'Library', 'Caches');
+    }
+    return process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
+}
+
 export async function status() {
     try {
-        const platform = process.platform;
-        const currentPid = process.pid;
-        let pids = [];
+        const home = os.homedir();
+        const pids = [];
 
-        if (platform === 'win32') {
-            const { stdout } = await execPromise(`wmic process where "CommandLine like '%heuristic-mcp/index.js%'" get ProcessId`);
-            pids = stdout.trim().split(/\s+/).filter(p => p && !isNaN(p) && parseInt(p) !== currentPid);
-        } else {
-            try {
-                const { stdout } = await execPromise(`pgrep -f "heuristic-mcp.*index.js"`);
-                const allPids = stdout.trim().split(/\s+/).filter(p => p && !isNaN(p));
+        // 1. Check PID file first
+        const pidFile = path.join(home, '.heuristic-mcp.pid');
 
-                // Filter out current PID and dead processes (e.g. ephemeral shell wrappers)
-                const validPids = [];
-                for (const p of allPids) {
-                    const pid = parseInt(p);
-                    if (pid === currentPid) continue;
-
-                    try {
-                        // Check if process is still alive
-                        process.kill(pid, 0);
-                        validPids.push(p);
-                    } catch (e) {
-                         // Process is dead or access denied
-                    }
-                }
-                pids = validPids;
-            } catch (e) {
-                if (e.code === 1) pids = [];
-                else throw e;
+        try {
+            const content = await fs.readFile(pidFile, 'utf-8');
+            const pid = parseInt(content.trim(), 10);
+            if (pid && !isNaN(pid)) {
+                 // Check if running
+                 try {
+                     process.kill(pid, 0);
+                     pids.push(pid);
+                 } catch (e) {
+                     // Stale PID file
+                     await fs.unlink(pidFile).catch(() => {});
+                 }
             }
+        } catch (e) {
+            // No pid file, ignore
         }
 
+        // 2. Fallback to process list if no PID file found or process dead
+        if (pids.length === 0) {
+             try {
+                // Simplified ps check for Linux/Mac
+                let cmd = 'ps aux';
+                if (process.platform === 'win32') {
+                     // Skip Win32 complex ps logic for now
+                } else {
+                    const { stdout } = await execPromise('ps aux');
+                    const lines = stdout.split('\n');
+
+                    const validPids = [];
+                    const myPid = process.pid;
+
+                    for (const line of lines) {
+                        if (line.includes('heuristic-mcp/index.js') || line.includes('heuristic-mcp')) {
+                             const parts = line.trim().split(/\s+/);
+                             const pid = parseInt(parts[1], 10);
+                             if (pid && !isNaN(pid) && pid !== myPid && !line.includes(' grep ')) {
+                                validPids.push(pid);
+                             }
+                        }
+                    }
+                    // Merge validPids into pids if not already present
+                    for (const p of validPids) {
+                        if (!pids.includes(p)) pids.push(p);
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // STATUS OUTPUT
+        console.log(''); // spacer
         if (pids.length > 0) {
             console.log(`[Lifecycle] 🟢 Server is RUNNING. PID(s): ${pids.join(', ')}`);
         } else {
             console.log('[Lifecycle] ⚪ Server is STOPPED.');
         }
-    } catch (error) {
-         console.error(`[Lifecycle] Failed to check status: ${error.message}`);
-    }
-}
+        console.log(''); // spacer
 
-export async function logs() {
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    const os = await import('os');
-    const crypto = await import('crypto');
+        // APPEND LOGS INFO (Cache Status)
+        const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
+        console.log('[Status] Inspecting cache status...\n');
 
-    console.log('[Logs] Searching for cache directories...\n');
-
-    // Determine global cache root
-    function getGlobalCacheDir() {
-        if (process.platform === 'win32') {
-            return process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
-        } else if (process.platform === 'darwin') {
-            return path.join(os.homedir(), 'Library', 'Caches');
-        }
-        return process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
-    }
-
-    const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
-
-    try {
-        // List all cache directories
         const cacheDirs = await fs.readdir(globalCacheRoot).catch(() => []);
 
         if (cacheDirs.length === 0) {
-            console.log('[Logs] No cache directories found.');
-            console.log(`[Logs] Expected location: ${globalCacheRoot}`);
-            console.log('');
-            // Don't return - fall through to show paths section
+             console.log('[Status] No cache directories found.');
+             console.log(`[Status] Expected location: ${globalCacheRoot}`);
         } else {
+            console.log(`[Status] Found ${cacheDirs.length} cache director${cacheDirs.length === 1 ? 'y' : 'ies'} in ${globalCacheRoot}`);
 
-        console.log(`[Logs] Found ${cacheDirs.length} cache director${cacheDirs.length === 1 ? 'y' : 'ies'} in ${globalCacheRoot}\n`);
+            for (const dir of cacheDirs) {
+                const cacheDir = path.join(globalCacheRoot, dir);
+                const metaFile = path.join(cacheDir, 'meta.json');
 
-        for (const dir of cacheDirs) {
-            const cacheDir = path.join(globalCacheRoot, dir);
-            const metaFile = path.join(cacheDir, 'meta.json');
+                console.log(`${'─'.repeat(60)}`);
+                console.log(`📁 Cache: ${dir}`);
+                console.log(`   Path: ${cacheDir}`);
 
-            console.log(`${'─'.repeat(60)}`);
-            console.log(`📁 Cache: ${dir}`);
-            console.log(`   Path: ${cacheDir}`);
+                try {
+                    const metaData = JSON.parse(await fs.readFile(metaFile, 'utf-8'));
 
-            try {
-                const metaData = JSON.parse(await fs.readFile(metaFile, 'utf-8'));
+                    console.log(`   Status: ✅ Valid cache`);
+                    console.log(`   Workspace: ${metaData.workspace || 'Unknown'}`);
+                    console.log(`   Files indexed: ${metaData.filesIndexed ?? 'N/A'}`);
+                    console.log(`   Chunks stored: ${metaData.chunksStored ?? 'N/A'}`);
 
-                console.log(`   Status: ✅ Valid cache`);
-                console.log(`   Workspace: ${metaData.workspace || 'Unknown'}`);
-                console.log(`   Files indexed: ${metaData.filesIndexed ?? 'N/A'}`);
-                console.log(`   Chunks stored: ${metaData.chunksStored ?? 'N/A'}`);
-                console.log(`   Embedding model: ${metaData.embeddingModel}`);
-
-                if (metaData.lastSaveTime) {
-                    const saveDate = new Date(metaData.lastSaveTime);
-                    const now = new Date();
-                    const ageMs = now - saveDate;
-                    const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
-                    const ageMins = Math.floor((ageMs % (1000 * 60 * 60)) / (1000 * 60));
-
-                    console.log(`   Last saved: ${saveDate.toLocaleString()} (${ageHours}h ${ageMins}m ago)`);
-                }
-
-                // Check file sizes
-                const files = ['embeddings.json', 'file-hashes.json', 'call-graph.json', 'ann-index.bin'];
-                const sizes = [];
-                for (const file of files) {
-                    try {
-                        const stat = await fs.stat(path.join(cacheDir, file));
-                        sizes.push(`${file}: ${(stat.size / 1024).toFixed(1)}KB`);
-                    } catch {}
-                }
-                if (sizes.length > 0) {
-                    console.log(`   Files: ${sizes.join(', ')}`);
-                }
-
-                // Verify indexing completion
-                if (metaData.filesIndexed && metaData.filesIndexed > 0 && metaData.chunksStored && metaData.chunksStored > 0) {
-                    console.log(`   Indexing: ✅ COMPLETE (${metaData.filesIndexed} files → ${metaData.chunksStored} chunks)`);
-                } else if (metaData.filesIndexed === 0) {
-                    console.log(`   Indexing: ⚠️  NO FILES (check excludePatterns in config)`);
-                } else {
-                    console.log(`   Indexing: ⚠️  INCOMPLETE or UNKNOWN`);
-                }
-
-            } catch (err) {
-                if (err.code === 'ENOENT') {
-                    // Meta file missing - check if directory is fresh (indexing in progress)
-                    try {
-                        const stats = await fs.stat(cacheDir);
-                        const ageMs = new Date() - stats.mtime;
-                        // If less than 10 minutes old, assume indexing
-                        if (ageMs < 10 * 60 * 1000) {
-                             console.log(`   Status: ⏳ Initializing / Indexing in progress...`);
-                             console.log(`   (Metadata file has not been written yet using ID ${dir})`);
-                        } else {
-                             console.log(`   Status: ⚠️  Incomplete cache (stale)`);
-                        }
-                    } catch {
-                         console.log(`   Status: ❌ Invalid cache directory`);
+                    if (metaData.lastSaveTime) {
+                        const saveDate = new Date(metaData.lastSaveTime);
+                        const now = new Date();
+                        const ageMs = now - saveDate;
+                        const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
+                        const ageMins = Math.floor((ageMs % (1000 * 60 * 60)) / (1000 * 60));
+                         console.log(`   Last saved: ${saveDate.toLocaleString()} (${ageHours}h ${ageMins}m ago)`);
                     }
-                } else {
-                    console.log(`   Status: ❌ Invalid or corrupted (${err.message})`);
+
+                    // Verify indexing completion
+                    if (metaData.filesIndexed && metaData.filesIndexed > 0) {
+                        console.log(`   Indexing: ✅ COMPLETE (${metaData.filesIndexed} files)`);
+                    } else if (metaData.filesIndexed === 0) {
+                        console.log(`   Indexing: ⚠️  NO FILES (check excludePatterns)`);
+                    } else {
+                        console.log(`   Indexing: ⚠️  INCOMPLETE`);
+                    }
+
+                } catch (err) {
+                    if (err.code === 'ENOENT') {
+                        try {
+                            const stats = await fs.stat(cacheDir);
+                            const ageMs = new Date() - stats.mtime;
+                            if (ageMs < 10 * 60 * 1000) {
+                                 console.log(`   Status: ⏳ Initializing / Indexing in progress...`);
+                                 console.log(`   (Metadata file has not been written yet using ID ${dir})`);
+                            } else {
+                                 console.log(`   Status: ⚠️  Incomplete cache (stale)`);
+                            }
+                        } catch {
+                             console.log(`   Status: ❌ Invalid cache directory`);
+                        }
+                    } else {
+                        console.log(`   Status: ❌ Invalid or corrupted (${err.message})`);
+                    }
                 }
             }
+            console.log(`${'─'.repeat(60)}`);
         }
 
-        console.log(`${'─'.repeat(60)}\n`);
-        }
-
-        // Show important paths
-        console.log('[Paths] Important locations:');
+        // SHOW PATHS
+        console.log('\n[Paths] Important locations:');
 
         // Global npm bin
-        const { execSync } = await import('child_process');
         let npmBin = 'unknown';
         try {
-            const prefix = execSync('npm config get prefix', { encoding: 'utf-8' }).trim();
-            npmBin = path.join(prefix, 'bin');
+            const { stdout } = await execPromise('npm config get prefix');
+            npmBin = path.join(stdout.trim(), 'bin');
         } catch {}
-
-        // Check all known MCP config paths (same as register.js)
-        const home = os.homedir();
-        const mcpConfigs = [];
-
-        // Antigravity
-        const antigravityConfig = path.join(home, '.gemini', 'antigravity', 'mcp_config.json');
-        const antigravityExists = await fs.access(antigravityConfig).then(() => true).catch(() => false);
-        mcpConfigs.push({ name: 'Antigravity', path: antigravityConfig, exists: antigravityExists });
-
-        // Claude Desktop
-        let claudeConfig = null;
-        if (process.platform === 'darwin') {
-            claudeConfig = path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
-        } else if (process.platform === 'win32') {
-            claudeConfig = path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json');
-        }
-        if (claudeConfig) {
-            const claudeExists = await fs.access(claudeConfig).then(() => true).catch(() => false);
-            mcpConfigs.push({ name: 'Claude Desktop', path: claudeConfig, exists: claudeExists });
-        }
-
-        // Cursor (uses settings.json with mcpServers key)
-        let cursorConfig = null;
-        if (process.platform === 'darwin') {
-            cursorConfig = path.join(home, 'Library', 'Application Support', 'Cursor', 'User', 'settings.json');
-        } else if (process.platform === 'win32') {
-            cursorConfig = path.join(process.env.APPDATA || '', 'Cursor', 'User', 'settings.json');
-        } else {
-            cursorConfig = path.join(home, '.config', 'Cursor', 'User', 'settings.json');
-        }
-        const cursorExists = await fs.access(cursorConfig).then(() => true).catch(() => false);
-        mcpConfigs.push({ name: 'Cursor', path: cursorConfig, exists: cursorExists });
-
         console.log(`   📦 Global npm bin: ${npmBin}`);
-        console.log(`   ⚙️  MCP configs:`);
-        for (const cfg of mcpConfigs) {
-            const status = cfg.exists ? '\x1b[32m(exists)\x1b[0m' : '\x1b[90m(not found)\x1b[0m';
-            console.log(`      - ${cfg.name}: ${cfg.path} ${status}`);
+
+        // Configs
+        const configLocations = [
+            { name: 'Antigravity', path: path.join(os.homedir(), '.gemini', 'antigravity', 'mcp_config.json') },
+            { name: 'Cursor', path: path.join(os.homedir(), '.config', 'Cursor', 'User', 'settings.json') }
+        ];
+
+        // Platform specific logic for Cursor
+         if (process.platform === 'darwin') {
+            configLocations[1].path = path.join(os.homedir(), 'Library', 'Application Support', 'Cursor', 'User', 'settings.json');
+        } else if (process.platform === 'win32') {
+            configLocations[1].path = path.join(process.env.APPDATA || '', 'Cursor', 'User', 'settings.json');
         }
+
+        console.log('   ⚙️  MCP configs:');
+        for (const loc of configLocations) {
+            let status = '(not found)';
+            try { await fs.access(loc.path); status = '(exists)'; } catch {}
+            console.log(`      - ${loc.name}: ${loc.path} ${status}`);
+        }
+
         console.log(`   💾 Cache root: ${globalCacheRoot}`);
         console.log(`   📁 Current dir: ${process.cwd()}`);
         console.log('');
 
     } catch (error) {
-        console.error(`[Logs] Error reading cache: ${error.message}`);
+         console.error(`[Lifecycle] Failed to check status: ${error.message}`);
     }
 }

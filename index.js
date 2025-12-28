@@ -54,7 +54,8 @@ if (args.includes('--status')) {
 }
 
 if (args.includes('--logs')) {
-  await logs();
+  console.log("⚠️  Note: '--logs' is deprecated. Please use '--status' to see cache information.");
+  await status();
   process.exit(0);
 }
 
