@@ -240,6 +240,20 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   console.error("\n[Server] Received SIGTERM, shutting down...");
+
+  // Stop file watcher
+  if (indexer && indexer.watcher) {
+    await indexer.watcher.close();
+    console.error("[Server] File watcher stopped");
+  }
+
+  // Save cache
+  if (cache) {
+    await cache.save();
+    console.error("[Server] Cache saved");
+  }
+
+  console.error("[Server] Goodbye!");
   process.exit(0);
 });
 
