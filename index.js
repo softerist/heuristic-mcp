@@ -248,9 +248,17 @@ process.on('SIGINT', async () => {
     console.error("[Server] File watcher stopped");
   }
 
-  // Terminate workers to avoid native crashes on exit
+  // Give workers time to finish current batch (prevents core dump)
   if (indexer && indexer.terminateWorkers) {
-    await indexer.terminateWorkers();
+    try {
+      console.error("[Server] Waiting for workers to finish...");
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await indexer.terminateWorkers();
+      console.error("[Server] Workers terminated");
+    } catch (err) {
+      // Suppress native module errors during shutdown
+      console.error("[Server] Workers shutdown (with warnings)");
+    }
   }
 
   // Save cache
@@ -272,9 +280,17 @@ process.on('SIGTERM', async () => {
     console.error("[Server] File watcher stopped");
   }
 
-  // Terminate workers to avoid native crashes on exit
+  // Give workers time to finish current batch (prevents core dump)
   if (indexer && indexer.terminateWorkers) {
-    await indexer.terminateWorkers();
+    try {
+      console.error("[Server] Waiting for workers to finish...");
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await indexer.terminateWorkers();
+      console.error("[Server] Workers terminated");
+    } catch (err) {
+      // Suppress native module errors during shutdown
+      console.error("[Server] Workers shutdown (with warnings)");
+    }
   }
 
   // Save cache
