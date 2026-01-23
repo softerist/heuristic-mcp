@@ -25,7 +25,7 @@ npm install -g @softerist/heuristic-mcp
 
 **That's it!**
 - The installer automatically creates the `mcp_config.json` for your IDE.
-- It pre-downloads the AI model (`all-MiniLM-L6-v2`) to your cache.
+- It pre-downloads the AI model (`jina-embeddings-v2-base-code`) to your cache.
 - Just **Restart your IDE** (or Reload Window) to start using it.
 
 ---
@@ -43,6 +43,12 @@ heuristic-mcp --status
 - 🟢 **Server Status**: Shows if the background process is running (PID).
 - 📁 **Cache Info**: Shows number of files indexed, chunks, and "Initializing..." status if still working.
 - ⚙️ **Config Check**: Validates that your IDE config files exist.
+
+### Check Version
+Verify the installed version.
+```bash
+heuristic-mcp --version
+```
 
 ### Live Logs (Streaming)
 Use this to watch the server's brain at work in real-time.
@@ -81,8 +87,9 @@ You can customize behavior by creating a `config.json` in your project root or `
 ```json
 {
   "excludePatterns": ["**/legacy-code/**", "**/*.test.ts"],
+  "fileNames": ["Dockerfile", ".env.example", "Makefile"],
   "smartIndexing": true,
-  "embeddingModel": "Xenova/all-MiniLM-L6-v2",
+  "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
   "workerThreads": "auto"
 }
 ```
