@@ -16,10 +16,10 @@ async function downloadModel() {
     console.log(`[Model Setup] Pre-caching model to: ${globalCacheDir}`);
     // Check if network is available by pinging HF (simple check)
     // Actually, pipeline() will fail fast if network is down
-    console.log(`[Model Setup] Downloading 'Xenova/all-MiniLM-L6-v2'...`);
+    console.log(`[Model Setup] Downloading 'jinaai/jina-embeddings-v2-base-code'...`);
 
     // This will download the model to the cache directory
-    await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    await pipeline('feature-extraction', 'jinaai/jina-embeddings-v2-base-code');
 
     console.log(`[Model Setup] ✅ Model cached successfully!`);
   } catch (error) {

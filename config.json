@@ -1,43 +1,490 @@
 {
   "searchDirectory": ".",
   "fileExtensions": [
-    "js",
-    "ts",
-    "jsx",
-    "tsx",
-    "mjs",
-    "cjs",
-    "css",
-    "scss",
-    "sass",
-    "less",
-    "html",
-    "htm",
-    "xml",
-    "svg",
-    "py",
-    "pyw",
-    "java",
-    "kt",
-    "scala",
-    "c",
-    "cpp",
-    "h",
-    "hpp",
-    "cs",
-    "go",
-    "rs",
-    "rb",
-    "php",
+    "js", "ts", "jsx", "tsx", "mjs", "cjs", "mts", "cts", "mjsx", "cjsx",
+
+    "css", "scss", "sass", "less", "styl", "stylus", "postcss",
+
+    "html", "htm", "xml", "svg", "xhtml", "vue", "svelte", "astro", "wxml", "wxs",
+
+    "py", "pyw", "pyx", "pxd", "pxi", "ipynb",
+
+    "java", "kt", "kts", "groovy", "gvy", "gradle", "j", "class",
+
+    "c", "cpp", "cc", "cxx", "h", "hpp", "hxx", "h++", "m", "mm", "objc", "metal", "cu", "cuh",
+
+    "cs", "csx", "vb", "vbs", "vba", "fs", "fsx", "fsi",
+
+    "go", "rs", "rlib",
+
+    "rb", "erb", "rake", "gemspec",
+
+    "php", "phtml", "php3", "php4", "php5", "phps",
+
     "swift",
-    "sh",
-    "bash",
-    "json",
-    "yaml",
-    "yml",
-    "toml",
-    "sql"
+
+    "sh", "bash", "zsh", "fish", "ksh", "csh", "tcsh", "bat", "cmd", "ps1", "psm1", "psd1",
+
+    "json", "json5", "jsonc", "yaml", "yml", "toml", "ini", "cfg", "conf", "properties", "env",
+    "dhall", "jsonnet", "cue", "kdl",
+
+    "sql", "pgsql", "mysql", "sqlite", "sqlpl",
+
+    "md", "markdown", "mdx", "txt", "rst", "adoc", "asciidoc", "tex", "latex", "sty",
+
+    "r", "rmd", "rdata", "rds", "rda", "jl",
+
+    "lua",
+
+    "pl", "pm", "t", "pl6", "pm6",
+
+    "clj", "cljs", "cljc", "edn",
+
+    "scala", "sbt",
+
+    "dart", "drt",
+
+    "el", "elc", "lisp", "lsp", "scm", "ss",
+
+    "erl", "hrl", "ex", "exs",
+
+    "hs", "lhs",
+
+    "ml", "mli",
+
+    "v", "vh", "sv", "svh", "vhd", "vhdl",
+
+    "coffee", "litcoffee",
+
+    "pug", "jade", "handlebars", "hbs", "mustache", "ejs", "njk", "liquid",
+    "jinja", "jinja2", "j2", "twig", "razor", "cshtml", "asp", "aspx", "jsp", "jspx",
+    "haml", "slim", "rhtml", "blade", "webc", "marko",
+
+    "proto", "graphql", "gql",
+
+    "sol", "vy",
+
+    "tf", "tfvars", "hcl",
+
+    "nix", "nixos",
+
+    "wasm", "wat", "asm", "s",
+
+    "vim", "vimrc", "elm",
+
+    "pas", "pp", "p",
+
+    "ada", "adb", "ads",
+
+    "f", "f77", "f90", "f95", "f03", "f08", "for", "fortran",
+
+    "d", "di",
+
+    "nim", "nimble",
+
+    "cr", "crystal", "ecr",
+
+    "zig", "odin",
+
+    "glsl", "hlsl", "wgsl",
+
+    "prisma", "bicep", "pkl", "ron",
+
+    "dockerfile", "containerfile", "mk", "cmake", "cmake.in",
+
+    "diff", "patch",
+
+    "dot", "gv", "graphviz",
+
+    "awk", "gawk",
+
+    "tcl", "exp",
+
+    "ps", "eps",
+
+    "mat", "mata",
+
+    "abap", "acds", "asa",
+
+    "applescript", "scpt",
+
+    "au3",
+
+    "bas", "bi", "bm", "cls", "frm", "ctl", "blitzbasic", "bb",
+
+    "chpl",
+
+    "cbl", "cob", "cpy", "cobol",
+
+    "cfm", "cfc",
+
+    "cl",
+
+    "coq",
+
+    "dylan", "dyl", "intr",
+
+    "e", "ecl", "eclxml",
+
+    "eiffel",
+
+    "fancy", "fy",
+
+    "factor",
+
+    "forth", "fth", "4th",
+
+    "frege", "fr",
+
+    "gml",
+
+    "gnuplot", "gp", "gpi",
+
+    "gd", "tres", "tscn",
+
+    "golo",
+
+    "gosu", "gs", "gst", "gsx",
+
+    "hack", "hh",
+
+    "haxe", "hx", "hxsl",
+
+    "hy",
+
+    "idr", "lidr",
+
+    "io",
+
+    "ioke", "ik",
+
+    "isabelle", "thy",
+
+    "ijs",
+
+    "jflex", "flex",
+
+    "labview", "lvproj",
+
+    "lfe",
+
+    "livecode",
+
+    "livescript", "ls",
+
+    "llvm", "ll",
+
+    "logos", "xm", "xmi",
+
+    "logtalk", "lgt",
+
+    "lookml",
+
+    "mako", "mao",
+
+    "mathematica", "nb", "cdf", "nbp", "ma",
+
+    "matlab",
+
+    "maxscript", "ms",
+
+    "mercury",
+
+    "meson", "wrap",
+
+    "mirah", "druby",
+
+    "modelica", "mo",
+
+    "modula2", "mod",
+
+    "monkey", "monkey2",
+
+    "nanomsg",
+
+    "nesc", "nc",
+
+    "nginx", "nginxconf",
+
+    "nit",
+
+    "nu",
+
+    "objdump",
+
+    "omgrofl", "lol",
+
+    "ooc",
+
+    "opal",
+
+    "oxygene",
+
+    "oz",
+
+    "pan",
+
+    "papyrus", "psc",
+
+    "parrot", "pasm", "pir",
+
+    "pawn", "pwn", "inc",
+
+    "pig",
+
+    "pike",
+
+    "pogoscript", "pogo",
+
+    "pony",
+
+    "postscript",
+
+    "povray", "pov",
+
+    "powerbuilder", "pbl", "srw",
+
+    "processing", "pde",
+
+    "prolog", "pro",
+
+    "propeller", "spin",
+
+    "puppet",
+
+    "purebasic", "pb", "pbi",
+
+    "purescript", "purs",
+
+    "q", "k",
+
+    "qmake", "pri",
+
+    "qml",
+
+    "racket", "rkt", "rktl", "rktd", "scrbl",
+
+    "ragel", "rl",
+
+    "raml",
+
+    "rdoc",
+
+    "realbasic", "rbbas", "rbfrm", "rbmnu", "rbres", "rbtbar", "rbuistate",
+
+    "rebol", "r2", "r3",
+
+    "red", "reds",
+
+    "redcode", "cw",
+
+    "renpy", "rpy",
+
+    "rexx", "pprx", "rex",
+
+    "roboconf", "graph", "instances",
+
+    "robot",
+
+    "rg",
+
+    "sage", "sagews",
+
+    "saltstack", "sls",
+
+    "sas",
+
+    "scheme",
+
+    "scilab", "sci", "sce",
+
+    "self",
+
+    "shen",
+
+    "slash", "sl",
+
+    "smalltalk", "st",
+
+    "smarty", "tpl",
+
+    "sourcepawn", "sp",
+
+    "sparql", "rq",
+
+    "splunk", "spl",
+
+    "sqf",
+
+    "squirrel", "nut",
+
+    "stan",
+
+    "stata", "do", "ado",
+
+    "supercollider", "sc", "scd",
+
+    "systemverilog",
+
+    "tea",
+
+    "terra",
+
+    "textile",
+
+    "thrift",
+
+    "ti",
+
+    "tl",
+
+    "turing", "tu",
+
+    "txl",
+
+    "unifiedparallelc", "upc",
+
+    "unity3d", "shader",
+
+    "unrealscript", "uc",
+
+    "vala", "vapi",
+
+    "vcl",
+
+    "volt",
+
+    "webidl",
+
+    "wisp",
+
+    "x10",
+
+    "xc",
+
+    "xojo_code", "xojo_menu", "xojo_report", "xojo_script", "xojo_toolbar", "xojo_window",
+
+    "xquery", "xq", "xql", "xqm", "xqy",
+
+    "xs",
+
+    "xslt", "xsl",
+
+    "xtend",
+
+    "yacc", "y",
+
+    "yara", "yar",
+
+    "zephir", "zep",
+
+    "zimpl",
+
+    "webmanifest", "manifest",
+
+    "lock", "sum", "log",
+
+    "csv", "tsv",
+
+    "xls", "xlsx", "xlsm", "xlsb",
+    "doc", "docx", "pdf", "ppt", "pptx",
+    "rtf",
+    "odt", "ods", "odp",
+    "ics",
+    "vcf",
+    "idx", "sub",
+    "srt",
+    "ass", "ssa",
+    "avs",
+    "d2v",
+    "m3u", "m3u8",
+    "pls",
+    "nfo",
+    "sfv",
+    "md5",
+    "torrent",
+    "magnet",
+    "dockerignore",
+    "babelrc", "eslintrc", "prettierrc", "stylelintrc",
+    "gitignore", "gitattributes", "editorconfig", "npmrc", "yarnrc"
   ],
+
+  "fileNames": [
+    "Dockerfile",
+    "Containerfile",
+    "Makefile",
+    "Jenkinsfile",
+    "Vagrantfile",
+    "CMakeLists.txt",
+
+    ".gitignore",
+    ".gitattributes",
+    ".editorconfig",
+    ".npmrc",
+    ".yarnrc",
+    ".npmignore",
+    ".dockerignore",
+    ".eslintignore",
+    ".prettierignore",
+
+    ".env",
+    ".env.example",
+    ".env.local",
+    ".env.development",
+    ".env.production",
+
+    ".babelrc",
+    ".eslintrc",
+    ".prettierrc",
+    ".stylelintrc",
+    "browserslistrc",
+
+    "tsconfig.json",
+    "jsconfig.json",
+
+    "package.json",
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "bun.lockb",
+
+    "composer.json",
+    "composer.lock",
+
+    "Cargo.toml",
+    "Cargo.lock",
+
+    "go.mod",
+    "go.sum",
+
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "settings.gradle",
+    "settings.gradle.kts",
+
+    "requirements.txt",
+    "Pipfile",
+    "Pipfile.lock",
+    "poetry.lock",
+    "pyproject.toml",
+
+    "Gemfile",
+    "Gemfile.lock",
+
+    "mix.exs",
+    "mix.lock",
+
+    "pubspec.yaml",
+    "pubspec.lock",
+
+    "docker-compose.yml",
+    "docker-compose.yaml",
+
+    "makefile.am",
+    "makefile.in"
+  ],
+  
   "excludePatterns": [
     "**/node_modules/**",
     "**/dist/**",
@@ -58,7 +505,7 @@
   "enableCache": true,
   "watchFiles": false,
   "verbose": false,
-  "embeddingModel": "Xenova/all-MiniLM-L6-v2",
+  "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
   "semanticWeight": 0.7,
   "exactMatchBoost": 1.5,
   "workerThreads": "auto",
