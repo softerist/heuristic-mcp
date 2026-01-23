@@ -37,6 +37,12 @@ try {
 
 // Parse workspace from command line arguments
 let args = process.argv.slice(2);
+
+if (args.includes('--version') || args.includes('-v')) {
+  console.log(packageJson.version);
+  process.exit(0);
+}
+
 const hadLogs = args.includes('--logs');
 if (hadLogs) {
   process.env.SMART_CODING_VERBOSE = 'true';
