@@ -405,6 +405,7 @@ export class CodebaseIndexer {
 
     // Build extension filter from config
     const extensions = new Set(this.config.fileExtensions.map(ext => `.${ext}`));
+    const allowedFileNames = new Set(this.config.fileNames || []);
 
     // Extract directory names from glob patterns in config.excludePatterns
     // Patterns like "**/node_modules/**" -> "node_modules"
@@ -432,7 +433,7 @@ export class CodebaseIndexer {
     const api = new fdir()
       .withFullPaths()
       .exclude((dirName) => excludeDirs.has(dirName))
-      .filter((filePath) => extensions.has(path.extname(filePath)) && !this.isExcluded(filePath))
+      .filter((filePath) => (extensions.has(path.extname(filePath)) || allowedFileNames.has(path.basename(filePath))) && !this.isExcluded(filePath))
       .crawl(this.config.searchDirectory);
 
     const files = await api.withPromise();
@@ -774,7 +775,10 @@ export class CodebaseIndexer {
   setupFileWatcher() {
     if (!this.config.watchFiles) return;
 
-    const pattern = this.config.fileExtensions.map(ext => `**/*.${ext}`);
+    const pattern = [
+      ...this.config.fileExtensions.map(ext => `**/*.${ext}`),
+      ...(this.config.fileNames || []).map(name => `**/${name}`)
+    ];
 
     this.watcher = chokidar.watch(pattern, {
       cwd: this.config.searchDirectory,
