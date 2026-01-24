@@ -53,7 +53,7 @@ maybeDescribe('Worker Error Handling', () => {
 
     indexer = new CodebaseIndexer(vi.fn(), cache, config, null);
 
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -83,7 +83,7 @@ maybeDescribe('Worker Error Handling', () => {
     await promise;
 
     expect(fallbackSpy).toHaveBeenCalled();
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Worker 0 crashed'));
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Worker 0 crashed'));
   });
 
   it('should handle worker startup failure', async () => {
@@ -91,6 +91,6 @@ maybeDescribe('Worker Error Handling', () => {
       throw new Error('Init bad');
     });
     await indexer.initializeWorkers();
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Failed to create worker'));
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to create worker'));
   });
 });

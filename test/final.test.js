@@ -73,10 +73,10 @@ describe('Final Coverage Gaps', () => {
       });
       vi.mocked(fs.rm).mockRejectedValue(new Error('unlink failed'));
 
-      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
       await cache.clearCallGraphData({ removeFile: true });
 
-      expect(console.error).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to remove call-graph cache')
       );
     });

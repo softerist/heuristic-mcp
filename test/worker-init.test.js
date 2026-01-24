@@ -84,7 +84,7 @@ describe('CodebaseIndexer Worker Initialization', () => {
     // initializeWorkers catches errors internally and logs them, then terminates workers.
     // It doesn't throw.
 
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await indexer.initializeWorkers();
 

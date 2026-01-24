@@ -47,7 +47,7 @@ describe('Ultra Maximizer', () => {
         verbose: true, // Crucial for line 673
       };
       const cache = new EmbeddingsCache(config);
-      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
       // Mock file system for load()
       vi.spyOn(fs, 'mkdir').mockResolvedValue();
@@ -78,7 +78,7 @@ describe('Ultra Maximizer', () => {
       // But we can emit error on the worker instances after creation?
       // initializeWorkers creates workers and waits for "ready".
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const terminateSpy = vi.spyOn(indexer, 'terminateWorkers');
 
       // We need to trigger the "error" event on the worker.

@@ -204,7 +204,7 @@ describe('Final Coverage Boost', () => {
         // Mock fs.stat for readJsonFile to avoid worker
         fs.stat.mockResolvedValue({ size: 100 });
 
-        const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
         
         const cache = new EmbeddingsCache(config);
         await cache.load();

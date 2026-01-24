@@ -33,19 +33,19 @@ async function withTempDir(testFn) {
 
 describe('EmbeddingsCache additional coverage', () => {
   let warnSpy;
-  let infoSpy;
+  let logSpy;
   let errorSpy;
 
   beforeEach(() => {
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.resetModules();
   });
 
   afterEach(() => {
     warnSpy.mockRestore();
-    infoSpy.mockRestore();
+    logSpy.mockRestore();
     errorSpy.mockRestore();
     vi.clearAllMocks();
     vi.resetModules();
@@ -82,7 +82,7 @@ describe('EmbeddingsCache additional coverage', () => {
       );
       await fs.writeFile(path.join(dir, 'call-graph.json'), JSON.stringify({ 'a.js': {} }));
       await cache.load();
-      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Loaded call-graph data'));
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Loaded call-graph data'));
     });
   });
 

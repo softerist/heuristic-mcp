@@ -71,7 +71,7 @@ describe('CodebaseIndexer Detailed Coverage', () => {
       workerThreads: 2,
     };
     indexer = new CodebaseIndexer(mockEmbedder, mockCache, config);
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   describe('Watcher Gaps', () => {
@@ -166,7 +166,7 @@ describe('CodebaseIndexer Detailed Coverage', () => {
       localIndexer.config.workerThreads = 2;
 
       await localIndexer.initializeWorkers();
-      expect(console.error).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('Worker initialization failed')
       );
       expect(localIndexer.workers.length).toBe(0);

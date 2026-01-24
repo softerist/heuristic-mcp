@@ -88,8 +88,9 @@ describe('CodebaseIndexer Gap Coverage', () => {
 
     indexer = new CodebaseIndexer(mockEmbedder, mockCache, mockConfig, mockServer);
     
-    // Silence console.error but track calls
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Silence console.warn/log but track calls
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   // Coverage for lines 825-837: Content provided but too large, or stat error
@@ -103,7 +104,7 @@ describe('CodebaseIndexer Gap Coverage', () => {
     
     await indexer.indexAll();
     
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('Skipped large.js (too large:')
     );
   });
@@ -119,7 +120,7 @@ describe('CodebaseIndexer Gap Coverage', () => {
     
     await indexer.indexAll();
     
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('Failed to stat error.js: Stat fail')
     );
   });
@@ -136,7 +137,7 @@ describe('CodebaseIndexer Gap Coverage', () => {
     
     await indexer.indexAll();
     
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('Invalid stat result for weird.js')
     );
   });
@@ -155,7 +156,7 @@ describe('CodebaseIndexer Gap Coverage', () => {
     
     await indexer.indexAll();
     
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('Skipped large_stat.js (too large:')
     );
   });
@@ -174,7 +175,7 @@ describe('CodebaseIndexer Gap Coverage', () => {
     
     await indexer.indexAll();
     
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('Failed to read read_fail.js: Read error')
     );
   });
@@ -197,7 +198,7 @@ describe('CodebaseIndexer Gap Coverage', () => {
     
     await indexer.indexAll();
     
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining('Skipped same.js (unchanged)')
     );
   });
@@ -217,17 +218,17 @@ describe('CodebaseIndexer Gap Coverage', () => {
     
     // 3. Trigger events
     await addHandler('new.js');
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining('Queued add event during indexing')
     );
     
     await changeHandler('changed.js');
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining('Queued change event during indexing')
     );
     
     await unlinkHandler('deleted.js');
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining('Queued delete event during indexing')
     );
   });

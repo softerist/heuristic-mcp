@@ -81,8 +81,8 @@ describe('Coverage Gap Filling', () => {
         throw new Error('Simulated worker failure');
       });
 
-      // Spy on console.error
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // Spy on console.warn
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const indexer = new CodebaseIndexer(mockEmbedder, mockCache, config);
       await indexer.initializeWorkers();
@@ -93,7 +93,7 @@ describe('Coverage Gap Filling', () => {
 
     it('logs skipped message for excluded file when verbose is true', async () => {
       const indexer = new CodebaseIndexer(mockEmbedder, mockCache, config);
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
       await indexer.indexFile('/test/dir/excluded.js');
 
@@ -135,8 +135,8 @@ describe('Coverage Gap Filling', () => {
       // mock fs.stat to throw
       fs.stat.mockRejectedValue(new Error('File not found'));
 
-      // mock console.error
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // mock console.warn
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       try {
         const result = await indexer.indexAll(false);
@@ -161,7 +161,7 @@ describe('Coverage Gap Filling', () => {
         return worker;
       });
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const indexer = new CodebaseIndexer(mockEmbedder, mockCache, config);
 
       // This method catches errors internally but logs them

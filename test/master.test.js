@@ -32,7 +32,7 @@ describe('Master Coverage Maximizer', () => {
       vi.resetModules();
       const mod = await import('../lib/cache.js');
       EmbeddingsCache = mod.EmbeddingsCache;
-      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
     });
 
     it('targets initHnswIndex retry logic via buildAnnIndex', async () => {
@@ -67,7 +67,7 @@ describe('Master Coverage Maximizer', () => {
       });
       vi.mocked(fs.rm).mockRejectedValue(new Error('fail'));
       await cache.clearCallGraphData({ removeFile: true });
-      expect(console.error).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to remove call-graph cache')
       );
     });
@@ -96,7 +96,7 @@ describe('Master Coverage Maximizer', () => {
       const mod = await import('../features/index-codebase.js');
       CodebaseIndexer = mod.CodebaseIndexer;
       handleToolCall = mod.handleToolCall;
-      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
     });
 
     it('targets worker init timeout and error paths (lines 120-153)', async () => {
@@ -128,7 +128,7 @@ describe('Master Coverage Maximizer', () => {
       );
 
       await indexer.initializeWorkers();
-      expect(console.error).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('Worker initialization failed')
       );
       expect(indexer.workers.length).toBe(0);
@@ -152,7 +152,7 @@ describe('Master Coverage Maximizer', () => {
 
       const p1 = indexer.processChunksWithWorkers([{ text: 'a' }]);
       await p1;
-      expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Worker 0 error'));
+      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Worker 0 error'));
 
       // Setup for p2 (crash)
       worker.postMessage.mockImplementationOnce(() => {
@@ -163,7 +163,7 @@ describe('Master Coverage Maximizer', () => {
 
       const p2 = indexer.processChunksWithWorkers([{ text: 'b' }]);
       await p2;
-      expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Worker 0 crashed'));
+      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Worker 0 crashed'));
     });
 
     it('targets setupFileWatcher closing existing (line 780)', async () => {

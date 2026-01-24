@@ -116,7 +116,8 @@ describe('CodebaseIndexer Branch Coverage', () => {
     };
 
     indexer = new CodebaseIndexer(mockEmbedder, mockCache, mockConfig, mockServer);
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -150,7 +151,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     indexer.config.workerThreads = 2;
     workerMode = 'error';
     await indexer.initializeWorkers();
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('Worker initialization failed')
     );
   });
@@ -246,7 +247,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     await indexer.processChunksWithWorkers([{ file: 'a.js', text: 'c' }]);
 
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('postMessage failed')
     );
     expect(fallbackSpy).toHaveBeenCalled();
@@ -314,7 +315,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     mockEmbedder.mockRejectedValue(new Error('fail'));
 
     await indexer.indexFile('file.js');
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Skipped hash update'));
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Skipped hash update'));
   });
 
   it('covers indexAll stats increment and hash update (L764)', async () => {
@@ -354,8 +355,8 @@ describe('CodebaseIndexer Branch Coverage', () => {
     await indexer.indexAll();
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Skipped hash update'));
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Skipped hash update'));
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('Background ANN build failed')
     );
   });
@@ -381,8 +382,8 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     // Wait for background promise
     await new Promise((resolve) => setImmediate(resolve));
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Skipped hash update'));
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Skipped hash update'));
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('Background ANN build failed')
     );
   });
@@ -414,7 +415,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     await indexer.indexAll();
 
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('Failed to apply queued file updates')
     );
   });
@@ -457,7 +458,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     await indexer.indexAll();
 
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('Skipped file-large-content.js (too large:')
     );
     expect(mockEmbedder).not.toHaveBeenCalled();
@@ -473,7 +474,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     await indexer.indexAll();
 
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('Invalid stat result for invalid-stat.js')
     );
   });
@@ -491,7 +492,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     await indexer.indexAll();
 
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('Skipped large-stat.js (too large:')
     );
   });
@@ -510,7 +511,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     await indexer.indexAll();
 
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('Failed to read read-error.js: Read failed')
     );
   });
@@ -532,7 +533,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     await indexer.indexAll();
 
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining('Skipped unchanged.js (unchanged)')
     );
     expect(mockEmbedder).not.toHaveBeenCalled();
@@ -547,21 +548,21 @@ describe('CodebaseIndexer Branch Coverage', () => {
     // Trigger ADD event
     await handlers['add']('added.js');
     expect(indexer.pendingWatchEvents.get(path.join('/test', 'added.js'))).toBe('add');
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining('Queued add event during indexing')
     );
 
     // Trigger CHANGE event
     await handlers['change']('changed.js');
     expect(indexer.pendingWatchEvents.get(path.join('/test', 'changed.js'))).toBe('change');
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining('Queued change event during indexing')
     );
 
     // Trigger UNLINK event
     await handlers['unlink']('deleted.js');
     expect(indexer.pendingWatchEvents.get(path.join('/test', 'deleted.js'))).toBe('unlink');
-    expect(console.error).toHaveBeenCalledWith(
+    expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining('Queued delete event during indexing')
     );
   });

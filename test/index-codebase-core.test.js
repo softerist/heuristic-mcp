@@ -79,7 +79,8 @@ const createCache = () => ({
 });
 
 describe('index-codebase branch coverage focused', () => {
-  let consoleError;
+  let consoleWarn;
+  let consoleLog;
 
   beforeEach(() => {
     vi.resetModules();
@@ -89,11 +90,13 @@ describe('index-codebase branch coverage focused', () => {
     fsMock.stat = vi.fn();
     fsMock.readFile = vi.fn();
     fsMock.mkdir = vi.fn();
-    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    consoleError.mockRestore();
+    consoleWarn.mockRestore();
+    consoleLog.mockRestore();
   });
 
   it('handles auto worker init failures', async () => {
@@ -111,7 +114,7 @@ describe('index-codebase branch coverage focused', () => {
     workerMessageType = 'error';
     await indexer.initializeWorkers();
 
-    expect(consoleError).toHaveBeenCalledWith(
+    expect(consoleWarn).toHaveBeenCalledWith(
       expect.stringContaining('Worker initialization failed')
     );
   });
@@ -132,7 +135,7 @@ describe('index-codebase branch coverage focused', () => {
 
     await indexer.initializeWorkers();
 
-    expect(consoleError).toHaveBeenCalledWith(
+    expect(consoleWarn).toHaveBeenCalledWith(
       expect.stringContaining('Worker initialization failed')
     );
     expect(terminateSpy).toHaveBeenCalled();
@@ -161,7 +164,7 @@ describe('index-codebase branch coverage focused', () => {
       timeoutSpy.mockRestore();
     }
 
-    expect(consoleError).toHaveBeenCalledWith(
+    expect(consoleWarn).toHaveBeenCalledWith(
       expect.stringContaining('Worker initialization failed')
     );
   });
@@ -331,7 +334,7 @@ describe('index-codebase branch coverage focused', () => {
 
     await indexer.indexFile('/root/fail-quiet.js');
 
-    const hasSkipLog = consoleError.mock.calls.some(
+    const hasSkipLog = consoleWarn.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes('Skipped hash update')
     );
     expect(hasSkipLog).toBe(false);
@@ -357,7 +360,7 @@ describe('index-codebase branch coverage focused', () => {
 
     await indexer.indexFile('/root/fail.js');
 
-    const hasSkipLog = consoleError.mock.calls.some(
+    const hasSkipLog = consoleWarn.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes('Skipped hash update')
     );
     expect(hasSkipLog).toBe(true);
@@ -389,7 +392,7 @@ describe('index-codebase branch coverage focused', () => {
 
     await indexer.indexFile('/root/partial.js');
 
-    const hasSkipLog = consoleError.mock.calls.some(
+    const hasSkipLog = consoleWarn.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes('Skipped hash update')
     );
     expect(hasSkipLog).toBe(true);
@@ -428,10 +431,10 @@ describe('index-codebase branch coverage focused', () => {
     await indexer.indexAll(false);
     await new Promise((resolve) => setImmediate(resolve));
 
-    const hasBatchSkip = consoleError.mock.calls.some(
+    const hasBatchSkip = consoleWarn.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes('Skipped hash update for a.js')
     );
-    const hasAnnError = consoleError.mock.calls.some(
+    const hasAnnError = consoleWarn.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes('Background ANN build failed')
     );
     expect(hasBatchSkip).toBe(true);
@@ -520,7 +523,7 @@ describe('index-codebase branch coverage focused', () => {
 
     await indexer.indexAll(false);
 
-    const hasBatchSkip = consoleError.mock.calls.some(
+    const hasBatchSkip = consoleWarn.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes('Skipped hash update for a.js')
     );
     expect(hasBatchSkip).toBe(true);
@@ -563,7 +566,7 @@ describe('index-codebase branch coverage focused', () => {
 
     await indexer.indexAll(false);
 
-    const hasBatchSkip = consoleError.mock.calls.some(
+    const hasBatchSkip = consoleWarn.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes('Skipped hash update for a.js')
     );
     expect(hasBatchSkip).toBe(false);
@@ -599,7 +602,7 @@ describe('index-codebase branch coverage focused', () => {
     await indexer.indexAll(false);
     await new Promise((resolve) => setImmediate(resolve));
 
-    const hasAnnError = consoleError.mock.calls.some(
+    const hasAnnError = consoleWarn.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes('Background ANN build failed')
     );
     expect(hasAnnError).toBe(true);
@@ -635,7 +638,7 @@ describe('index-codebase branch coverage focused', () => {
     await indexer.indexAll(false);
     await new Promise((resolve) => setImmediate(resolve));
 
-    const hasAnnError = consoleError.mock.calls.some(
+    const hasAnnError = consoleWarn.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes('Background ANN build failed')
     );
     expect(hasAnnError).toBe(false);
@@ -669,7 +672,7 @@ describe('index-codebase branch coverage focused', () => {
 
     await indexer.indexAll(false);
 
-    const hasBatchSize = consoleError.mock.calls.some(
+    const hasBatchSize = consoleLog.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes('batch size: 500')
     );
     expect(hasBatchSize).toBe(true);
