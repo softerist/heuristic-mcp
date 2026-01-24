@@ -179,13 +179,9 @@ describe('Coverage Gap Filling', () => {
     });
 
     it('ignores unknown worker message types (implicit else branch coverage)', async () => {
-      const timeoutCallbacks = [];
-      const setTimeoutSpy = vi.spyOn(global, 'setTimeout').mockImplementation((cb, ms) => {
-        if (ms === 120000) {
-          timeoutCallbacks.push(cb);
-          return 12345 + timeoutCallbacks.length;
-        }
-        return 1; // Dummy for others
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout').mockImplementation((cb) => {
+        cb();
+        return 1;
       });
 
       const WorkerMock = vi.mocked(Worker);
@@ -211,9 +207,6 @@ describe('Coverage Gap Filling', () => {
       // Wait for microtasks
       await Promise.resolve();
       await Promise.resolve();
-
-      // Trigger all timeouts manually
-      timeoutCallbacks.forEach((cb) => cb());
 
       await initPromise;
       expect(indexer.workers.length).toBe(0);

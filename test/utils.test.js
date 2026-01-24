@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { smartChunk } from '../lib/utils.js';
+import { smartChunk, MODEL_TOKEN_LIMITS } from '../lib/utils.js';
 
 describe('smartChunk', () => {
   it('handles inline block comments on the same line', () => {
@@ -14,6 +14,16 @@ describe('smartChunk', () => {
 
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks[0].text).toContain('const x = 1');
+  });
+
+  it('handles block comments that end mid-line', () => {
+    const content = '/* start comment\nend */ const y = 2;\nfunction ok() { return y; }';
+    const config = { embeddingModel: 'jinaai/jina-embeddings-v2-base-code' };
+
+    const chunks = smartChunk(content, 'example.js', config);
+
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks[0].text).toContain('const y = 2');
   });
 
   it('splits large content respecting boundaries and overlap', () => {
@@ -66,6 +76,31 @@ describe('smartChunk', () => {
     const config = { embeddingModel: 'test-model' };
     smartChunk(content, 'test.js', config);
     // Mainly ensuring no crash and coverage of state machine (lines 176-230)
+  });
+
+  it('splits chunks when target token budget is exceeded', () => {
+    MODEL_TOKEN_LIMITS['test-split'] = 18;
+    const line = 'alpha beta gamma delta';
+    const content = `${line}\n${line}\n${line}`;
+    const config = { embeddingModel: 'test-split' };
+
+    const chunks = smartChunk(content, 'test.js', config);
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks[0].text.trim().length).toBeGreaterThan(20);
+  });
+
+  it('splits oversized lines and keeps long chunks', () => {
+    MODEL_TOKEN_LIMITS['test-tiny-oversize'] = 12;
+    const firstLine = 'alpha beta gamma delta';
+    const secondLine = 'one two three four five six seven eight nine ten eleven';
+    const content = `${firstLine}\n${secondLine}`;
+    const config = { embeddingModel: 'test-tiny-oversize' };
+
+    const chunks = smartChunk(content, 'test.txt', config);
+
+    expect(chunks.some((chunk) => chunk.text.includes(firstLine))).toBe(true);
+    expect(chunks.some((chunk) => chunk.text.length > 20)).toBe(true);
   });
 
   it('handles empty input', () => {

@@ -1,46 +1,32 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 
-describe.skip('Worker Error Handling', () => {
+// Enable worker error tests by default since we mock the worker properly
+const runWorkerErrors = true;
+const maybeDescribe = describe;
+
+maybeDescribe('Worker Error Handling', () => {
   let indexer;
   let config;
   let cache;
-  let mockWorker;
+  let workers;
   let WorkerConstructor;
 
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
 
-    mockWorker = new EventEmitter();
-    mockWorker.postMessage = vi.fn();
-    mockWorker.terminate = vi.fn();
-    mockWorker.threadId = 1;
-
-    // Auto-reply ready to ensure initialization passes
-    mockWorker.on = vi.fn((event, _cb) => {
-      if (event === 'message')
-        setTimeout(() => {
-          // Only emit ready if not already emitted?
-          // Simpler: just emit.
-          // Note: 'on' is called for 'message' listener in initializeWorkers
-          mockWorker.emit('message', { type: 'ready' });
-        }, 0);
-      return mockWorker;
-    });
-    // Ignore once implementation detail for simplicity or match it
-    mockWorker.once = vi.fn((event, _cb) => {
-      if (event === 'message')
-        setTimeout(() => {
-          mockWorker.emit('message', { type: 'ready' });
-        }, 0);
-      return mockWorker;
-    });
-    mockWorker.removeListener = vi.fn();
-
-    // Factory returning our single instance
+    workers = [];
     WorkerConstructor = vi.fn(function () {
-      return mockWorker;
+      const worker = new EventEmitter();
+      worker.postMessage = vi.fn();
+      worker.terminate = vi.fn();
+      worker.threadId = workers.length + 1;
+      workers.push(worker);
+      queueMicrotask(() => {
+        worker.emit('message', { type: 'ready' });
+      });
+      return worker;
     });
 
     vi.doMock('worker_threads', () => ({
@@ -75,10 +61,12 @@ describe.skip('Worker Error Handling', () => {
   });
 
   it('should handle offline workers and fallback', async () => {
-    await indexer.initializeWorkers();
+    const initPromise = indexer.initializeWorkers();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await initPromise;
 
     const chunks = [{ text: 'a' }, { text: 'b' }];
-    const fallbackSpy = vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue(2);
+    const fallbackSpy = vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue([]);
 
     const promise = indexer.processChunksWithWorkers(chunks);
 
@@ -89,7 +77,7 @@ describe.skip('Worker Error Handling', () => {
       // Emit error on the event emitter.
       // The indexer attached a listener via 'once'.
       // Vitest might complain if unhandled, so we wrap.
-      mockWorker.emit('error', new Error('Worker crash'));
+      workers[0].emit('error', new Error('Worker crash'));
     } catch (_e) { /* ignore */ }
 
     await promise;
@@ -99,7 +87,7 @@ describe.skip('Worker Error Handling', () => {
   });
 
   it('should handle worker startup failure', async () => {
-    WorkerConstructor.mockImplementationOnce(() => {
+    WorkerConstructor.mockImplementationOnce(function () {
       throw new Error('Init bad');
     });
     await indexer.initializeWorkers();

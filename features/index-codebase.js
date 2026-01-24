@@ -4,6 +4,7 @@ import chokidar from 'chokidar';
 import path from 'path';
 import os from 'os';
 import { Worker } from 'worker_threads';
+import { setTimeout as delay } from 'timers/promises';
 import { fileURLToPath } from 'url';
 import { smartChunk, hashContent } from '../lib/utils.js';
 import { extractCallData } from '../lib/call-graph.js';
@@ -70,6 +71,10 @@ function matchesExcludePatterns(filePath, matchers) {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+function isTestEnv() {
+  return process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
+}
+
 export class CodebaseIndexer {
   constructor(embedder, cache, config, server = null) {
     this.embedder = embedder;
@@ -118,7 +123,11 @@ export class CodebaseIndexer {
         });
 
         const readyPromise = new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('Worker init timeout')), 120000);
+          const readyTimeoutMs = isTestEnv() ? 1000 : 120000;
+          const timeout = setTimeout(
+            () => reject(new Error('Worker init timeout')),
+            readyTimeoutMs
+          );
 
           worker.once('message', (msg) => {
             clearTimeout(timeout);
@@ -161,11 +170,28 @@ export class CodebaseIndexer {
    * Terminate all worker threads
    */
   async terminateWorkers() {
+    const WORKER_SHUTDOWN_TIMEOUT = isTestEnv() ? 50 : 5000;
     const terminations = this.workers.map((worker) => {
       try {
         worker.postMessage({ type: 'shutdown' });
       } catch { /* ignore */ }
-      return worker.terminate().catch(() => null);
+
+      let exited = false;
+      const exitPromise = new Promise((resolve) => {
+        worker.once('exit', () => {
+          exited = true;
+          resolve();
+        });
+      });
+      const timeoutPromise = delay(WORKER_SHUTDOWN_TIMEOUT);
+
+      return Promise.race([exitPromise, timeoutPromise]).then(() => {
+        if (!exited) {
+          const termination = worker.terminate?.();
+          return Promise.resolve(termination).catch(() => null);
+        }
+        return null;
+      });
     });
     await Promise.all(terminations);
     this.workers = [];
@@ -206,7 +232,7 @@ export class CodebaseIndexer {
     const results = [];
     const chunkSize = Math.ceil(allChunks.length / this.workers.length);
     const workerPromises = [];
-    const WORKER_TIMEOUT = 300000; // 5 minutes per batch
+    const WORKER_TIMEOUT = isTestEnv() ? 1000 : 300000; // 1s in tests, 5 minutes in prod
 
     if (this.config.verbose) {
       console.error(
@@ -475,13 +501,17 @@ export class CodebaseIndexer {
     const skippedCount = { unchanged: 0, tooLarge: 0, error: 0 };
 
     // Process in parallel batches for speed
-    const BATCH_SIZE = 500;
+    // We fetch stats for 100 files at a time to keep IO efficient
+    const STAT_BATCH_SIZE = Math.min(100, this.config.batchSize || 100);
+    // Limit concurrent file reads to 50MB to prevent OOM
+    const MAX_READ_BATCH_BYTES = 50 * 1024 * 1024;
 
-    for (let i = 0; i < files.length; i += BATCH_SIZE) {
-      const batch = files.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < files.length; i += STAT_BATCH_SIZE) {
+      const batchFiles = files.slice(i, i + STAT_BATCH_SIZE);
 
-      const results = await Promise.all(
-        batch.map(async (file) => {
+      // 1. Get stats for all files in this batch parallel
+      const fileStats = await Promise.all(
+        batchFiles.map(async (file) => {
           try {
             const stats = await fs.stat(file);
 
@@ -494,24 +524,61 @@ export class CodebaseIndexer {
               return null;
             }
 
-            const content = await fs.readFile(file, 'utf-8');
-            const hash = hashContent(content);
-
-            if (this.cache.getFileHash(file) === hash) {
-              skippedCount.unchanged++;
-              return null;
-            }
-
-            return { file, content, hash };
-          } catch (_error) {
+            return { file, size: stats.size };
+          } catch (_err) {
             skippedCount.error++;
             return null;
           }
         })
       );
 
-      for (const result of results) {
-        if (result) filesToProcess.push(result);
+      // 2. Process valid files in size-constrained sub-batches
+      let currentReadBatch = [];
+      let currentReadBytes = 0;
+
+      const processReadBatch = async (batch) => {
+        const results = await Promise.all(
+          batch.map(async ({ file }) => {
+            try {
+              const content = await fs.readFile(file, 'utf-8');
+              const hash = hashContent(content);
+
+              if (this.cache.getFileHash(file) === hash) {
+                skippedCount.unchanged++;
+                return null;
+              }
+
+              return { file, hash, force: false };
+            } catch (_err) {
+              skippedCount.error++;
+              return null;
+            }
+          })
+        );
+
+        for (const result of results) {
+          if (result) filesToProcess.push(result);
+        }
+      };
+
+      for (const item of fileStats) {
+        if (!item) continue;
+
+        if (
+          currentReadBytes + item.size > MAX_READ_BATCH_BYTES &&
+          currentReadBatch.length > 0
+        ) {
+          await processReadBatch(currentReadBatch);
+          currentReadBatch = [];
+          currentReadBytes = 0;
+        }
+
+        currentReadBatch.push(item);
+        currentReadBytes += item.size;
+      }
+
+      if (currentReadBatch.length > 0) {
+        await processReadBatch(currentReadBatch);
       }
     }
 
@@ -528,8 +595,22 @@ export class CodebaseIndexer {
     }
 
     this.isIndexing = true;
+    let memoryTimer = null;
+    const logMemory = (label) => {
+      if (!this.config.verbose) return;
+      const { rss, heapUsed, heapTotal } = process.memoryUsage();
+      const toMb = (value) => `${(value / 1024 / 1024).toFixed(1)}MB`;
+      console.error(
+        `[Indexer] Memory ${label}: rss=${toMb(rss)} heap=${toMb(heapUsed)}/${toMb(heapTotal)}`,
+      );
+    };
 
     try {
+      logMemory('start');
+      if (this.config.verbose) {
+        memoryTimer = setInterval(() => logMemory('periodic'), 15000);
+      }
+
       if (force) {
         console.error('[Indexer] Force reindex requested: clearing cache');
         this.cache.setVectorStore([]);
@@ -616,11 +697,14 @@ export class CodebaseIndexer {
                 batch.map(async (file) => {
                   try {
                     const stats = await fs.stat(file);
+                    if (!stats || typeof stats.isDirectory !== 'function') {
+                      return null;
+                    }
                     if (stats.isDirectory()) return null;
                     if (stats.size > this.config.maxFileSize) return null;
                     const content = await fs.readFile(file, 'utf-8');
                     const hash = hashContent(content);
-                    return { file, content, hash };
+                    return { file, hash, force: true };
                   } catch {
                     return null;
                   }
@@ -684,7 +768,82 @@ export class CodebaseIndexer {
         const allChunks = [];
         const fileStats = new Map();
 
-        for (const { file, content, hash } of batch) {
+        for (const { file, force, content: presetContent, hash: presetHash } of batch) {
+          let content = presetContent;
+          let liveHash = presetHash;
+
+          if (content !== undefined && content !== null) {
+            if (typeof content !== 'string') {
+              content = String(content);
+            }
+            if (!liveHash) {
+              liveHash = hashContent(content);
+            }
+            const byteSize = Buffer.byteLength(content, 'utf8');
+            if (byteSize > this.config.maxFileSize) {
+              if (this.config.verbose) {
+                console.error(
+                  `[Indexer] Skipped ${path.basename(file)} (too large: ${(byteSize / 1024 / 1024).toFixed(2)}MB)`,
+                );
+              }
+              continue;
+            }
+          } else {
+            let stats;
+            try {
+              stats = await fs.stat(file);
+            } catch (err) {
+              if (this.config.verbose) {
+                console.error(
+                  `[Indexer] Failed to stat ${path.basename(file)}: ${err.message}`,
+                );
+              }
+              continue;
+            }
+
+            if (!stats || typeof stats.isDirectory !== 'function') {
+              if (this.config.verbose) {
+                console.error(
+                  `[Indexer] Invalid stat result for ${path.basename(file)}`,
+                );
+              }
+              continue;
+            }
+
+            if (stats.isDirectory()) {
+              continue;
+            }
+
+            if (stats.size > this.config.maxFileSize) {
+              if (this.config.verbose) {
+                console.error(
+                  `[Indexer] Skipped ${path.basename(file)} (too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB)`,
+                );
+              }
+              continue;
+            }
+
+            try {
+              content = await fs.readFile(file, 'utf-8');
+            } catch (err) {
+              if (this.config.verbose) {
+                console.error(
+                  `[Indexer] Failed to read ${path.basename(file)}: ${err.message}`,
+                );
+              }
+              continue;
+            }
+
+            liveHash = hashContent(content);
+          }
+
+          if (!force && liveHash && this.cache.getFileHash(file) === liveHash) {
+            if (this.config.verbose) {
+              console.error(`[Indexer] Skipped ${path.basename(file)} (unchanged)`);
+            }
+            continue;
+          }
+
           // Remove old chunks for this file
           this.cache.removeFileFromStore(file);
 
@@ -703,7 +862,7 @@ export class CodebaseIndexer {
           }
 
           const chunks = smartChunk(content, file, this.config);
-          fileStats.set(file, { hash, totalChunks: 0, successChunks: 0 });
+          fileStats.set(file, { hash: liveHash, totalChunks: 0, successChunks: 0 });
 
           for (const chunk of chunks) {
             allChunks.push({
@@ -820,6 +979,10 @@ export class CodebaseIndexer {
         message: `Indexed ${filesToProcess.length} files (${totalChunks} chunks) in ${totalTime}s`,
       };
     } finally {
+      if (memoryTimer) {
+        clearInterval(memoryTimer);
+      }
+      logMemory('end');
       this.isIndexing = false;
     }
   }
@@ -870,7 +1033,7 @@ export class CodebaseIndexer {
         await this.indexFile(fullPath);
         await this.cache.save();
       })
-      .on('unlink', (filePath) => {
+      .on('unlink', async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.error(`[Indexer] File deleted: ${filePath}`);
 
@@ -881,7 +1044,7 @@ export class CodebaseIndexer {
 
         this.cache.removeFileFromStore(fullPath);
         this.cache.deleteFileHash(fullPath);
-        this.cache.save();
+        await this.cache.save();
       });
 
     console.error('[Indexer] File watcher enabled for incremental indexing');

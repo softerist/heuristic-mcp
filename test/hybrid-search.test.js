@@ -342,6 +342,98 @@ describe('HybridSearch', () => {
 
       expect(files).toContain('c.js');
     });
+
+    it('should add exact-match chunks when ANN misses them', async () => {
+      const vectorStore = [
+        {
+          file: 'a.js',
+          content: 'alpha content',
+          vector: [1, 0],
+          startLine: 1,
+          endLine: 1,
+        },
+        {
+          file: 'b.js',
+          content: 'exact match term',
+          vector: [0, 1],
+          startLine: 1,
+          endLine: 1,
+        },
+      ];
+      const cache = {
+        getVectorStore: () => vectorStore,
+        queryAnn: async () => [0],
+        getRelatedFiles: async () => new Map(),
+      };
+      const config = {
+        annEnabled: true,
+        annMinCandidates: 0,
+        annMaxCandidates: 10,
+        annCandidateMultiplier: 1,
+        semanticWeight: 1,
+        exactMatchBoost: 1,
+        recencyBoost: 0,
+        callGraphEnabled: false,
+        callGraphBoost: 0,
+        searchDirectory: process.cwd(),
+      };
+      const embedder = async () => ({ data: new Float32Array([0, 1]) });
+      const hybrid = new HybridSearch(embedder, cache, config);
+
+      const { results } = await hybrid.search('exact', 1);
+
+      expect(results[0].file).toBe('b.js');
+    });
+
+    it('should skip empty content and duplicate keys when adding exact matches', async () => {
+      const vectorStore = [
+        {
+          file: 'a.js',
+          content: 'no match here',
+          vector: [1, 0],
+          startLine: 1,
+          endLine: 1,
+        },
+        {
+          file: 'b.js',
+          content: null,
+          vector: [0, 1],
+          startLine: 1,
+          endLine: 1,
+        },
+        {
+          file: 'a.js',
+          content: 'match term',
+          vector: [1, 0],
+          startLine: 1,
+          endLine: 1,
+        },
+      ];
+      const cache = {
+        getVectorStore: () => vectorStore,
+        queryAnn: async () => [0],
+        getRelatedFiles: async () => new Map(),
+      };
+      const config = {
+        annEnabled: true,
+        annMinCandidates: 0,
+        annMaxCandidates: 10,
+        annCandidateMultiplier: 1,
+        semanticWeight: 1,
+        exactMatchBoost: 1,
+        recencyBoost: 0,
+        callGraphEnabled: false,
+        callGraphBoost: 0,
+        searchDirectory: process.cwd(),
+      };
+      const embedder = async () => ({ data: new Float32Array([1, 0]) });
+      const hybrid = new HybridSearch(embedder, cache, config);
+
+      const { results } = await hybrid.search('match', 1);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].content).toBe('no match here');
+    });
   });
 
   describe('Cache Invalidation', () => {

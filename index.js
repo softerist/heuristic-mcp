@@ -27,6 +27,19 @@ import * as FindSimilarCodeFeature from './features/find-similar-code.js';
 import * as AnnConfigFeature from './features/ann-config.js';
 import { register } from './features/register.js';
 
+const MEMORY_LOG_INTERVAL_MS = 15000;
+
+function formatMb(bytes) {
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+function logMemory(prefix) {
+  const { rss, heapUsed, heapTotal } = process.memoryUsage();
+  console.error(
+    `${prefix} rss=${formatMb(rss)} heap=${formatMb(heapUsed)}/${formatMb(heapTotal)}`
+  );
+}
+
 // Log cache directory logic for debugging
 try {
   const globalCache = path.join(getGlobalCacheDir(), 'heuristic-mcp');
@@ -143,6 +156,15 @@ async function initialize() {
   // Load configuration with workspace support
   config = await loadConfig(workspaceDir);
 
+  let startupMemoryTimer = null;
+  if (config.verbose) {
+    logMemory('[Server] Memory (startup)');
+    startupMemoryTimer = setInterval(
+      () => logMemory('[Server] Memory (startup)'),
+      MEMORY_LOG_INTERVAL_MS
+    );
+  }
+
   // Ensure search directory exists
   try {
     await fs.access(config.searchDirectory);
@@ -154,11 +176,20 @@ async function initialize() {
   // Load AI model
   console.error('[Server] Loading AI embedding model (this may take time on first run)...');
   embedder = await pipeline('feature-extraction', config.embeddingModel);
+  if (config.verbose) {
+    logMemory('[Server] Memory (after model load)');
+  }
 
   // Initialize cache
   cache = new EmbeddingsCache(config);
   console.error(`[Server] Cache directory: ${config.cacheDirectory}`);
   await cache.load();
+  if (config.verbose) {
+    logMemory('[Server] Memory (after cache load)');
+  }
+  if (startupMemoryTimer) {
+    clearInterval(startupMemoryTimer);
+  }
 
   // Initialize features
   indexer = new CodebaseIndexer(embedder, cache, config, server);

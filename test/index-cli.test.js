@@ -231,6 +231,48 @@ describe('index.js CLI coverage', () => {
     logSpy.mockRestore();
   });
 
+  it('logs memory stats when verbose is enabled', async () => {
+    process.argv = ['node', 'index.js'];
+    configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
+    configMock.loadConfig.mockResolvedValue({
+      ...baseConfig,
+      verbose: true,
+    });
+    let accessResolve;
+    const accessPromise = new Promise((resolve) => {
+      accessResolve = resolve;
+    });
+    fsMock.access.mockReturnValue(accessPromise);
+    pipelineMock.mockResolvedValue(() => ({}));
+    vi.useFakeTimers();
+    const clearSpy = vi.spyOn(global, 'clearInterval');
+
+    const importPromise = import('../index.js');
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(15000);
+    accessResolve();
+    await importPromise;
+
+    const messages = errorSpy.mock.calls.map((call) => call[0]);
+    const hasStartup = messages.some(
+      (message) => typeof message === 'string' && message.includes('[Server] Memory (startup)')
+    );
+    const hasModelLoad = messages.some(
+      (message) =>
+        typeof message === 'string' && message.includes('[Server] Memory (after model load)')
+    );
+    const hasCacheLoad = messages.some(
+      (message) =>
+        typeof message === 'string' && message.includes('[Server] Memory (after cache load)')
+    );
+    expect(hasStartup).toBe(true);
+    expect(hasModelLoad).toBe(true);
+    expect(hasCacheLoad).toBe(true);
+    expect(clearSpy).toHaveBeenCalled();
+
+    clearSpy.mockRestore();
+  });
+
   it('handles lifecycle stop/start/status flags', async () => {
     const exitError = new Error('exit');
     exitSpy.mockImplementation(() => {

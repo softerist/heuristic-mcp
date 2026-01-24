@@ -5,6 +5,7 @@ import {
   extractCalls,
   buildCallGraph,
   getRelatedFiles,
+  extractSymbolsFromContent,
 } from '../lib/call-graph.js';
 
 describe('Call Graph Extractor', () => {
@@ -221,6 +222,20 @@ describe('Call Graph Extractor', () => {
 
       expect(related.has('/path/a.js')).toBe(true);
       expect(related.has('/path/b.js')).toBe(true);
+    });
+  });
+
+  describe('extractSymbolsFromContent', () => {
+    it('should extract symbols from result snippets', () => {
+      const content = `
+        function alpha() {}
+        class Beta {}
+        const gamma = () => {};
+      `;
+      const symbols = extractSymbolsFromContent(content);
+      expect(symbols).toContain('alpha');
+      expect(symbols).toContain('Beta');
+      expect(symbols).toContain('gamma');
     });
   });
 });

@@ -96,6 +96,27 @@ export class HybridSearch {
       usedAnn = false;
     }
 
+    const lowerQuery = query.toLowerCase();
+    if (usedAnn) {
+      const hasExactInCandidates = candidates.some(
+        (chunk) => chunk?.content?.toLowerCase().includes(lowerQuery),
+      );
+
+      if (!hasExactInCandidates && lowerQuery.length > 1) {
+        const seen = new Set(
+          candidates.map((chunk) => `${chunk.file}:${chunk.startLine}:${chunk.endLine}`),
+        );
+        for (const chunk of vectorStore) {
+          if (!chunk?.content) continue;
+          if (!chunk.content.toLowerCase().includes(lowerQuery)) continue;
+          const key = `${chunk.file}:${chunk.startLine}:${chunk.endLine}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          candidates.push(chunk);
+        }
+      }
+    }
+
     if (this.config.recencyBoost > 0) {
       await this.populateFileModTimes(candidates.map((chunk) => chunk.file));
     }
@@ -106,7 +127,6 @@ export class HybridSearch {
       let score = dotSimilarity(queryVector, chunk.vector) * this.config.semanticWeight;
 
       // Exact match boost
-      const lowerQuery = query.toLowerCase();
       const lowerContent = chunk.content.toLowerCase();
 
       if (lowerContent.includes(lowerQuery)) {

@@ -10,6 +10,9 @@ import { CacheClearer } from '../features/clear-cache.js';
 import { HybridSearch } from '../features/hybrid-search.js';
 import { pipeline } from '@xenova/transformers';
 import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
+import crypto from 'crypto';
 
 // Cached embedder instance (shared across tests for speed)
 let sharedEmbedder = null;
@@ -22,9 +25,13 @@ const DEFAULT_MOCK_DIMENSIONS = 64;
  */
 export async function getEmbedder(config) {
   if (!sharedEmbedder) {
-    console.log('[TestHelper] Loading embedding model (first time)...');
+    if (config.verbose) {
+      console.error('[TestHelper] Loading embedding model (first time)...');
+    }
     sharedEmbedder = await pipeline('feature-extraction', config.embeddingModel);
-    console.log('[TestHelper] Embedding model loaded');
+    if (config.verbose) {
+      console.error('[TestHelper] Embedding model loaded');
+    }
   }
   return sharedEmbedder;
 }
@@ -81,14 +88,40 @@ function createMockEmbedder({ dimensions = DEFAULT_MOCK_DIMENSIONS } = {}) {
 }
 
 /**
- * Create test fixtures with initialized components
+ * Create test fixtures with initialized components and isolated environment
  * @param {Object} options - Options for fixture creation
  * @returns {Object} Initialized components for testing
  */
 export async function createTestFixtures(options = {}) {
+  // Create a unique temporary directory for this test run
+  const sessionId = crypto.randomBytes(6).toString('hex');
+  const tempRootDir = path.join(os.tmpdir(), `heuristic-mcp-test-${sessionId}`);
+  const searchDir = path.join(tempRootDir, 'project');
+  const cacheDir = path.join(tempRootDir, 'cache');
+
+  await fs.mkdir(searchDir, { recursive: true });
+  await fs.mkdir(cacheDir, { recursive: true });
+
+  // Create some dummy files in the fixture directory
+  // This prevents tests from indexing the real heuristic-mcp codebase
+  await fs.writeFile(
+    path.join(searchDir, 'test.js'),
+    'function hello() {\n  console.log("hello world");\n}\n\n// embedder CodebaseIndexer test fixture\nmodule.exports = { hello };'
+  );
+  await fs.writeFile(
+    path.join(searchDir, 'utils.py'),
+    'def add(a, b):\n    """Adds two numbers"""\n    return a + b\n\nif __name__ == "__main__":\n    print(add(2, 3))'
+  );
+  await fs.writeFile(path.join(searchDir, 'README.md'), '# Test Project\n\nThis is a test.');
+
+  // Load baseline config
   const config = await loadConfig();
 
-  // Override config for testing if needed
+  // Redirect to isolated test directories
+  config.searchDirectory = searchDir;
+  config.cacheDirectory = cacheDir;
+
+  // Override config for testing
   if (options.verbose !== undefined) config.verbose = options.verbose;
   if (options.workerThreads !== undefined) config.workerThreads = options.workerThreads;
   if (isVitest()) config.workerThreads = 1;
@@ -106,6 +139,9 @@ export async function createTestFixtures(options = {}) {
   const hybridSearch = new HybridSearch(embedder, cache, config);
 
   return {
+    tempRootDir,
+    searchDir,
+    cacheDir,
     config,
     embedder,
     cache,
@@ -124,6 +160,15 @@ export async function cleanupFixtures(fixtures) {
     fixtures.indexer.terminateWorkers();
     if (fixtures.indexer.watcher) {
       await fixtures.indexer.watcher.close();
+    }
+  }
+
+  // Remove temporary test directory
+  if (fixtures.tempRootDir) {
+    try {
+      await fs.rm(fixtures.tempRootDir, { recursive: true, force: true });
+    } catch (err) {
+      // Ignore cleanup errors
     }
   }
 }

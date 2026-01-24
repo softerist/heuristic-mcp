@@ -38,7 +38,7 @@ describe('CodebaseIndexer', () => {
   beforeEach(async () => {
     // Reset state
     fixtures.indexer.isIndexing = false;
-    fixtures.indexer.terminateWorkers();
+    await fixtures.indexer.terminateWorkers();
   });
 
   describe('Basic Indexing', () => {
@@ -337,6 +337,7 @@ describe('Index Codebase Tool Handler', () => {
 
   beforeEach(async () => {
     fixtures.indexer.isIndexing = false;
+    await fixtures.indexer.terminateWorkers();
   });
 
   describe('Tool Definition', () => {
