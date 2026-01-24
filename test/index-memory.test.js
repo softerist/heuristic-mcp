@@ -21,6 +21,14 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
 
 vi.mock('@xenova/transformers', () => ({
   pipeline: vi.fn().mockResolvedValue({}),
+  env: {
+    backends: {
+      onnx: {
+        numThreads: 1,
+        wasm: { numThreads: 1 },
+      },
+    },
+  },
 }));
 
 vi.mock('../features/lifecycle.js', () => ({

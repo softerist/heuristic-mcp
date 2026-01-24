@@ -124,7 +124,7 @@ export async function createTestFixtures(options = {}) {
   // Override config for testing
   if (options.verbose !== undefined) config.verbose = options.verbose;
   if (options.workerThreads !== undefined) config.workerThreads = options.workerThreads;
-  if (isVitest()) config.workerThreads = 1;
+  if (isVitest() && options.forceWorkers !== true) config.workerThreads = 0;
 
   const useRealEmbedder = options.useRealEmbedder === true;
   const embedder = useRealEmbedder

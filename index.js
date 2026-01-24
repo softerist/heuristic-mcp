@@ -6,9 +6,13 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { pipeline, env } from '@xenova/transformers';
 
-// Limit ONNX threads to preventing CPU saturation (tuned to 2 for balanced load)
-env.backends.onnx.numThreads = 2;
-env.backends.onnx.wasm.numThreads = 2;
+// Limit ONNX threads to prevent CPU saturation (tuned to 2 for balanced load)
+if (env?.backends?.onnx) {
+  env.backends.onnx.numThreads = 2;
+  if (env.backends.onnx.wasm) {
+    env.backends.onnx.wasm.numThreads = 2;
+  }
+}
 import fs from 'fs/promises';
 import fsSync, { createWriteStream } from 'fs';
 import path from 'path';
@@ -66,6 +70,7 @@ Usage:
 
 Options:
   --status                 Show server and cache status
+  --clear-cache            Remove cache for current workspace (and stale global caches)
   --logs                   Tail server logs (defaults to last 200 lines, follows)
   --tail <lines>           Lines to show with --logs (default: ${DEFAULT_LOG_TAIL_LINES})
   --no-follow              Do not follow log output with --logs
@@ -101,10 +106,12 @@ async function setupPidFile() {
 
   process.on('exit', cleanup);
   process.on('SIGINT', () => {
+    console.error('\n[Server] Shutting down...');
     cleanup();
     process.exit(0);
   });
   process.on('SIGTERM', () => {
+    console.error('\n[Server] Shutting down...');
     cleanup();
     process.exit(0);
   });
@@ -162,6 +169,83 @@ async function setupFileLogging(activeConfig) {
   } catch (err) {
     originalConsole.error(`[Logs] Failed to initialize log file: ${err.message}`);
     return null;
+  }
+}
+
+function parseWorkspaceDir(args) {
+  const workspaceIndex = args.findIndex((arg) => arg.startsWith('--workspace'));
+  if (workspaceIndex === -1) return null;
+
+  const arg = args[workspaceIndex];
+  let rawWorkspace = null;
+
+  if (arg.includes('=')) {
+    rawWorkspace = arg.split('=')[1];
+  } else if (workspaceIndex + 1 < args.length) {
+    rawWorkspace = args[workspaceIndex + 1];
+  }
+
+  // Check if IDE variable wasn't expanded (contains ${})
+  if (rawWorkspace && rawWorkspace.includes('${')) {
+    console.error(`[Server] IDE variable not expanded: ${rawWorkspace}, using current directory`);
+    return process.cwd();
+  }
+
+  return rawWorkspace || null;
+}
+
+async function clearStaleCaches() {
+  const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
+  const cacheDirs = await fs.readdir(globalCacheRoot).catch(() => []);
+  if (cacheDirs.length === 0) return;
+
+  const tenMinutesMs = 10 * 60 * 1000;
+  const now = Date.now();
+  let removed = 0;
+
+  for (const dir of cacheDirs) {
+    const cacheDir = path.join(globalCacheRoot, dir);
+    const metaFile = path.join(cacheDir, 'meta.json');
+    try {
+      await fs.access(metaFile);
+      continue; // valid cache with metadata
+    } catch (err) {
+      if (err.code !== 'ENOENT') continue;
+      try {
+        const stats = await fs.stat(cacheDir);
+        const ageMs = now - stats.mtimeMs;
+        if (ageMs < tenMinutesMs) {
+          continue; // likely indexing in progress
+        }
+        await fs.rm(cacheDir, { recursive: true, force: true });
+        removed++;
+      } catch {
+        // ignore failures per dir
+      }
+    }
+  }
+
+  if (removed > 0) {
+    console.log(`[Cache] Removed ${removed} stale cache director${removed === 1 ? 'y' : 'ies'}.`);
+  }
+}
+
+async function clearCache(workspaceDir) {
+  const effectiveWorkspace = workspaceDir || process.cwd();
+  const activeConfig = await loadConfig(effectiveWorkspace);
+
+  if (!activeConfig.enableCache) {
+    console.log('[Cache] Cache disabled (enableCache=false); nothing to clear.');
+    return;
+  }
+
+  try {
+    await fs.rm(activeConfig.cacheDirectory, { recursive: true, force: true });
+    console.log(`[Cache] Cleared cache directory: ${activeConfig.cacheDirectory}`);
+    await clearStaleCaches();
+  } catch (err) {
+    console.error(`[Cache] Failed to clear cache: ${err.message}`);
+    process.exit(1);
   }
 }
 
@@ -407,7 +491,17 @@ export async function main(argv = process.argv) {
     process.exit(0);
   }
 
+  const workspaceDir = parseWorkspaceDir(args);
+  if (workspaceDir) {
+    console.error(`[Server] Workspace mode: ${workspaceDir}`);
+  }
+
   const wantsLogs = args.includes('--logs');
+  if (wantsLogs) {
+    process.env.SMART_CODING_LOGS = 'true';
+    process.env.SMART_CODING_VERBOSE = 'true';
+    console.log('[Server] Starting server with verbose logging (logs flag)');
+  }
   const wantsNoFollow = args.includes('--no-follow');
   let tailLines = DEFAULT_LOG_TAIL_LINES;
   if (wantsLogs) {
@@ -435,6 +529,11 @@ export async function main(argv = process.argv) {
     process.exit(0);
   }
 
+  if (args.includes('--clear-cache')) {
+    await clearCache(workspaceDir);
+    process.exit(0);
+  }
+
   // Check if --register flag is present
   if (args.includes('--register')) {
     // Extract optional filter (e.g. --register antigravity)
@@ -444,32 +543,6 @@ export async function main(argv = process.argv) {
 
     await register(filter);
     process.exit(0);
-  }
-
-  const workspaceIndex = args.findIndex((arg) => arg.startsWith('--workspace'));
-  let workspaceDir = null;
-
-  if (workspaceIndex !== -1) {
-    const arg = args[workspaceIndex];
-    let rawWorkspace = null;
-
-    if (arg.includes('=')) {
-      rawWorkspace = arg.split('=')[1];
-    } else if (workspaceIndex + 1 < args.length) {
-      rawWorkspace = args[workspaceIndex + 1];
-    }
-
-    // Check if IDE variable wasn't expanded (contains ${})
-    if (rawWorkspace && rawWorkspace.includes('${')) {
-      console.error(`[Server] IDE variable not expanded: ${rawWorkspace}, using current directory`);
-      workspaceDir = process.cwd();
-    } else if (rawWorkspace) {
-      workspaceDir = rawWorkspace;
-    }
-
-    if (workspaceDir) {
-      console.error(`[Server] Workspace mode: ${workspaceDir}`);
-    }
   }
 
   if (wantsLogs) {
@@ -483,6 +556,7 @@ export async function main(argv = process.argv) {
 
   const knownFlags = new Set([
     '--status',
+    '--clear-cache',
     '--logs',
     '--tail',
     '--no-follow',
@@ -518,6 +592,7 @@ export async function main(argv = process.argv) {
   }
 
   const { startBackgroundTasks } = await initialize(workspaceDir);
+  await setupPidFile();
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -531,6 +606,7 @@ export async function main(argv = process.argv) {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('[Server] Shutting down gracefully...');
+  console.error('[Server] Shutting down gracefully...');
 
   // Stop file watcher
   if (indexer && indexer.watcher) {
@@ -563,6 +639,7 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   console.log('[Server] Received SIGTERM, shutting down...');
+  console.error('[Server] Received SIGTERM, shutting down...');
 
   // Stop file watcher
   if (indexer && indexer.watcher) {

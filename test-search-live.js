@@ -31,9 +31,9 @@ async function testSearch() {
 
   // 4. Perform Search
   const searcher = new HybridSearch(embedder, cache, config);
-  console.log('Searching for "onnx threading"...');
+  console.log('Searching for "how are worker threads initialized with memory limits"...');
   
-  const { results, message } = await searcher.search('onnx threading');
+  const { results, message } = await searcher.search('how are worker threads initialized with memory limits');
 
   if (message) {
       console.log(`\n[Server Message]: ${message}`);

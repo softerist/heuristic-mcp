@@ -51,6 +51,14 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => {
 });
 vi.mock('@xenova/transformers', () => ({
   pipeline: (...args) => pipelineMock(...args),
+  env: {
+    backends: {
+      onnx: {
+        numThreads: 1,
+        wasm: { numThreads: 1 },
+      },
+    },
+  },
 }));
 vi.mock('fs/promises', () => fsMock);
 vi.mock('../lib/config.js', () => configMock);
@@ -123,6 +131,7 @@ describe('index.js CLI coverage', () => {
 
   beforeEach(() => {
     vi.resetModules();
+    vi.resetAllMocks();
     originalArgv = process.argv;
     listeners = {};
     lastIndexer = null;

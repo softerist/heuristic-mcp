@@ -85,6 +85,14 @@ heuristic-mcp --start
 heuristic-mcp --stop
 ```
 
+### Clear Cache
+
+```bash
+heuristic-mcp --clear-cache
+```
+
+Clears the cache for the current working directory (or `--workspace` if provided) and removes stale cache directories without metadata.
+
 ---
 
 ## Configuration (`config.json`)
@@ -150,7 +158,7 @@ See `lib/config.js` for the full list.
 
 **Clear cache**
 
-- Use the MCP tool `c_clear_cache`, or delete the cache directory. For local dev, run `npm run clean`.
+- Use the MCP tool `c_clear_cache`, run `heuristic-mcp --clear-cache`, or delete the cache directory. For local dev, run `npm run clean`.
 
 ---
 

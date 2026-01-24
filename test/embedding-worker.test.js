@@ -40,6 +40,7 @@ describe('embedding-worker', () => {
     parentPort.postMessage.mockReset();
     workerData.embeddingModel = 'test-model';
     pipeline.mockReset();
+    pipeline.mockImplementation(() => Promise.resolve({}));
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
   });
 

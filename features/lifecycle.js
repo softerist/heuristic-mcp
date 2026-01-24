@@ -217,7 +217,7 @@ export async function status() {
     // 2. Fallback to process list if no PID file found or process dead
     if (pids.length === 0) {
       try {
-        // Simplified ps check for Linux/Mac
+        const myPid = process.pid;
         if (process.platform === 'win32') {
           const { stdout } = await execPromise(
             `powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"CommandLine LIKE '%heuristic-mcp%index.js%'\\" | Select-Object -ExpandProperty ProcessId"`
@@ -230,15 +230,13 @@ export async function status() {
           for (const p of winPids) {
             const pid = parseInt(p, 10);
             if (pid && pid !== myPid) {
-              validPids.push(pid);
+              if (!pids.includes(pid)) pids.push(pid);
             }
           }
         } else {
           const { stdout } = await execPromise('ps aux');
           const lines = stdout.split('\n');
-
           const validPids = [];
-          const myPid = process.pid;
 
           for (const line of lines) {
             if (line.includes('heuristic-mcp/index.js') || line.includes('heuristic-mcp')) {

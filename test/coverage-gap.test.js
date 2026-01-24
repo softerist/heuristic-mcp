@@ -56,7 +56,7 @@ describe('Coverage Gap Filling', () => {
       embeddingModel: 'test-model',
       excludePatterns: ['**/excluded.js'],
       fileExtensions: ['js'],
-      workerThreads: 2,
+      workerThreads: 0,
       verbose: true,
       searchDirectory: '/test/dir',
       maxFileSize: 100, // Small limit for testing
@@ -82,9 +82,9 @@ describe('Coverage Gap Filling', () => {
       });
 
       // Spy on console.warn
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      const indexer = new CodebaseIndexer(mockEmbedder, mockCache, config);
+      const indexer = new CodebaseIndexer(mockEmbedder, mockCache, { ...config, workerThreads: 1 });
       await indexer.initializeWorkers();
 
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to create worker'));
@@ -136,7 +136,7 @@ describe('Coverage Gap Filling', () => {
       fs.stat.mockRejectedValue(new Error('File not found'));
 
       // mock console.warn
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
         const result = await indexer.indexAll(false);
@@ -161,8 +161,8 @@ describe('Coverage Gap Filling', () => {
         return worker;
       });
 
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const indexer = new CodebaseIndexer(mockEmbedder, mockCache, config);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const indexer = new CodebaseIndexer(mockEmbedder, mockCache, { ...config, workerThreads: 1 });
 
       // This method catches errors internally but logs them
       // Wait, looking at initializeWorkers, it does catch(err) around the loop body,
@@ -200,7 +200,7 @@ describe('Coverage Gap Filling', () => {
         return worker;
       });
 
-      const indexer = new CodebaseIndexer(mockEmbedder, mockCache, config);
+      const indexer = new CodebaseIndexer(mockEmbedder, mockCache, { ...config, workerThreads: 1 });
 
       const initPromise = indexer.initializeWorkers();
 
@@ -218,7 +218,7 @@ describe('Coverage Gap Filling', () => {
       const indexer = new CodebaseIndexer(mockEmbedder, mockCache, {
         ...config,
         verbose: false,
-        workerThreads: 1,
+        workerThreads: 0,
       });
 
       vi.mocked(extractCallData).mockImplementation(() => {
@@ -244,7 +244,7 @@ describe('Coverage Gap Filling', () => {
     });
 
     it('logs error when call graph extraction fails (line 745)', async () => {
-      const indexer = new CodebaseIndexer(mockEmbedder, mockCache, { ...config, workerThreads: 1 });
+      const indexer = new CodebaseIndexer(mockEmbedder, mockCache, { ...config, workerThreads: 0 });
 
       // Force call graph extraction to fail
       vi.mocked(extractCallData).mockImplementation(() => {
@@ -415,7 +415,7 @@ describe('Coverage Gap Filling', () => {
 
     it('initializes workers without verbose logging', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const nonVerboseConfig = { ...config, verbose: false };
+      const nonVerboseConfig = { ...config, verbose: false, workerThreads: 1 };
       const indexer = new CodebaseIndexer(mockEmbedder, mockCache, nonVerboseConfig);
 
       // We need to mock successful worker init to avoid crash
