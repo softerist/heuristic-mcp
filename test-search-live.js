@@ -17,6 +17,7 @@ async function testSearch() {
 
   // 2. Load Cache (this reads the data the server just built)
   const cache = new EmbeddingsCache(config);
+  console.log(`[Test] Loading cache from: ${config.cacheDirectory}`);
   await cache.load();
   console.log(`Cache loaded with ${cache.getVectorStore().length} chunks.`);
 
@@ -32,10 +33,14 @@ async function testSearch() {
   const searcher = new HybridSearch(embedder, cache, config);
   console.log('Searching for "onnx threading"...');
   
-  const results = await searcher.search('onnx threading');
+  const { results, message } = await searcher.search('onnx threading');
+
+  if (message) {
+      console.log(`\n[Server Message]: ${message}`);
+  }
   
   // 5. Output Results
-  console.log('\n--- Top 3 Results ---');
+  console.log(`\n--- Top 3 Results (Total: ${results.length}) ---`);
   results.slice(0, 3).forEach((r, i) => {
     console.log(`[${i+1}] ${r.file} (Score: ${r.score.toFixed(4)})`);
     console.log(`    Snippet: ${r.content.substring(0, 100).replace(/\n/g, ' ')}...`);

@@ -103,7 +103,7 @@ export class CodebaseIndexer {
   async initializeWorkers() {
     let numWorkers =
       this.config.workerThreads === 'auto'
-        ? Math.min(4, Math.max(1, os.cpus().length - 1)) // Cap 'auto' at 4 workers
+        ? Math.min(2, Math.max(1, os.cpus().length - 1)) // Cap 'auto' at 2 workers
         : this.config.workerThreads || 1;
 
     // Resource-aware scaling: check available RAM (skip in test env to avoid mocking issues)
@@ -124,9 +124,9 @@ export class CodebaseIndexer {
       }
     }
 
-    // Only use workers if we have more than 1 CPU AND enough memory
-    if (numWorkers <= 1) {
-      console.log('[Indexer] Single-threaded mode (CPU or memory constrained)');
+    // Use workers even for single worker to benefit from --expose-gc and separate heap
+    if (numWorkers < 1) {
+      console.log('[Indexer] No workers configured, using main thread (warning: higher RAM usage)');
       return;
     }
 
@@ -390,8 +390,8 @@ export class CodebaseIndexer {
     let processedSinceGc = 0;
     
     for (const chunk of chunks) {
-      // Throttle speed (~2 files/sec target) to reduce fan noise
-      await delay(100);
+      // Throttle speed (balanced)
+      await delay(10);
 
       try {
           const output = await this.embedder(chunk.text, {
@@ -1018,13 +1018,14 @@ export class CodebaseIndexer {
 
         // Update file hashes
         for (const [file, stats] of fileStats) {
-          if (stats.totalChunks === 0 || stats.successChunks === stats.totalChunks) {
+          if (stats.successChunks > 0) {
             this.cache.setFileHash(file, stats.hash);
-          } else if (this.config.verbose) {
-            console.warn(
-              `[Indexer] Skipped hash update for ${path.basename(file)} (${stats.successChunks}/${stats.totalChunks} chunks embedded)`
-            );
           }
+        }
+
+        // Clean up memory after each batch (Main Process)
+        if (global.gc) {
+          global.gc();
         }
 
         processedFiles += batch.length;

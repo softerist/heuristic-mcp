@@ -93,10 +93,7 @@ async function setupPidFile() {
 
   const cleanup = () => {
     try {
-      const current = fsSync.readFileSync(pidPath, 'utf-8').trim();
-      if (current === `${process.pid}`) {
-        fsSync.unlinkSync(pidPath);
-      }
+      fsSync.unlinkSync(pidPath);
     } catch {
       // ignore
     }
@@ -212,8 +209,10 @@ const features = [
 async function initialize(workspaceDir) {
   // Load configuration with workspace support
   config = await loadConfig(workspaceDir);
-  const pidPath = await setupPidFile();
-  const logPath = await setupFileLogging(config);
+  const [pidPath, logPath] = await Promise.all([
+    setupPidFile(),
+    setupFileLogging(config),
+  ]);
   if (logPath) {
     console.log(`[Logs] Writing server logs to ${logPath}`);
     console.log(`[Logs] Log viewer: heuristic-mcp --logs --workspace "${config.searchDirectory}"`);
@@ -286,10 +285,7 @@ async function initialize(workspaceDir) {
   }
 
   // In verbose mode, we trigger an early load to provide immediate resource feedback
-  if (config.verbose) {
-    if (embedderPreloaded) {
-      return;
-    }
+  if (config.verbose && !embedderPreloaded) {
     embedder('').catch((err) => {
       // Ignore "text may not be null" errors as we are just pre-warming
       if (!err.message.includes('text may not be null')) {
@@ -298,16 +294,9 @@ async function initialize(workspaceDir) {
     });
   }
 
-  // Initialize cache
+  // Initialize cache (load deferred until after server is ready)
   cache = new EmbeddingsCache(config);
   console.log(`[Server] Cache directory: ${config.cacheDirectory}`);
-  await cache.load();
-  if (config.verbose) {
-    logMemory('[Server] Memory (after cache load)');
-  }
-  if (startupMemoryTimer) {
-    clearInterval(startupMemoryTimer);
-  }
 
   // Initialize features
   indexer = new CodebaseIndexer(embedder, cache, config, server);
@@ -326,19 +315,35 @@ async function initialize(workspaceDir) {
   // Attach hybridSearch to server for cross-feature access (e.g. cache invalidation)
   server.hybridSearch = hybridSearch;
 
-  // Start indexing in background (non-blocking)
-  console.log('[Server] Starting background indexing...');
-  indexer
-    .indexAll()
-    .then(() => {
-      // Only start file watcher if explicitly enabled in config
-      if (config.watchFiles) {
-        indexer.setupFileWatcher();
+  const startBackgroundTasks = async () => {
+    try {
+      console.log('[Server] Loading cache (deferred)...');
+      await cache.load();
+      if (config.verbose) {
+        logMemory('[Server] Memory (after cache load)');
       }
-    })
-    .catch((err) => {
-      console.error('[Server] Background indexing error:', err.message);
-    });
+    } finally {
+      if (startupMemoryTimer) {
+        clearInterval(startupMemoryTimer);
+      }
+    }
+
+    // Start indexing in background (non-blocking)
+    console.log('[Server] Starting background indexing...');
+    indexer
+      .indexAll()
+      .then(() => {
+        // Only start file watcher if explicitly enabled in config
+        if (config.watchFiles) {
+          indexer.setupFileWatcher();
+        }
+      })
+      .catch((err) => {
+        console.error('[Server] Background indexing error:', err.message);
+      });
+  };
+
+  return { startBackgroundTasks };
 }
 
 // Setup MCP server
@@ -512,12 +517,15 @@ export async function main(argv = process.argv) {
     process.exit(1);
   }
 
-  await initialize(workspaceDir);
+  const { startBackgroundTasks } = await initialize(workspaceDir);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
+  console.log('[Server] MCP transport connected.');
   console.log('[Server] Heuristic MCP server started.');
+  console.log('[Server] MCP server is now fully ready to accept requests.');
+  startBackgroundTasks();
 }
 
 // Graceful shutdown
