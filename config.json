@@ -854,7 +854,7 @@
   "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
   "semanticWeight": 0.7,
   "exactMatchBoost": 1.5,
-  "workerThreads": "auto",
+  "workerThreads": 1,
   "annEnabled": true,
   "annMinChunks": 5000,
   "annMinCandidates": 50,

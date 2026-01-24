@@ -47,7 +47,7 @@ describe('Ultra Maximizer', () => {
         verbose: true, // Crucial for line 673
       };
       const cache = new EmbeddingsCache(config);
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       // Mock file system for load()
       vi.spyOn(fs, 'mkdir').mockResolvedValue();

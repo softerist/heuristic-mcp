@@ -33,14 +33,17 @@ async function withTempDir(testFn) {
 }
 
 describe('EmbeddingsCache Perfection', () => {
-  let consoleSpy;
+  let warnSpy;
+  let infoSpy;
 
   beforeEach(() => {
-    consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
+    warnSpy.mockRestore();
+    infoSpy.mockRestore();
     vi.clearAllMocks();
   });
 
@@ -96,7 +99,7 @@ describe('EmbeddingsCache Perfection', () => {
 
       await cache.load();
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(infoSpy).toHaveBeenCalledWith(
         expect.stringContaining('Filtered 1 outdated cache entries')
       );
     });
@@ -114,7 +117,7 @@ describe('EmbeddingsCache Perfection', () => {
       // No call-graph.json exists. This should hit the empty catch block at line 131.
       await cache.load();
       // No error should be logged for missing call-graph.json
-      expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('call-graph'));
+      expect(infoSpy).not.toHaveBeenCalledWith(expect.stringContaining('call-graph'));
     });
   });
 
@@ -217,7 +220,7 @@ describe('EmbeddingsCache Perfection', () => {
       }
       await cache.loadAnnIndexFromDisk(FailIndex, 1);
       expect(calls).toBe(2);
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Failed to load ANN index file')
       );
     });
@@ -240,7 +243,7 @@ describe('EmbeddingsCache Perfection', () => {
       const cache = new EmbeddingsCache(config);
       await fs.writeFile(path.join(dir, 'file-hashes.json'), '{}');
       await cache.load();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Missing cache metadata'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Missing cache metadata'));
     });
   });
 
@@ -326,7 +329,7 @@ describe('EmbeddingsCache Perfection', () => {
       const cache = new EmbeddingsCache(config);
       await fs.writeFile(path.join(dir, 'embeddings.json'), '[]');
       await cache.clear();
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(infoSpy).toHaveBeenCalledWith(
         expect.stringContaining('Cache cleared successfully')
       );
     });

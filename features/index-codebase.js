@@ -136,12 +136,8 @@ export class CodebaseIndexer {
       );
     }
 
-    // Dynamic CPU allocation: distribute available cores among workers
-    // This provides "dynamic" optimization instead of hardcoding to 1,
-    // solving the user's request for elegance while still preventing saturation.
-    const cpus = os.cpus() || [];
-    const totalCores = cpus.length || 1;
-    const threadsPerWorker = Math.max(1, Math.floor(totalCores / numWorkers));
+    // Force 1 thread per worker to prevent CPU saturation (ONNX is very aggressive)
+    const threadsPerWorker = 1;
 
     console.log(`[Indexer] Initializing ${numWorkers} worker threads (${threadsPerWorker} threads per worker)...`);
 
@@ -151,10 +147,13 @@ export class CodebaseIndexer {
       try {
         const worker = new Worker(workerPath, {
           workerData: {
+            workerId: i,
             embeddingModel: this.config.embeddingModel,
             verbose: this.config.verbose,
             numThreads: threadsPerWorker,
           },
+          // Critical: Enable garbage collection in worker
+          execArgv: ['--expose-gc'],
         });
 
         const readyPromise = new Promise((resolve, reject) => {
@@ -182,7 +181,7 @@ export class CodebaseIndexer {
         this.workers.push(worker);
         this.workerReady.push(readyPromise);
       } catch (err) {
-        console.error(`[Indexer] Failed to create worker ${i}: ${err.message}`);
+        console.warn(`[Indexer] Failed to create worker ${i}: ${err.message}`);
       }
     }
 
@@ -194,7 +193,7 @@ export class CodebaseIndexer {
         console.log(`[Indexer] Each worker loaded model: ${this.config.embeddingModel}`);
       }
     } catch (err) {
-      console.error(
+      console.warn(
         `[Indexer] Worker initialization failed: ${err.message}, falling back to single-threaded`
       );
       await this.terminateWorkers();
@@ -270,7 +269,7 @@ export class CodebaseIndexer {
     const WORKER_TIMEOUT = isTestEnv() ? 1000 : 300000; // 1s in tests, 5 minutes in prod
 
     if (this.config.verbose) {
-      console.error(
+      console.log(
         `[Indexer] Distributing ${allChunks.length} chunks across ${this.workers.length} workers (~${chunkSize} chunks each)`
       );
     }
@@ -280,7 +279,7 @@ export class CodebaseIndexer {
       if (workerChunks.length === 0) continue;
 
       if (this.config.verbose) {
-        console.error(`[Indexer] Worker ${i}: processing ${workerChunks.length} chunks`);
+        console.log(`[Indexer] Worker ${i}: processing ${workerChunks.length} chunks`);
       }
 
       const promise = new Promise((resolve, _reject) => {
@@ -292,7 +291,7 @@ export class CodebaseIndexer {
         let timeout = setTimeout(() => {
           worker.off('message', handler);
           worker.off('error', errorHandler);
-          console.error(
+          console.warn(
             `[Indexer] Worker ${i} timed out, falling back to single-threaded for this batch`
           );
           // Return empty and let fallback handle it
@@ -304,7 +303,7 @@ export class CodebaseIndexer {
           timeout = setTimeout(() => {
             worker.off('message', handler);
             worker.off('error', errorHandler);
-            console.error(
+            console.warn(
               `[Indexer] Worker ${i} timed out, falling back to single-threaded for this batch`
             );
             resolve([]);
@@ -330,7 +329,7 @@ export class CodebaseIndexer {
               }
               finalize(batchResults);
             } else if (msg.type === 'error') {
-              console.error(`[Indexer] Worker ${i} error: ${msg.error}`);
+              console.warn(`[Indexer] Worker ${i} error: ${msg.error}`);
               finalize([]); // Return empty, don't reject - let fallback handle
             }
           }
@@ -338,7 +337,7 @@ export class CodebaseIndexer {
 
         // Handle worker crash
         const errorHandler = (err) => {
-          console.error(`[Indexer] Worker ${i} crashed: ${err.message}`);
+          console.warn(`[Indexer] Worker ${i} crashed: ${err.message}`);
           finalize([]); // Return empty, don't reject
         };
         worker.once('error', errorHandler);
@@ -347,7 +346,7 @@ export class CodebaseIndexer {
         try {
           worker.postMessage({ type: 'process', chunks: workerChunks, batchId });
         } catch (error) {
-          console.error(`[Indexer] Worker ${i} postMessage failed: ${error.message}`);
+          console.warn(`[Indexer] Worker ${i} postMessage failed: ${error.message}`);
           finalize([]);
         }
       });
@@ -371,7 +370,7 @@ export class CodebaseIndexer {
 
     // Retry failed chunks with single-threaded fallback
     if (failedChunks.length > 0) {
-      console.error(
+      console.warn(
         `[Indexer] Retrying ${failedChunks.length} chunks with single-threaded fallback...`
       );
       const retryResults = await this.processChunksSingleThreaded(failedChunks);
@@ -387,7 +386,13 @@ export class CodebaseIndexer {
   async processChunksSingleThreaded(chunks) {
     const results = [];
 
+    // Manual GC and yield loop to prevent CPU lockup
+    let processedSinceGc = 0;
+    
     for (const chunk of chunks) {
+      // Throttle speed (~2 files/sec target) to reduce fan noise
+      await delay(100);
+
       try {
           const output = await this.embedder(chunk.text, {
             pooling: 'mean',
@@ -401,6 +406,14 @@ export class CodebaseIndexer {
             vector: toFloat32Array(output.data),
             success: true,
           });
+
+          // Periodic GC to prevent memory creep during heavy single-threaded generic execution
+          processedSinceGc++;
+          if (processedSinceGc >= 50) { 
+            if (global.gc) global.gc();
+            processedSinceGc = 0;
+          }
+
       } catch (error) {
         results.push({
           file: chunk.file,
@@ -419,12 +432,12 @@ export class CodebaseIndexer {
     const fileName = path.basename(file);
     if (this.isExcluded(file)) {
       if (this.config.verbose) {
-        console.error(`[Indexer] Skipped ${fileName} (excluded by pattern)`);
+        console.log(`[Indexer] Skipped ${fileName} (excluded by pattern)`);
       }
       return 0;
     }
     if (this.config.verbose) {
-      console.error(`[Indexer] Processing: ${fileName}...`);
+      console.log(`[Indexer] Processing: ${fileName}...`);
     }
 
     try {
@@ -438,7 +451,7 @@ export class CodebaseIndexer {
 
       if (stats.size > this.config.maxFileSize) {
         if (this.config.verbose) {
-          console.error(
+          console.warn(
             `[Indexer] Skipped ${fileName} (too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB)`
           );
         }
@@ -451,13 +464,13 @@ export class CodebaseIndexer {
       // Skip if file hasn't changed
       if (this.cache.getFileHash(file) === hash) {
         if (this.config.verbose) {
-          console.error(`[Indexer] Skipped ${fileName} (unchanged)`);
+          console.log(`[Indexer] Skipped ${fileName} (unchanged)`);
         }
         return 0;
       }
 
       if (this.config.verbose) {
-        console.error(`[Indexer] Indexing ${fileName}...`);
+        console.log(`[Indexer] Indexing ${fileName}...`);
       }
 
       // Remove old chunks for this file
@@ -484,19 +497,19 @@ export class CodebaseIndexer {
           addedChunks++;
         } catch (embeddingError) {
           failedChunks++;
-          console.error(`[Indexer] Failed to embed chunk in ${fileName}:`, embeddingError.message);
+          console.warn(`[Indexer] Failed to embed chunk in ${fileName}:`, embeddingError.message);
         }
       }
 
       if (chunks.length === 0 || failedChunks === 0) {
         this.cache.setFileHash(file, hash);
       } else if (this.config.verbose) {
-        console.error(
+        console.warn(
           `[Indexer] Skipped hash update for ${fileName} (${addedChunks}/${chunks.length} chunks embedded)`
         );
       }
       if (this.config.verbose) {
-        console.error(`[Indexer] Completed ${fileName} (${addedChunks} chunks)`);
+        console.log(`[Indexer] Completed ${fileName} (${addedChunks} chunks)`);
       }
       return addedChunks;
     } catch (error) {
@@ -588,7 +601,7 @@ export class CodebaseIndexer {
               return null;
             }
 
-            return { file, size: stats.size };
+            return { file, size: stats.size, mtimeMs: stats.mtimeMs };
           } catch (_err) {
             skippedCount.error++;
             return null;
@@ -644,17 +657,31 @@ export class CodebaseIndexer {
       if (currentReadBatch.length > 0) {
         await processReadBatch(currentReadBatch);
       }
+      
+      // Pre-warm HybridSearch cache if available
+      if (this.server && this.server.hybridSearch && this.server.hybridSearch.fileModTimes) {
+          for (const stat of fileStats) {
+            if (stat && stat.file && typeof stat.mtimeMs === 'number') {
+              this.server.hybridSearch.fileModTimes.set(stat.file, stat.mtimeMs);
+            }
+          }
+      }
     }
 
-    console.log(
-      `[Indexer] Pre-filter: ${filesToProcess.length} changed, ${skippedCount.unchanged} unchanged, ${skippedCount.tooLarge} too large, ${skippedCount.error} errors (${Date.now() - startTime}ms)`
-    );
+    if (this.config.verbose) {
+       console.log(
+        `[Indexer] Pre-filter: ${filesToProcess.length} changed, ${skippedCount.unchanged} unchanged, ${skippedCount.tooLarge} too large, ${skippedCount.error} errors (${Date.now() - startTime}ms)`
+      );
+    }
+    
+
+    
     return filesToProcess;
   }
 
   async indexAll(force = false) {
     if (this.isIndexing || this.processingWatchEvents) {
-      console.error('[Indexer] Indexing already in progress, skipping concurrent request');
+      console.warn('[Indexer] Indexing already in progress, skipping concurrent request');
       return {
         skipped: true,
         reason: 'Indexing already in progress or pending file updates are being applied',
@@ -807,8 +834,8 @@ export class CodebaseIndexer {
       this.sendProgress(10, 100, `Processing ${filesToProcess.length} changed files`);
 
       // Step 3: Determine batch size based on project size
-      const adaptiveBatchSize =
-        files.length > 10000 ? 500 : files.length > 1000 ? 200 : this.config.batchSize || 100;
+      // Reduced to 10 to prevent memory exhaustion (was 100-500)
+      const adaptiveBatchSize = 10;
 
       console.log(
         `[Indexer] Processing ${filesToProcess.length} files (batch size: ${adaptiveBatchSize})`
@@ -819,13 +846,19 @@ export class CodebaseIndexer {
 
       if (useWorkers) {
         await this.initializeWorkers();
+      if (this.workers.length > 0) {
         console.log(`[Indexer] Multi-threaded mode: ${this.workers.length} workers active`);
+      }
       } else {
         console.log(`[Indexer] Single-threaded mode (single-core system)`);
       }
 
       let totalChunks = 0;
       let processedFiles = 0;
+
+      console.log(
+        `[Indexer] Embedding pass started: ${filesToProcess.length} files using ${this.config.embeddingModel}`
+      );
 
       // Step 5: Process files in adaptive batches
       for (let i = 0; i < filesToProcess.length; i += adaptiveBatchSize) {
@@ -834,6 +867,18 @@ export class CodebaseIndexer {
         // Generate all chunks for this batch
         const allChunks = [];
         const fileStats = new Map();
+
+        // Memory safeguard: check if we are running hot
+        const mem = process.memoryUsage();
+        if (mem.rss > 2048 * 1024 * 1024) { // > 2GB
+           if (global.gc) {
+               console.log('[Indexer] Memory high (>2GB), forcing GC...');
+               global.gc();
+           } else if (this.config.verbose) {
+               console.log(`[Indexer] Memory high (>2GB): ${Math.round(mem.rss/1024/1024)}MB`);
+           }
+           // Optimization: could reduce batch size dynamically here
+        }
 
         for (const { file, force, content: presetContent, hash: presetHash } of batch) {
           let content = presetContent;
@@ -849,7 +894,7 @@ export class CodebaseIndexer {
             const byteSize = Buffer.byteLength(content, 'utf8');
             if (byteSize > this.config.maxFileSize) {
               if (this.config.verbose) {
-                console.error(
+                console.warn(
                   `[Indexer] Skipped ${path.basename(file)} (too large: ${(byteSize / 1024 / 1024).toFixed(2)}MB)`,
                 );
               }
@@ -861,7 +906,7 @@ export class CodebaseIndexer {
               stats = await fs.stat(file);
             } catch (err) {
               if (this.config.verbose) {
-                console.error(
+                console.warn(
                   `[Indexer] Failed to stat ${path.basename(file)}: ${err.message}`,
                 );
               }
@@ -870,7 +915,7 @@ export class CodebaseIndexer {
 
             if (!stats || typeof stats.isDirectory !== 'function') {
               if (this.config.verbose) {
-                console.error(
+                console.warn(
                   `[Indexer] Invalid stat result for ${path.basename(file)}`,
                 );
               }
@@ -883,7 +928,7 @@ export class CodebaseIndexer {
 
             if (stats.size > this.config.maxFileSize) {
               if (this.config.verbose) {
-                console.error(
+                console.warn(
                   `[Indexer] Skipped ${path.basename(file)} (too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB)`,
                 );
               }
@@ -894,7 +939,7 @@ export class CodebaseIndexer {
               content = await fs.readFile(file, 'utf-8');
             } catch (err) {
               if (this.config.verbose) {
-                console.error(
+                console.warn(
                   `[Indexer] Failed to read ${path.basename(file)}: ${err.message}`,
                 );
               }
@@ -906,7 +951,7 @@ export class CodebaseIndexer {
 
           if (!force && liveHash && this.cache.getFileHash(file) === liveHash) {
             if (this.config.verbose) {
-              console.error(`[Indexer] Skipped ${path.basename(file)} (unchanged)`);
+              console.log(`[Indexer] Skipped ${path.basename(file)} (unchanged)`);
             }
             continue;
           }
@@ -921,7 +966,7 @@ export class CodebaseIndexer {
               this.cache.setFileCallData(file, callData);
             } catch (err) {
               if (this.config.verbose) {
-                console.error(
+                console.warn(
                   `[Indexer] Call graph extraction failed for ${path.basename(file)}: ${err.message}`
                 );
               }
@@ -976,7 +1021,7 @@ export class CodebaseIndexer {
           if (stats.totalChunks === 0 || stats.successChunks === stats.totalChunks) {
             this.cache.setFileHash(file, stats.hash);
           } else if (this.config.verbose) {
-            console.error(
+            console.warn(
               `[Indexer] Skipped hash update for ${path.basename(file)} (${stats.successChunks}/${stats.totalChunks} chunks embedded)`
             );
           }
@@ -1012,7 +1057,7 @@ export class CodebaseIndexer {
 
       const totalTime = ((Date.now() - totalStartTime) / 1000).toFixed(1);
       console.log(
-        `[Indexer] Complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
+        `[Indexer] Embedding pass complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
       );
 
       // Send completion progress
@@ -1031,7 +1076,7 @@ export class CodebaseIndexer {
 
       void this.cache.ensureAnnIndex().catch((error) => {
         if (this.config.verbose) {
-          console.error(`[ANN] Background ANN build failed: ${error.message}`);
+          console.warn(`[ANN] Background ANN build failed: ${error.message}`);
         }
       });
 
@@ -1054,9 +1099,9 @@ export class CodebaseIndexer {
       try {
         await this.processPendingWatchEvents();
       } catch (error) {
-        console.error(`[Indexer] Failed to apply queued file updates: ${error.message}`);
-      }
+      console.warn(`[Indexer] Failed to apply queued file updates: ${error.message}`);
     }
+  }
   }
 
   enqueueWatchEvent(type, filePath) {

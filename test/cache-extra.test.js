@@ -32,15 +32,21 @@ async function withTempDir(testFn) {
 }
 
 describe('EmbeddingsCache additional coverage', () => {
-  let consoleSpy;
+  let warnSpy;
+  let infoSpy;
+  let errorSpy;
 
   beforeEach(() => {
-    consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.resetModules();
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
+    warnSpy.mockRestore();
+    infoSpy.mockRestore();
+    errorSpy.mockRestore();
     vi.clearAllMocks();
     vi.resetModules();
   });
@@ -54,21 +60,21 @@ describe('EmbeddingsCache additional coverage', () => {
       await fs.writeFile(path.join(dir, 'file-hashes.json'), JSON.stringify({}));
 
       await cache.load();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Missing cache metadata'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Missing cache metadata'));
 
       await fs.writeFile(
         path.join(dir, 'meta.json'),
         JSON.stringify({ version: 999, embeddingModel: 'test-model' })
       );
       await cache.load();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Cache version mismatch'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cache version mismatch'));
 
       await fs.writeFile(
         path.join(dir, 'meta.json'),
         JSON.stringify({ version: 1, embeddingModel: 'other-model' })
       );
       await cache.load();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Embedding model changed'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Embedding model changed'));
 
       await fs.writeFile(
         path.join(dir, 'meta.json'),
@@ -76,7 +82,7 @@ describe('EmbeddingsCache additional coverage', () => {
       );
       await fs.writeFile(path.join(dir, 'call-graph.json'), JSON.stringify({ 'a.js': {} }));
       await cache.load();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Loaded call-graph data'));
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Loaded call-graph data'));
     });
   });
 
@@ -118,7 +124,7 @@ describe('EmbeddingsCache additional coverage', () => {
       const metaFile = path.join(dir, 'ann-meta.json');
       await fs.writeFile(metaFile, 'not-json');
       await cache.loadAnnIndexFromDisk(class {}, 3);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid ANN metadata'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid ANN metadata'));
 
       await fs.writeFile(
         metaFile,
@@ -133,7 +139,7 @@ describe('EmbeddingsCache additional coverage', () => {
         })
       );
       await cache.loadAnnIndexFromDisk(class {}, 3);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('ANN index config changed'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ANN index config changed'));
     });
   });
 
@@ -152,7 +158,7 @@ describe('EmbeddingsCache additional coverage', () => {
       const result = await cache.ensureAnnIndex();
 
       expect(result).toBeNull();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to build ANN index'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to build ANN index'));
     });
   });
 
@@ -180,7 +186,7 @@ describe('EmbeddingsCache additional coverage', () => {
       const result = await cache.ensureAnnIndex();
 
       expect(result).toBeNull();
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('HierarchicalNSW export not found')
       );
     });
@@ -278,7 +284,7 @@ describe('EmbeddingsCache additional coverage', () => {
     
     await cache.load();
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('JSON worker failed'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('JSON worker failed'));
   });
 
   it('handles non-array store in setVectorStore (line 320)', async () => {

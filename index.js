@@ -4,7 +4,11 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { stop, start, status, logs } from './features/lifecycle.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { pipeline } from '@xenova/transformers';
+import { pipeline, env } from '@xenova/transformers';
+
+// Limit ONNX threads to preventing CPU saturation (tuned to 2 for balanced load)
+env.backends.onnx.numThreads = 2;
+env.backends.onnx.wasm.numThreads = 2;
 import fs from 'fs/promises';
 import fsSync, { createWriteStream } from 'fs';
 import path from 'path';
@@ -123,10 +127,16 @@ async function setupFileLogging(activeConfig) {
     const writeLine = (level, args) => {
       if (!logStream) return;
       const message = util.format(...args);
+      // Skip empty lines (spacers) in log files
+      if (!message.trim()) return;
+
       const timestamp = new Date().toISOString();
-      const lines = message.split(/\r?\n/);
-      const payload =
-        lines.map((line) => `${timestamp} [${level}] ${line}`).join('\n') + '\n';
+      const lines = message
+        .split(/\r?\n/)
+        .map((line) => line.trimEnd())
+        .filter((line) => line.length > 0);
+      if (lines.length === 0) return;
+      const payload = lines.map((line) => `${timestamp} [${level}] ${line}`).join('\n') + '\n';
       logStream.write(payload);
     };
 
@@ -243,7 +253,16 @@ async function initialize(workspaceDir) {
   const lazyEmbedder = async (...args) => {
     if (!cachedEmbedderPromise) {
       console.log(`[Server] Loading AI embedding model: ${config.embeddingModel}...`);
-      cachedEmbedderPromise = pipeline('feature-extraction', config.embeddingModel).then((model) => {
+      const modelLoadStart = Date.now();
+      cachedEmbedderPromise = pipeline('feature-extraction', config.embeddingModel, {
+        session_options: {
+          numThreads: 2,
+          intraOpNumThreads: 2,
+          interOpNumThreads: 2,
+        },
+      }).then((model) => {
+        const loadSeconds = ((Date.now() - modelLoadStart) / 1000).toFixed(1);
+        console.log(`[Server] Embedding model loaded (${loadSeconds}s). Starting intensive indexing (expect high CPU)...`);
         if (config.verbose) {
           logMemory('[Server] Memory (after model load)');
         }
@@ -489,7 +508,7 @@ export async function main(argv = process.argv) {
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('\n[Server] Shutting down gracefully...');
+  console.log('[Server] Shutting down gracefully...');
 
   // Stop file watcher
   if (indexer && indexer.watcher) {
@@ -521,7 +540,7 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\n[Server] Received SIGTERM, shutting down...');
+  console.log('[Server] Received SIGTERM, shutting down...');
 
   // Stop file watcher
   if (indexer && indexer.watcher) {

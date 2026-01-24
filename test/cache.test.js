@@ -53,7 +53,7 @@ async function createConfig(cacheDir) {
 
 describe('EmbeddingsCache', () => {
   beforeEach(() => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -70,7 +70,7 @@ describe('EmbeddingsCache', () => {
         .spyOn(fs, 'mkdir')
         .mockRejectedValue(new Error('Failed to create directory'));
       await cache.load();
-      expect(console.error).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         '[Cache] Failed to load cache:',
         'Failed to create directory'
       );
@@ -230,7 +230,7 @@ describe('EmbeddingsCache', () => {
 
       await cache.clearCallGraphData({ removeFile: true });
 
-      const called = console.error.mock.calls.some(
+      const called = console.warn.mock.calls.some(
         (call) =>
           typeof call[0] === 'string' && call[0].includes('Failed to remove call-graph cache')
       );
@@ -298,7 +298,7 @@ describe('EmbeddingsCache', () => {
 
       await cache.clearCallGraphData({ removeFile: true });
 
-      expect(console.error).not.toHaveBeenCalledWith(
+      expect(console.warn).not.toHaveBeenCalledWith(
         expect.stringContaining('Failed to remove call-graph cache')
       );
       rmSpy.mockRestore();

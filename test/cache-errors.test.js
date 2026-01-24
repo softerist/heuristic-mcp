@@ -70,7 +70,8 @@ describe('EmbeddingsCache Error Handling', () => {
     };
     cache = new EmbeddingsCache(config);
 
-    // Spy on console error but verify calls
+    // Spy on console warn/error but verify calls
+    vi.spyOn(console, 'warn');
     vi.spyOn(console, 'error');
 
     fs.readFile.mockResolvedValue(null);
@@ -109,7 +110,7 @@ describe('EmbeddingsCache Error Handling', () => {
       const index = await cache.ensureAnnIndex();
 
       expect(index).toBeNull();
-      expect(console.error).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to build ANN index')
       );
     });
@@ -163,7 +164,7 @@ describe('EmbeddingsCache Error Handling', () => {
 
       const index = await cache.ensureAnnIndex();
 
-      expect(console.error).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to load ANN index')
       );
       expect(index).toBeDefined();
@@ -175,7 +176,7 @@ describe('EmbeddingsCache Error Handling', () => {
     it('should handle fs errors during load', async () => {
       fs.mkdir.mockRejectedValue(new Error('Permission denied'));
       await cache.load();
-      expect(console.error).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         '[Cache] Failed to load cache:',
         'Permission denied'
       );
@@ -185,7 +186,7 @@ describe('EmbeddingsCache Error Handling', () => {
       cache.vectorStore = [{ vector: [1] }];
       fs.mkdir.mockRejectedValue(new Error('Read-only file system'));
       await cache.save();
-      expect(console.error).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         '[Cache] Failed to save cache:',
         'Read-only file system'
       );
@@ -207,7 +208,7 @@ describe('EmbeddingsCache Error Handling', () => {
 
       cache.setFileCallData('f.js', {});
       await cache.save();
-      expect(console.error).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         '[Cache] Failed to save cache:',
         'Graph Write Fail'
       );
@@ -226,7 +227,7 @@ describe('EmbeddingsCache Error Handling', () => {
       cache.vectorStore = [{ vector: [1] }];
       const index = await cache.ensureAnnIndex();
 
-      expect(console.error).toHaveBeenCalledWith(expect.stringContaining('version mismatch'));
+      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('version mismatch'));
       expect(mockIndex.initIndex).toHaveBeenCalled();
     });
 
@@ -240,7 +241,7 @@ describe('EmbeddingsCache Error Handling', () => {
       const index = await cache.ensureAnnIndex();
 
       expect(index).toBeNull();
-      expect(console.error).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to build ANN index')
       );
     });
@@ -255,7 +256,7 @@ describe('EmbeddingsCache Error Handling', () => {
       const index = await cache.ensureAnnIndex();
 
       expect(index).toBeDefined();
-      expect(console.error).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to save ANN index')
       );
     });

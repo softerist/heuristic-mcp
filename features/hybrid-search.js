@@ -125,7 +125,14 @@ export class HybridSearch {
     }
 
     if (this.config.recencyBoost > 0) {
-      await this.populateFileModTimes(candidates.map((chunk) => chunk.file));
+      // optimization: avoid IO storm during full scan fallbacks
+      // Only check recency on demand if we have a reasonable number of candidates
+      if (candidates.length <= 1000) {
+        await this.populateFileModTimes(candidates.map((chunk) => chunk.file));
+      } else {
+         // for large sets, relied on cached times only (or 0 if missing)
+         // this prevents blocking the search request with thousands of fs.stat calls
+      }
     }
 
     // Score all chunks (batched to prevent blocking event loop)

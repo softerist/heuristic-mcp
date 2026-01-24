@@ -34,7 +34,7 @@ describe('EmbeddingsCache branch coverage', () => {
   let consoleSpy;
 
   beforeEach(() => {
-    consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.resetModules();
   });
 

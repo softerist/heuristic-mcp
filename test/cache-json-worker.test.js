@@ -87,7 +87,7 @@ describe('EmbeddingsCache JSON worker parsing', () => {
 
     const { EmbeddingsCache } = await import('../lib/cache.js');
     const cache = new EmbeddingsCache(baseConfig);
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await cache.load();
 
