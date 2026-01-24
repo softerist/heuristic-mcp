@@ -205,11 +205,11 @@ async function initialize(workspaceDir) {
   const pidPath = await setupPidFile();
   const logPath = await setupFileLogging(config);
   if (logPath) {
-    console.error(`[Logs] Writing server logs to ${logPath}`);
-    console.error(`[Logs] Log viewer: heuristic-mcp --logs --workspace "${config.searchDirectory}"`);
+    console.log(`[Logs] Writing server logs to ${logPath}`);
+    console.log(`[Logs] Log viewer: heuristic-mcp --logs --workspace "${config.searchDirectory}"`);
   }
   if (pidPath) {
-    console.error(`[Server] PID file: ${pidPath}`);
+    console.log(`[Server] PID file: ${pidPath}`);
   }
 
   // Log cache directory logic for debugging
@@ -242,7 +242,7 @@ async function initialize(workspaceDir) {
   let cachedEmbedderPromise = null;
   const lazyEmbedder = async (...args) => {
     if (!cachedEmbedderPromise) {
-      console.error(`[Server] Loading AI embedding model: ${config.embeddingModel}...`);
+      console.log(`[Server] Loading AI embedding model: ${config.embeddingModel}...`);
       cachedEmbedderPromise = pipeline('feature-extraction', config.embeddingModel).then((model) => {
         if (config.verbose) {
           logMemory('[Server] Memory (after model load)');
