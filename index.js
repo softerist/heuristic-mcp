@@ -173,11 +173,29 @@ async function initialize() {
     process.exit(1);
   }
 
-  // Load AI model
-  console.error('[Server] Loading AI embedding model (this may take time on first run)...');
-  embedder = await pipeline('feature-extraction', config.embeddingModel);
+  // Create a transparent lazy-loading embedder closure
+  console.error('[Server] Initializing features...');
+  let cachedEmbedder = null;
+  const lazyEmbedder = async (...args) => {
+    if (!cachedEmbedder) {
+      console.error(`[Server] Loading AI embedding model: ${config.embeddingModel}...`);
+      cachedEmbedder = await pipeline('feature-extraction', config.embeddingModel);
+      if (config.verbose) {
+        logMemory('[Server] Memory (after model load)');
+      }
+    }
+    return cachedEmbedder(...args);
+  };
+  embedder = lazyEmbedder;
+
+  // In verbose mode, we trigger an early load to provide immediate resource feedback
   if (config.verbose) {
-    logMemory('[Server] Memory (after model load)');
+    embedder('').catch((err) => {
+      // Ignore "text may not be null" errors as we are just pre-warming
+      if (!err.message.includes('text may not be null')) {
+        console.error(`[Server] Warning: Early model load failed: ${err.message}`);
+      }
+    });
   }
 
   // Initialize cache

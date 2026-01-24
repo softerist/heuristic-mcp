@@ -2,6 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@xenova/transformers', () => ({
   pipeline: vi.fn(),
+  env: {
+    backends: {
+      onnx: {
+        wasm: { numThreads: null },
+        numThreads: null,
+      },
+    },
+  },
 }));
 vi.mock('worker_threads', () => ({
   parentPort: {

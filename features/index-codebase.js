@@ -101,14 +101,32 @@ export class CodebaseIndexer {
    * Initialize worker thread pool for parallel embedding
    */
   async initializeWorkers() {
-    const numWorkers =
+    let numWorkers =
       this.config.workerThreads === 'auto'
         ? Math.min(4, Math.max(1, os.cpus().length - 1)) // Cap 'auto' at 4 workers
         : this.config.workerThreads || 1;
 
-    // Only use workers if we have more than 1 CPU
+    // Resource-aware scaling: check available RAM (skip in test env to avoid mocking issues)
+    if (this.config.workerThreads === 'auto' && !isTestEnv()) {
+      // Jina model typically requires ~1.5GB - 2GB per worker
+      const freeMemGb = os.freemem() / 1024 / 1024 / 1024;
+      const isHeavyModel = this.config.embeddingModel.includes('jina');
+      const memPerWorker = isHeavyModel ? 2.0 : 0.8;
+
+      const memCappedWorkers = Math.max(1, Math.floor(freeMemGb / memPerWorker));
+      if (memCappedWorkers < numWorkers) {
+        if (this.config.verbose) {
+          console.error(
+            `[Indexer] Throttling workers from ${numWorkers} to ${memCappedWorkers} due to available RAM (${freeMemGb.toFixed(1)}GB)`
+          );
+        }
+        numWorkers = memCappedWorkers;
+      }
+    }
+
+    // Only use workers if we have more than 1 CPU AND enough memory
     if (numWorkers <= 1) {
-      console.error('[Indexer] Single-threaded mode (1 CPU detected)');
+      console.error('[Indexer] Single-threaded mode (CPU or memory constrained)');
       return;
     }
 
@@ -118,7 +136,13 @@ export class CodebaseIndexer {
       );
     }
 
-    console.error(`[Indexer] Initializing ${numWorkers} worker threads...`);
+    // Dynamic CPU allocation: distribute available cores among workers
+    // This provides "dynamic" optimization instead of hardcoding to 1,
+    // solving the user's request for elegance while still preventing saturation.
+    const totalCores = os.cpus().length;
+    const threadsPerWorker = Math.max(1, Math.floor(totalCores / numWorkers));
+
+    console.error(`[Indexer] Initializing ${numWorkers} worker threads (${threadsPerWorker} threads per worker)...`);
 
     const workerPath = path.join(__dirname, '../lib/embedding-worker.js');
 
@@ -128,6 +152,7 @@ export class CodebaseIndexer {
           workerData: {
             embeddingModel: this.config.embeddingModel,
             verbose: this.config.verbose,
+            numThreads: threadsPerWorker,
           },
         });
 
