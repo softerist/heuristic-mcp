@@ -1,0 +1,678 @@
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+
+let mockFiles = [];
+let cpuCount = 2;
+let workerMessageType = 'ready';
+const fsMock = {};
+const smartChunkMock = vi.fn();
+const hashContentMock = vi.fn();
+
+vi.mock('fdir', () => ({
+  fdir: class {
+    withFullPaths() {
+      return this;
+    }
+    exclude() {
+      return this;
+    }
+    filter(fn) {
+      this.filterFn = fn;
+      return this;
+    }
+    crawl() {
+      return this;
+    }
+    withPromise() {
+      const filtered = this.filterFn ? mockFiles.filter(this.filterFn) : mockFiles;
+      return Promise.resolve(filtered);
+    }
+  },
+}));
+vi.mock('os', () => ({
+  default: { cpus: () => new Array(cpuCount).fill({}) },
+  cpus: () => new Array(cpuCount).fill({}),
+}));
+class MockWorker {
+  once(event, handler) {
+    if (event === 'message') {
+      setImmediate(() => handler({ type: workerMessageType, error: 'worker fail' }));
+    }
+  }
+  on() {}
+  off() {}
+  postMessage() {}
+  terminate() {
+    return Promise.resolve();
+  }
+}
+vi.mock('worker_threads', () => ({
+  Worker: MockWorker,
+}));
+vi.mock('fs/promises', () => ({
+  default: fsMock,
+  ...fsMock,
+}));
+vi.mock('../lib/utils.js', () => ({
+  smartChunk: (...args) => smartChunkMock(...args),
+  hashContent: (...args) => hashContentMock(...args),
+}));
+vi.mock('../lib/call-graph.js', () => ({
+  extractCallData: vi.fn().mockReturnValue({ definitions: [], calls: [] }),
+}));
+
+const createCache = () => ({
+  vectorStore: [],
+  fileHashes: new Map(),
+  fileCallData: new Map(),
+  getFileHash: vi.fn(),
+  setFileHash: vi.fn(),
+  deleteFileHash: vi.fn(),
+  removeFileFromStore: vi.fn(),
+  addToStore: vi.fn(),
+  setVectorStore: vi.fn(),
+  getVectorStore: vi.fn().mockReturnValue([]),
+  pruneCallGraphData: vi.fn().mockReturnValue(0),
+  clearCallGraphData: vi.fn(),
+  save: vi.fn().mockResolvedValue(undefined),
+  rebuildCallGraph: vi.fn(),
+  ensureAnnIndex: vi.fn().mockResolvedValue(null),
+});
+
+describe('index-codebase branch coverage focused', () => {
+  let consoleError;
+
+  beforeEach(() => {
+    vi.resetModules();
+    mockFiles = [];
+    cpuCount = 2;
+    workerMessageType = 'ready';
+    fsMock.stat = vi.fn();
+    fsMock.readFile = vi.fn();
+    fsMock.mkdir = vi.fn();
+    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleError.mockRestore();
+  });
+
+  it('handles auto worker init failures', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      workerThreads: 'auto',
+      verbose: true,
+      embeddingModel: 'test-model',
+      excludePatterns: [],
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    cpuCount = 4;
+    workerMessageType = 'error';
+    await indexer.initializeWorkers();
+
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining('Worker initialization failed')
+    );
+  });
+
+  it('rejects worker ready promise on error message', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      workerThreads: 2,
+      verbose: true,
+      embeddingModel: 'test-model',
+      excludePatterns: [],
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    workerMessageType = 'error';
+    const terminateSpy = vi.spyOn(indexer, 'terminateWorkers');
+
+    await indexer.initializeWorkers();
+
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining('Worker initialization failed')
+    );
+    expect(terminateSpy).toHaveBeenCalled();
+  });
+
+  it('times out worker init on unexpected message type', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      workerThreads: 2,
+      verbose: true,
+      embeddingModel: 'test-model',
+      excludePatterns: [],
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    workerMessageType = 'other';
+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn) => {
+      fn();
+      return 0;
+    });
+
+    try {
+      await indexer.initializeWorkers();
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining('Worker initialization failed')
+    );
+  });
+
+  it('matches exclude patterns with and without path separators', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      excludePatterns: ['skip.js', '**/dir/**'],
+      fileExtensions: ['js'],
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    expect(indexer.isExcluded('/root/skip.js')).toBe(true);
+    expect(indexer.isExcluded('/root/dir/file.js')).toBe(true);
+  });
+
+  it('covers worker error message handling and retry', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const indexer = new CodebaseIndexer(vi.fn(), cache, { workerThreads: 2 });
+
+    const makeWorker = (mode) => {
+      let handler;
+      return {
+        on: (event, fn) => {
+          if (event === 'message') handler = fn;
+        },
+        once: () => {},
+        off: () => {},
+        postMessage: (msg) => {
+          if (mode === 'results') {
+            handler({ type: 'results', results: [{ success: true }], batchId: msg.batchId });
+          } else {
+            handler({ type: 'error', error: 'boom', batchId: msg.batchId });
+          }
+        },
+      };
+    };
+    indexer.workers = [makeWorker('results'), makeWorker('error')];
+
+    const fallbackSpy = vi
+      .spyOn(indexer, 'processChunksSingleThreaded')
+      .mockResolvedValue([{ success: true }]);
+
+    const results = await indexer.processChunksWithWorkers([
+      { file: 'a.js', text: 'x' },
+      { file: 'b.js', text: 'y' },
+    ]);
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(fallbackSpy).toHaveBeenCalled();
+  });
+
+  it('retries failed worker batches when results are empty', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const indexer = new CodebaseIndexer(vi.fn(), cache, { workerThreads: 1 });
+
+    let handler;
+    const worker = {
+      on: (event, fn) => {
+        if (event === 'message') handler = fn;
+      },
+      once: () => {},
+      off: () => {},
+      postMessage: (msg) => {
+        handler({ type: 'results', results: [], batchId: msg.batchId });
+      },
+    };
+    indexer.workers = [worker];
+
+    const fallbackSpy = vi
+      .spyOn(indexer, 'processChunksSingleThreaded')
+      .mockResolvedValue([{ success: true }]);
+
+    await indexer.processChunksWithWorkers([{ file: 'a.js', text: 'x' }]);
+
+    expect(fallbackSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ file: 'a.js' })])
+    );
+  });
+
+  it('skips retry when worker chunks are emptied after processing', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const indexer = new CodebaseIndexer(vi.fn(), cache, { workerThreads: 1 });
+
+    const originalSlice = Array.prototype.slice;
+    let capturedChunks;
+    Array.prototype.slice = function (...args) {
+      const result = originalSlice.apply(this, args);
+      if (!capturedChunks) capturedChunks = result;
+      return result;
+    };
+
+    try {
+      let handler;
+      const worker = {
+        on: (event, fn) => {
+          if (event === 'message') handler = fn;
+        },
+        once: () => {},
+        off: () => {},
+        postMessage: (msg) => {
+          if (capturedChunks) capturedChunks.length = 0;
+          handler({ type: 'results', results: [], batchId: msg.batchId });
+        },
+      };
+      indexer.workers = [worker];
+
+      await indexer.processChunksWithWorkers([{ file: 'a.js', text: 'x' }]);
+    } finally {
+      Array.prototype.slice = originalSlice;
+    }
+  });
+
+  it('handles mismatched batch IDs and times out', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const indexer = new CodebaseIndexer(vi.fn(), cache, { workerThreads: 2 });
+
+    let handler;
+    const worker = {
+      on: (event, fn) => {
+        if (event === 'message') handler = fn;
+      },
+      once: () => {},
+      off: () => {},
+      postMessage: () => {
+        handler({ type: 'results', results: [{ success: true }], batchId: 'wrong' });
+      },
+    };
+    indexer.workers = [worker];
+
+    const fallbackSpy = vi
+      .spyOn(indexer, 'processChunksSingleThreaded')
+      .mockResolvedValue([{ success: true }]);
+
+    vi.useFakeTimers();
+    const promise = indexer.processChunksWithWorkers([{ file: 'a.js', text: 'x' }]);
+    vi.advanceTimersByTime(300001);
+    const results = await promise;
+    vi.useRealTimers();
+
+    expect(fallbackSpy).toHaveBeenCalled();
+    expect(results).toHaveLength(1);
+  });
+
+  it('skips hash update logging when verbose is false for single-file failures', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const embedder = vi.fn().mockRejectedValue(new Error('embed fail'));
+    const config = {
+      excludePatterns: [],
+      verbose: false,
+      maxFileSize: 10,
+      fileExtensions: ['js'],
+    };
+    const indexer = new CodebaseIndexer(embedder, cache, config);
+
+    fsMock.stat.mockResolvedValueOnce({ isDirectory: () => false, size: 1 });
+    fsMock.readFile.mockResolvedValueOnce('content');
+    hashContentMock.mockReturnValueOnce('newhash');
+    cache.getFileHash.mockReturnValueOnce('oldhash');
+    smartChunkMock.mockReturnValueOnce([{ text: 'a', startLine: 1, endLine: 1 }]);
+
+    await indexer.indexFile('/root/fail-quiet.js');
+
+    const hasSkipLog = consoleError.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('Skipped hash update')
+    );
+    expect(hasSkipLog).toBe(false);
+  });
+
+  it('logs indexFile hash skip when embedding fails in verbose mode', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const embedder = vi.fn().mockRejectedValue(new Error('embed fail'));
+    const config = {
+      excludePatterns: [],
+      verbose: true,
+      maxFileSize: 10,
+      fileExtensions: ['js'],
+    };
+    const indexer = new CodebaseIndexer(embedder, cache, config);
+
+    fsMock.stat.mockResolvedValueOnce({ isDirectory: () => false, size: 1 });
+    fsMock.readFile.mockResolvedValueOnce('content');
+    hashContentMock.mockReturnValueOnce('newhash');
+    cache.getFileHash.mockReturnValueOnce('oldhash');
+    smartChunkMock.mockReturnValueOnce([{ text: 'a', startLine: 1, endLine: 1 }]);
+
+    await indexer.indexFile('/root/fail.js');
+
+    const hasSkipLog = consoleError.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('Skipped hash update')
+    );
+    expect(hasSkipLog).toBe(true);
+  });
+
+  it('logs indexFile hash skip on partial embedding failures', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const embedder = vi
+      .fn()
+      .mockResolvedValueOnce({ data: Float32Array.from([1]) })
+      .mockRejectedValueOnce(new Error('embed fail'));
+    const config = {
+      excludePatterns: [],
+      verbose: true,
+      maxFileSize: 10,
+      fileExtensions: ['js'],
+    };
+    const indexer = new CodebaseIndexer(embedder, cache, config);
+
+    fsMock.stat.mockResolvedValueOnce({ isDirectory: () => false, size: 1 });
+    fsMock.readFile.mockResolvedValueOnce('content');
+    hashContentMock.mockReturnValueOnce('newhash');
+    cache.getFileHash.mockReturnValueOnce('oldhash');
+    smartChunkMock.mockReturnValueOnce([
+      { text: 'a', startLine: 1, endLine: 1 },
+      { text: 'b', startLine: 2, endLine: 2 },
+    ]);
+
+    await indexer.indexFile('/root/partial.js');
+
+    const hasSkipLog = consoleError.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('Skipped hash update')
+    );
+    expect(hasSkipLog).toBe(true);
+  });
+
+  it('covers batch hash skip and ANN background error logging', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    cache.ensureAnnIndex = vi.fn().mockRejectedValue(new Error('ann fail'));
+    cache.getVectorStore.mockReturnValue([]);
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1000,
+      callGraphEnabled: false,
+      verbose: true,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    mockFiles = ['/root/a.js'];
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/root/a.js', content: 'code', hash: 'h' }]);
+    smartChunkMock.mockReturnValueOnce([
+      { text: 'a', startLine: 1, endLine: 1 },
+      { text: 'b', startLine: 2, endLine: 2 },
+    ]);
+    const processSpy = vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue([
+      { file: '/root/a.js', startLine: 1, endLine: 1, content: 'a', vector: [1], success: true },
+      { file: '/root/a.js', startLine: 2, endLine: 2, content: 'b', vector: [2], success: false },
+    ]);
+
+    await indexer.indexAll(false);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const hasBatchSkip = consoleError.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('Skipped hash update for a.js')
+    );
+    const hasAnnError = consoleError.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('Background ANN build failed')
+    );
+    expect(hasBatchSkip).toBe(true);
+    expect(hasAnnError).toBe(true);
+    expect(processSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ startLine: 1 }),
+        expect.objectContaining({ startLine: 2 }),
+      ])
+    );
+  });
+
+  it('skips chunk stats increment when stats are missing', async () => {
+    const OriginalMap = global.Map;
+    let firstGet = true;
+    class TestMap extends OriginalMap {
+      get(key) {
+        if (firstGet) {
+          firstGet = false;
+          return undefined;
+        }
+        return super.get(key);
+      }
+    }
+
+    global.Map = TestMap;
+    try {
+      const { CodebaseIndexer } = await import('../features/index-codebase.js');
+      const cache = createCache();
+      const config = {
+        searchDirectory: '/root',
+        excludePatterns: [],
+        fileExtensions: ['js'],
+        fileNames: [],
+        batchSize: 1,
+        maxFileSize: 1000,
+        callGraphEnabled: false,
+        verbose: false,
+      };
+      const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+      cpuCount = 1;
+      mockFiles = ['/root/a.js'];
+      indexer.preFilterFiles = vi
+        .fn()
+        .mockResolvedValue([{ file: '/root/a.js', content: 'code', hash: 'h' }]);
+      smartChunkMock.mockReturnValueOnce([{ text: 'a', startLine: 1, endLine: 1 }]);
+      vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue([
+        { file: '/root/a.js', startLine: 1, endLine: 1, content: 'a', vector: [1], success: true },
+      ]);
+
+      await indexer.indexAll(false);
+    } finally {
+      global.Map = OriginalMap;
+    }
+  });
+
+  it('increments chunk stats and logs batch hash skip in verbose mode', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1000,
+      callGraphEnabled: false,
+      verbose: true,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    cpuCount = 1;
+    mockFiles = ['/root/a.js'];
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/root/a.js', content: 'code', hash: 'h' }]);
+    smartChunkMock.mockReturnValueOnce([
+      { text: 'a', startLine: 1, endLine: 1 },
+      { text: 'b', startLine: 2, endLine: 2 },
+    ]);
+    const processSpy = vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue([
+      { file: '/root/a.js', startLine: 1, endLine: 1, content: 'a', vector: [1], success: true },
+      { file: '/root/a.js', startLine: 2, endLine: 2, content: 'b', vector: [2], success: false },
+    ]);
+
+    await indexer.indexAll(false);
+
+    const hasBatchSkip = consoleError.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('Skipped hash update for a.js')
+    );
+    expect(hasBatchSkip).toBe(true);
+    expect(processSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ startLine: 1 }),
+        expect.objectContaining({ startLine: 2 }),
+      ])
+    );
+  });
+
+  it('skips batch hash update logging when verbose is false', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1000,
+      callGraphEnabled: false,
+      verbose: false,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    cpuCount = 1;
+    mockFiles = ['/root/a.js'];
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/root/a.js', content: 'code', hash: 'h' }]);
+    smartChunkMock.mockReturnValueOnce([
+      { text: 'a', startLine: 1, endLine: 1 },
+      { text: 'b', startLine: 2, endLine: 2 },
+    ]);
+    vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue([
+      { file: '/root/a.js', startLine: 1, endLine: 1, content: 'a', vector: [1], success: true },
+      { file: '/root/a.js', startLine: 2, endLine: 2, content: 'b', vector: [2], success: false },
+    ]);
+
+    await indexer.indexAll(false);
+
+    const hasBatchSkip = consoleError.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('Skipped hash update for a.js')
+    );
+    expect(hasBatchSkip).toBe(false);
+  });
+
+  it('logs ANN build failure in verbose mode', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    cache.ensureAnnIndex = vi.fn().mockRejectedValue(new Error('ann fail'));
+    cache.getVectorStore.mockReturnValue([]);
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1000,
+      callGraphEnabled: false,
+      verbose: true,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    cpuCount = 1;
+    mockFiles = ['/root/a.js'];
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/root/a.js', content: 'code', hash: 'h' }]);
+    smartChunkMock.mockReturnValueOnce([{ text: 'a', startLine: 1, endLine: 1 }]);
+    vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue([
+      { file: '/root/a.js', startLine: 1, endLine: 1, content: 'a', vector: [1], success: true },
+    ]);
+
+    await indexer.indexAll(false);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const hasAnnError = consoleError.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('Background ANN build failed')
+    );
+    expect(hasAnnError).toBe(true);
+  });
+
+  it('skips ANN build error logging when verbose is false', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    cache.ensureAnnIndex = vi.fn().mockRejectedValue(new Error('ann fail'));
+    cache.getVectorStore.mockReturnValue([]);
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1000,
+      callGraphEnabled: false,
+      verbose: false,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    cpuCount = 1;
+    mockFiles = ['/root/a.js'];
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/root/a.js', content: 'code', hash: 'h' }]);
+    smartChunkMock.mockReturnValueOnce([{ text: 'a', startLine: 1, endLine: 1 }]);
+    vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue([
+      { file: '/root/a.js', startLine: 1, endLine: 1, content: 'a', vector: [1], success: true },
+    ]);
+
+    await indexer.indexAll(false);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const hasAnnError = consoleError.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('Background ANN build failed')
+    );
+    expect(hasAnnError).toBe(false);
+  });
+
+  it('uses adaptive batch sizes and increments chunk stats', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 5,
+      maxFileSize: 1000,
+      callGraphEnabled: false,
+      verbose: true,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    mockFiles = new Array(10001).fill(0).map((_, i) => `/root/b${i}.js`);
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/root/b0.js', content: 'code', hash: 'h' }]);
+    smartChunkMock.mockReturnValueOnce([{ text: 'x', startLine: 1, endLine: 1 }]);
+    const processSpy = vi
+      .spyOn(indexer, 'processChunksSingleThreaded')
+      .mockResolvedValue([
+        { file: '/root/b0.js', startLine: 1, endLine: 1, content: 'x', vector: [1], success: true },
+      ]);
+
+    await indexer.indexAll(false);
+
+    const hasBatchSize = consoleError.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('batch size: 500')
+    );
+    expect(hasBatchSize).toBe(true);
+    expect(processSpy.mock.calls[0][0]).toHaveLength(1);
+  });
+});

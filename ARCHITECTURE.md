@@ -8,24 +8,33 @@ This document outlines the modular architecture of Heuristic MCP.
 heuristic-mcp/
 ├── index.js                    # Main entry point, MCP server setup
 ├── package.json                # Package configuration
-├── config.json                 # User configuration
+├── config.json                 # Sample configuration
 ├── LICENSE                     # MIT License
 ├── README.md                   # Project documentation
-├── EXAMPLES.md                 # Usage examples
+├── ARCHITECTURE.md             # Architecture notes
+├── CONTRIBUTING.md             # Contribution guide
 ├── .gitignore                  # Git ignore rules
 │
 ├── lib/                        # Core libraries
-│   ├── config.js              # Configuration loader
-│   ├── cache.js               # Embeddings cache management
-│   └── utils.js               # Shared utilities (chunking, similarity)
+│   ├── config.js              # Configuration loader and env overrides
+│   ├── cache.js               # Embeddings cache management + ANN index
+│   ├── utils.js               # Shared utilities (chunking, similarity)
+│   ├── tokenizer.js           # Token estimation and limits
+│   └── call-graph.js          # Symbol extraction and call graph helpers
 │
 ├── features/                   # Pluggable features
-│   ├── hybrid-search.js       # Semantic search feature
+│   ├── hybrid-search.js       # Semantic + exact match search
 │   ├── index-codebase.js      # Code indexing feature
-│   └── clear-cache.js         # Cache management feature
+│   ├── clear-cache.js         # Cache management feature
+│   ├── find-similar-code.js   # Similarity search by code snippet
+│   ├── ann-config.js          # ANN configuration tool
+│   ├── lifecycle.js           # CLI lifecycle helpers
+│   └── register.js            # IDE registration logic
 │
 └── scripts/                    # Utility scripts
-    └── clear-cache.js         # Cache management utility
+    ├── clear-cache.js         # Cache management utility
+    ├── download-model.js      # Optional model pre-download
+    └── postinstall.js         # Auto-register on install
 ```
 
 ## Module Responsibilities
@@ -39,9 +48,10 @@ heuristic-mcp/
 
 ### lib/config.js
 
-- Loads and validates configuration from config.json
+- Loads and validates configuration from `config.json`
 - Provides default configuration values
-- Resolves file paths
+- Resolves file paths and cache location
+- Applies `SMART_CODING_*` environment variable overrides
 
 ### lib/cache.js
 
@@ -53,111 +63,53 @@ heuristic-mcp/
 
 ### lib/utils.js
 
-- **cosineSimilarity()** - Vector similarity calculation
+- **dotSimilarity()** - Vector similarity calculation
 - **hashContent()** - MD5 hashing for change detection
 - **smartChunk()** - Language-aware code chunking
+
+### lib/call-graph.js
+
+- Extracts definitions and calls
+- Builds a lightweight call graph for proximity boosting
 
 ### features/hybrid-search.js
 
 - **HybridSearch** class
 - Combines semantic and exact matching
-- Weighted scoring algorithm
-- Result formatting with relevance scores
-- MCP tool: `semantic_search`
+- Recency and call-graph proximity boosting
+- MCP tool: `a_semantic_search`
 
 ### features/index-codebase.js
 
 - **CodebaseIndexer** class
 - File discovery via glob patterns
 - Incremental indexing
-- File watcher for real-time updates
-- MCP tool: `index_codebase`
+- Optional file watcher for real-time updates
+- MCP tool: `b_index_codebase`
 
-## Adding New Features
+### features/clear-cache.js
 
-To extend with a new feature:
+- **CacheClearer** class
+- Clears vector store and cache directory
+- MCP tool: `c_clear_cache`
 
-### 1. Create Feature Module
+### features/find-similar-code.js
 
-Create `features/my-feature.js`:
+- **FindSimilarCode** class
+- Finds semantically similar code snippets
+- MCP tool: `d_find_similar_code`
 
-```javascript
-export class MyFeature {
-  constructor(embedder, cache, config) {
-    this.embedder = embedder;
-    this.cache = cache;
-    this.config = config;
-  }
+### features/ann-config.js
 
-  async execute(params) {
-    // Implementation
-    return {
-      /* results */
-    };
-  }
-}
-
-export function getToolDefinition(config) {
-  return {
-    name: "my_tool",
-    description: "What this tool does",
-    inputSchema: {
-      type: "object",
-      properties: {
-        param1: { type: "string", description: "..." },
-      },
-      required: ["param1"],
-    },
-  };
-}
-
-export async function handleToolCall(request, instance) {
-  const params = request.params.arguments;
-  const result = await instance.execute(params);
-
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(result, null, 2),
-      },
-    ],
-  };
-}
-```
-
-### 2. Register in index.js
-
-```javascript
-import * as MyFeature from "./features/my-feature.js";
-
-// In initialize():
-const myFeature = new MyFeature.MyFeature(embedder, cache, config);
-
-// Add to features array:
-const features = [
-  // ... existing features
-  {
-    module: MyFeature,
-    instance: myFeature,
-    handler: MyFeature.handleToolCall,
-  },
-];
-```
-
-### 3. Done!
-
-The feature will automatically:
-
-- Be listed in MCP tool discovery
-- Handle incoming tool requests
-- Have access to embeddings and cache
+- **AnnConfigTool** class
+- Runtime ANN tuning and stats
+- MCP tool: `d_ann_config`
 
 ## Configuration Flow
 
 1. User creates/edits `config.json`
 2. `lib/config.js` loads configuration on startup
-3. Configuration merged with defaults
+3. Configuration merged with defaults and env overrides
 4. Passed to all features via constructor
 
 ## Data Flow
@@ -167,7 +119,7 @@ The feature will automatically:
 ```
 User code files
     ↓
-glob pattern matching
+exclude patterns and smart indexing
     ↓
 smartChunk() - split into chunks
     ↓
@@ -187,22 +139,22 @@ embedder - query to vector
     ↓
 ANN candidate search (optional)
     ↓
-cosineSimilarity() - score candidates
+dotSimilarity() - score candidates
     ↓
-exact match boost - adjust scores
+exact match + recency + call-graph boosts
     ↓
 sort and filter - top N results
     ↓
-format output - markdown with syntax highlighting
+format output - markdown with code blocks
 ```
 
 ## Performance Considerations
 
 ### Caching Strategy
 
-- **First Run**: Download model (~90MB), index all files, save cache
+- **First Run**: Download model (if not cached), index all files, save cache
 - **Subsequent Runs**: Load cache from disk, only index changed files
-- **File Changes**: Incremental updates via file watcher
+- **File Changes**: Incremental updates via file watcher (if enabled)
 
 ### Memory Usage
 
@@ -218,75 +170,3 @@ Approximate memory usage:
 - Reduce `chunkSize` for large codebases
 - Disable `watchFiles` if not needed
 - Use `excludePatterns` aggressively
-- Limit `fileExtensions` to relevant types
-
-## Future Feature Ideas
-
-Potential features to add following this architecture:
-
-1. **Code Complexity Analysis**
-
-   - Cyclomatic complexity scoring
-   - Technical debt detection
-
-2. **Pattern Detection**
-
-   - Anti-pattern identification
-   - Best practice recommendations
-
-3. **Documentation Generation**
-
-   - Auto-generate function docs
-   - README generation from code
-
-4. **Refactoring Suggestions**
-
-   - Code smell detection
-   - Automated fix suggestions
-
-5. **Test Coverage Analysis**
-
-   - Identify untested code paths
-   - Generate test templates
-
-6. **Dependency Analysis**
-   - Import/export graph
-   - Dead code detection
-
-Each feature would follow the same pattern:
-
-- Class in `features/` directory
-- Access to embedder, cache, config
-- MCP tool definition and handler
-- Registration in feature array
-
-## Testing Strategy
-
-Recommended testing approach:
-
-1. **Unit Tests**: lib/ modules
-
-   - Test utilities in isolation
-   - Mock dependencies
-
-2. **Integration Tests**: features/
-
-   - Test with sample codebases
-   - Verify MCP tool contracts
-
-3. **E2E Tests**: Full workflow
-   - Index → Search → Results
-   - File watching behavior
-   - Cache persistence
-
-## Error Handling
-
-Each module follows defensive error handling:
-
-- Config errors → use defaults
-- File read errors → log and skip
-- Embedding errors → retry or skip chunk
-- Cache errors → log but continue
-- Unknown tools → return helpful error message
-
-All errors logged to stderr for MCP protocol compatibility.

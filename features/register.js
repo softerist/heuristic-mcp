@@ -5,7 +5,6 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 
-
 // Detect which IDE is running the install
 function detectCurrentIDE() {
   // Check environment variables to determine which IDE is running
@@ -18,16 +17,15 @@ function detectCurrentIDE() {
 
   // Fallback: Check for Antigravity directory presence
   try {
-     const agPath = path.join(os.homedir(), '.gemini', 'antigravity');
-     if (existsSync(agPath) || (statSync && statSync(agPath).isDirectory())) {
-        return 'Antigravity';
-     }
-  } catch (e) {}
+    const agPath = path.join(os.homedir(), '.gemini', 'antigravity');
+    if (existsSync(agPath) || (statSync && statSync(agPath).isDirectory())) {
+      return 'Antigravity';
+    }
+  } catch (_e) { /* ignore */ }
 
   // Claude Desktop doesn't have a known env var, so we rely on existing config detection
   return null;
 }
-
 
 // Known config paths for different IDEs
 function getConfigPaths() {
@@ -39,19 +37,25 @@ function getConfigPaths() {
   // Antigravity - dedicated mcp_config.json
   allPaths.push({
     name: 'Antigravity',
-    path: path.join(home, '.gemini', 'antigravity', 'mcp_config.json')
+    path: path.join(home, '.gemini', 'antigravity', 'mcp_config.json'),
   });
 
   // Claude Desktop - dedicated config file
   if (platform === 'darwin') {
     allPaths.push({
       name: 'Claude Desktop',
-      path: path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
+      path: path.join(
+        home,
+        'Library',
+        'Application Support',
+        'Claude',
+        'claude_desktop_config.json'
+      ),
     });
   } else if (platform === 'win32') {
     allPaths.push({
       name: 'Claude Desktop',
-      path: path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json')
+      path: path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json'),
     });
   }
 
@@ -59,17 +63,17 @@ function getConfigPaths() {
   if (platform === 'darwin') {
     allPaths.push({
       name: 'Cursor',
-      path: path.join(home, 'Library', 'Application Support', 'Cursor', 'User', 'settings.json')
+      path: path.join(home, 'Library', 'Application Support', 'Cursor', 'User', 'settings.json'),
     });
   } else if (platform === 'win32') {
     allPaths.push({
       name: 'Cursor',
-      path: path.join(process.env.APPDATA || '', 'Cursor', 'User', 'settings.json')
+      path: path.join(process.env.APPDATA || '', 'Cursor', 'User', 'settings.json'),
     });
   } else {
     allPaths.push({
       name: 'Cursor',
-      path: path.join(home, '.config', 'Cursor', 'User', 'settings.json')
+      path: path.join(home, '.config', 'Cursor', 'User', 'settings.json'),
     });
   }
 
@@ -79,12 +83,10 @@ function getConfigPaths() {
 
   if (currentIDE) {
     // IDE detected - return only that IDE with permission to create
-    return allPaths
-      .filter(p => p.name === currentIDE)
-      .map(p => ({ ...p, canCreate: true }));
+    return allPaths.filter((p) => p.name === currentIDE).map((p) => ({ ...p, canCreate: true }));
   } else {
     // No IDE detected - return all but don't create new configs
-    return allPaths.map(p => ({ ...p, canCreate: false }));
+    return allPaths.map((p) => ({ ...p, canCreate: false }));
   }
 }
 
@@ -96,7 +98,7 @@ function forceLog(message) {
     } else {
       console.error(message);
     }
-  } catch (e) {
+  } catch (_e) {
     console.error(message);
   }
 }
@@ -109,15 +111,14 @@ export async function register(filter = null) {
   // For Antigravity, we MUST use absolute path because ${workspaceFolder} variable expansion
   // is not supported in the current version, and '.' uses the wrong CWD.
   // Use INIT_CWD (where npm install was run) if available, otherwise cwd.
-  const workspacePath = currentIDE === 'Antigravity' ? (process.env.INIT_CWD || process.cwd()) : '.';
+  const workspacePath = currentIDE === 'Antigravity' ? process.env.INIT_CWD || process.cwd() : '.';
 
   const serverConfig = {
     command: binaryPath,
-    args: [scriptPath, "--workspace", workspacePath],
+    args: [scriptPath, '--workspace', workspacePath],
     disabled: false,
-    autoRegistered: true // Marker to know we did this
+    autoRegistered: true, // Marker to know we did this
   };
-
 
   const configPaths = getConfigPaths();
   let registeredCount = 0;
@@ -145,7 +146,9 @@ export async function register(filter = null) {
             await fs.mkdir(path.dirname(configPath), { recursive: true });
             forceLog(`[Auto-Register] Creating ${name} config at ${configPath}`);
           } catch (mkdirErr) {
-            forceLog(`[Auto-Register] Skipped ${name}: Cannot create config directory: ${mkdirErr.message}`);
+            forceLog(
+              `[Auto-Register] Skipped ${name}: Cannot create config directory: ${mkdirErr.message}`
+            );
             continue;
           }
         } else {
@@ -159,16 +162,17 @@ export async function register(filter = null) {
         const content = await fs.readFile(configPath, 'utf-8');
         try {
           if (!content || content.trim() === '') {
-             // Empty file - treat as new
-             config = {};
+            // Empty file - treat as new
+            config = {};
           } else {
-             config = JSON.parse(content);
+            config = JSON.parse(content);
           }
         } catch (e) {
-          forceLog(`[Auto-Register] Warning: Corrupt/empty ${name} config, resetting to default. Error: ${e.message}`);
+          forceLog(
+            `[Auto-Register] Warning: Corrupt/empty ${name} config, resetting to default. Error: ${e.message}`
+          );
           config = {};
         }
-
       }
 
       // Init mcpServers if missing
@@ -184,7 +188,6 @@ export async function register(filter = null) {
 
       forceLog(`\x1b[32m[Auto-Register] ✅ Successfully registered with ${name}\x1b[0m`);
       registeredCount++;
-
     } catch (err) {
       forceLog(`[Auto-Register] Failed to register with ${name}: ${err.message}`);
     }
@@ -192,7 +195,9 @@ export async function register(filter = null) {
 
   if (registeredCount === 0) {
     forceLog(`[Auto-Register] No compatible IDE configurations found to update.`);
-    forceLog(`[Auto-Register] Manual Config:\n${JSON.stringify({ mcpServers: { "heuristic-mcp": serverConfig } }, null, 2)}`);
+    forceLog(
+      `[Auto-Register] Manual Config:\n${JSON.stringify({ mcpServers: { 'heuristic-mcp': serverConfig } }, null, 2)}`
+    );
   } else {
     // Friendly Banner (Using forceLog to bypass npm stdout suppression)
     forceLog('\n\x1b[36m' + '='.repeat(60));
@@ -201,11 +206,15 @@ export async function register(filter = null) {
 
     // Show important paths
     const home = os.homedir();
-    const cacheRoot = process.platform === 'win32'
-        ? path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'heuristic-mcp')
+    const cacheRoot =
+      process.platform === 'win32'
+        ? path.join(
+            process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'),
+            'heuristic-mcp'
+          )
         : process.platform === 'darwin'
-        ? path.join(home, 'Library', 'Caches', 'heuristic-mcp')
-        : path.join(process.env.XDG_CACHE_HOME || path.join(home, '.cache'), 'heuristic-mcp');
+          ? path.join(home, 'Library', 'Caches', 'heuristic-mcp')
+          : path.join(process.env.XDG_CACHE_HOME || path.join(home, '.cache'), 'heuristic-mcp');
 
     forceLog(`
 \x1b[33mACTION REQUIRED:\x1b[0m
@@ -218,7 +227,7 @@ export async function register(filter = null) {
 - \x1b[1mUsage:\x1b[0m You can work while it indexes (it catches up!).
 
 \x1b[90mPATHS:\x1b[0m
-- \x1b[1mMCP Config:\x1b[0m ${configPaths.map(p => p.path).join(', ')}
+- \x1b[1mMCP Config:\x1b[0m ${configPaths.map((p) => p.path).join(', ')}
 - \x1b[1mCache:\x1b[0m ${cacheRoot}
 - \x1b[1mCheck status:\x1b[0m heuristic-mcp --logs
 

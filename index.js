@@ -1,30 +1,31 @@
 #!/usr/bin/env node
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { stop, start, status } from "./features/lifecycle.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { pipeline } from "@xenova/transformers";
-import fs from "fs/promises";
-import path from "path";
+/* eslint-disable no-console */
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { stop, start, status } from './features/lifecycle.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { pipeline } from '@xenova/transformers';
+import fs from 'fs/promises';
+import path from 'path';
 
-import { createRequire } from "module";
+import { createRequire } from 'module';
 
 // Import package.json for version
 const require = createRequire(import.meta.url);
-const packageJson = require("./package.json");
+const packageJson = require('./package.json');
 
-import { loadConfig, getGlobalCacheDir } from "./lib/config.js";
+import { loadConfig, getGlobalCacheDir } from './lib/config.js';
 
-import { EmbeddingsCache } from "./lib/cache.js";
-import { CodebaseIndexer } from "./features/index-codebase.js";
-import { HybridSearch } from "./features/hybrid-search.js";
+import { EmbeddingsCache } from './lib/cache.js';
+import { CodebaseIndexer } from './features/index-codebase.js';
+import { HybridSearch } from './features/hybrid-search.js';
 
-import * as IndexCodebaseFeature from "./features/index-codebase.js";
-import * as HybridSearchFeature from "./features/hybrid-search.js";
-import * as ClearCacheFeature from "./features/clear-cache.js";
-import * as FindSimilarCodeFeature from "./features/find-similar-code.js";
-import * as AnnConfigFeature from "./features/ann-config.js";
-import { register } from "./features/register.js";
+import * as IndexCodebaseFeature from './features/index-codebase.js';
+import * as HybridSearchFeature from './features/hybrid-search.js';
+import * as ClearCacheFeature from './features/clear-cache.js';
+import * as FindSimilarCodeFeature from './features/find-similar-code.js';
+import * as AnnConfigFeature from './features/ann-config.js';
+import { register } from './features/register.js';
 
 // Log cache directory logic for debugging
 try {
@@ -32,8 +33,7 @@ try {
   const localCache = path.join(process.cwd(), '.heuristic-mcp');
   console.error(`[Server] Cache debug: Global=${globalCache}, Local=${localCache}`);
   console.error(`[Server] Process CWD: ${process.cwd()}`);
-} catch (e) {}
-
+} catch (_e) { /* ignore */ }
 
 // Parse workspace from command line arguments
 let args = process.argv.slice(2);
@@ -46,7 +46,7 @@ if (args.includes('--version') || args.includes('-v')) {
 const hadLogs = args.includes('--logs');
 if (hadLogs) {
   process.env.SMART_CODING_VERBOSE = 'true';
-  args = args.filter(arg => arg !== '--logs');
+  args = args.filter((arg) => arg !== '--logs');
   console.log('[Logs] Starting server with verbose console output (Ctrl+C to stop)...');
 }
 
@@ -65,20 +65,18 @@ if (args.includes('--status')) {
   process.exit(0);
 }
 
-
 // Check if --register flag is present
 if (args.includes('--register')) {
   // Extract optional filter (e.g. --register antigravity)
   const filterIndex = args.indexOf('--register');
-  const filter = args[filterIndex + 1] && !args[filterIndex + 1].startsWith('-')
-                 ? args[filterIndex + 1]
-                 : null;
+  const filter =
+    args[filterIndex + 1] && !args[filterIndex + 1].startsWith('-') ? args[filterIndex + 1] : null;
 
   await register(filter);
   process.exit(0);
 }
 
-const workspaceIndex = args.findIndex(arg => arg.startsWith('--workspace'));
+const workspaceIndex = args.findIndex((arg) => arg.startsWith('--workspace'));
 let workspaceDir = null;
 
 if (workspaceIndex !== -1) {
@@ -116,28 +114,28 @@ const features = [
   {
     module: HybridSearchFeature,
     instance: null,
-    handler: HybridSearchFeature.handleToolCall
+    handler: HybridSearchFeature.handleToolCall,
   },
   {
     module: IndexCodebaseFeature,
     instance: null,
-    handler: IndexCodebaseFeature.handleToolCall
+    handler: IndexCodebaseFeature.handleToolCall,
   },
   {
     module: ClearCacheFeature,
     instance: null,
-    handler: ClearCacheFeature.handleToolCall
+    handler: ClearCacheFeature.handleToolCall,
   },
   {
     module: FindSimilarCodeFeature,
     instance: null,
-    handler: FindSimilarCodeFeature.handleToolCall
+    handler: FindSimilarCodeFeature.handleToolCall,
   },
   {
     module: AnnConfigFeature,
     instance: null,
-    handler: AnnConfigFeature.handleToolCall
-  }
+    handler: AnnConfigFeature.handleToolCall,
+  },
 ];
 
 // Initialize application
@@ -154,8 +152,8 @@ async function initialize() {
   }
 
   // Load AI model
-  console.error("[Server] Loading AI embedding model (this may take time on first run)...");
-  embedder = await pipeline("feature-extraction", config.embeddingModel);
+  console.error('[Server] Loading AI embedding model (this may take time on first run)...');
+  embedder = await pipeline('feature-extraction', config.embeddingModel);
 
   // Initialize cache
   cache = new EmbeddingsCache(config);
@@ -180,27 +178,30 @@ async function initialize() {
   server.hybridSearch = hybridSearch;
 
   // Start indexing in background (non-blocking)
-  console.error("[Server] Starting background indexing...");
-  indexer.indexAll().then(() => {
-    // Only start file watcher if explicitly enabled in config
-    if (config.watchFiles) {
-      indexer.setupFileWatcher();
-    }
-  }).catch(err => {
-    console.error("[Server] Background indexing error:", err.message);
-  });
+  console.error('[Server] Starting background indexing...');
+  indexer
+    .indexAll()
+    .then(() => {
+      // Only start file watcher if explicitly enabled in config
+      if (config.watchFiles) {
+        indexer.setupFileWatcher();
+      }
+    })
+    .catch((err) => {
+      console.error('[Server] Background indexing error:', err.message);
+    });
 }
 
 // Setup MCP server
 const server = new Server(
   {
-    name: "heuristic-mcp",
-    version: packageJson.version
+    name: 'heuristic-mcp',
+    version: packageJson.version,
   },
   {
     capabilities: {
-      tools: {}
-    }
+      tools: {},
+    },
   }
 );
 
@@ -227,10 +228,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   return {
-    content: [{
-      type: "text",
-      text: `Unknown tool: ${request.params.name}`
-    }]
+    content: [
+      {
+        type: 'text',
+        text: `Unknown tool: ${request.params.name}`,
+      },
+    ],
   };
 });
 
@@ -241,71 +244,71 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  console.error("[Server] Heuristic MCP server ready!");
+  console.error('[Server] Heuristic MCP server ready!');
 }
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.error("\n[Server] Shutting down gracefully...");
+  console.error('\n[Server] Shutting down gracefully...');
 
   // Stop file watcher
   if (indexer && indexer.watcher) {
     await indexer.watcher.close();
-    console.error("[Server] File watcher stopped");
+    console.error('[Server] File watcher stopped');
   }
 
   // Give workers time to finish current batch (prevents core dump)
   if (indexer && indexer.terminateWorkers) {
     try {
-      console.error("[Server] Waiting for workers to finish...");
-      await new Promise(resolve => setTimeout(resolve, 500));
+      console.error('[Server] Waiting for workers to finish...');
+      await new Promise((resolve) => setTimeout(resolve, 500));
       await indexer.terminateWorkers();
-      console.error("[Server] Workers terminated");
-    } catch (err) {
+      console.error('[Server] Workers terminated');
+    } catch (_err) {
       // Suppress native module errors during shutdown
-      console.error("[Server] Workers shutdown (with warnings)");
+      console.error('[Server] Workers shutdown (with warnings)');
     }
   }
 
   // Save cache
   if (cache) {
     await cache.save();
-    console.error("[Server] Cache saved");
+    console.error('[Server] Cache saved');
   }
 
-  console.error("[Server] Goodbye!");
+  console.error('[Server] Goodbye!');
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.error("\n[Server] Received SIGTERM, shutting down...");
+  console.error('\n[Server] Received SIGTERM, shutting down...');
 
   // Stop file watcher
   if (indexer && indexer.watcher) {
     await indexer.watcher.close();
-    console.error("[Server] File watcher stopped");
+    console.error('[Server] File watcher stopped');
   }
 
   // Give workers time to finish current batch (prevents core dump)
   if (indexer && indexer.terminateWorkers) {
     try {
-      console.error("[Server] Waiting for workers to finish...");
-      await new Promise(resolve => setTimeout(resolve, 500));
+      console.error('[Server] Waiting for workers to finish...');
+      await new Promise((resolve) => setTimeout(resolve, 500));
       await indexer.terminateWorkers();
-      console.error("[Server] Workers terminated");
-    } catch (err) {
+      console.error('[Server] Workers terminated');
+    } catch (_err) {
       // Suppress native module errors during shutdown
-      console.error("[Server] Workers shutdown (with warnings)");
+      console.error('[Server] Workers shutdown (with warnings)');
     }
   }
 
   // Save cache
   if (cache) {
     await cache.save();
-    console.error("[Server] Cache saved");
+    console.error('[Server] Cache saved');
   }
 
-  console.error("[Server] Goodbye!");
+  console.error('[Server] Goodbye!');
   process.exit(0);
 });
 

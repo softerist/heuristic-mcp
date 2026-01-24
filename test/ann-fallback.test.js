@@ -18,12 +18,12 @@ describe('ANN Fallback (Missing hnswlib-node)', () => {
       annEnabled: true,
       annMinChunks: 5, // Low threshold for testing
       annIndexCache: false,
-      embeddingModel: 'test-model'
+      embeddingModel: 'test-model',
     };
 
     // Mock embedder
     embedder = vi.fn().mockResolvedValue({
-      data: new Float32Array([0.1, 0.2, 0.3])
+      data: new Float32Array([0.1, 0.2, 0.3]),
     });
 
     cache = new EmbeddingsCache(config);
@@ -36,7 +36,7 @@ describe('ANN Fallback (Missing hnswlib-node)', () => {
         content: `content ${i}`,
         startLine: 1,
         endLine: 5,
-        vector: [0.1, 0.2, 0.3] // simple dummy vector
+        vector: [0.1, 0.2, 0.3], // simple dummy vector
       });
     }
     cache.setVectorStore(vectors);
@@ -45,7 +45,7 @@ describe('ANN Fallback (Missing hnswlib-node)', () => {
   });
 
   it('should fall back to linear search when ANN index is unavailable', async () => {
-    const query = "test query";
+    const query = 'test query';
     const maxResults = 5;
 
     const result = await hybridSearch.search(query, maxResults);

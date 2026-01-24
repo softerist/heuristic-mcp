@@ -15,31 +15,39 @@ export class AnnConfigTool {
    * Adjust efSearch and optionally trigger index rebuild
    */
   async execute(args) {
-    const action = args.action || "stats";
+    const action = args.action || 'stats';
 
-    if (action === "stats") {
+    if (action === 'stats') {
       return this.cache.getAnnStats();
     }
 
-    if (action === "set_ef_search") {
+    if (action === 'set_ef_search') {
       const efSearch = args.efSearch;
       if (efSearch === undefined) {
-        return { success: false, error: "efSearch parameter is required for set_ef_search action" };
+        return {
+          success: false,
+          error: 'efSearch parameter is required for set_ef_search action',
+        };
       }
       return this.cache.setEfSearch(efSearch);
     }
 
-    if (action === "rebuild") {
+    if (action === 'rebuild') {
       // Force invalidate and rebuild the ANN index
       this.cache.invalidateAnnIndex();
       const index = await this.cache.ensureAnnIndex();
       return {
         success: index !== null,
-        message: index ? "ANN index rebuilt successfully" : "ANN index rebuild failed or not available"
+        message: index
+          ? 'ANN index rebuilt successfully'
+          : 'ANN index rebuild failed or not available',
       };
     }
 
-    return { success: false, error: `Unknown action: ${action}. Valid actions: stats, set_ef_search, rebuild` };
+    return {
+      success: false,
+      error: `Unknown action: ${action}. Valid actions: stats, set_ef_search, rebuild`,
+    };
   }
 
   formatResults(result) {
@@ -49,7 +57,7 @@ export class AnnConfigTool {
 
     if (result.enabled !== undefined) {
       // Stats response
-      let output = "## ANN Index Statistics\n\n";
+      let output = '## ANN Index Statistics\n\n';
       output += `- **Enabled**: ${result.enabled}\n`;
       output += `- **Index Loaded**: ${result.indexLoaded}\n`;
       output += `- **Dirty (needs rebuild)**: ${result.dirty}\n`;
@@ -57,7 +65,7 @@ export class AnnConfigTool {
       output += `- **Min Chunks for ANN**: ${result.minChunksForAnn}\n`;
 
       if (result.config) {
-        output += "\n### Current Config\n\n";
+        output += '\n### Current Config\n\n';
         output += `- **Metric**: ${result.config.metric}\n`;
         output += `- **Dimensions**: ${result.config.dim}\n`;
         output += `- **Indexed Vectors**: ${result.config.count}\n`;
@@ -65,7 +73,7 @@ export class AnnConfigTool {
         output += `- **efConstruction**: ${result.config.efConstruction}\n`;
         output += `- **efSearch**: ${result.config.efSearch}\n`;
       } else {
-        output += "\n*No active ANN index.*\n";
+        output += '\n*No active ANN index.*\n';
       }
 
       return output;
@@ -79,32 +87,35 @@ export class AnnConfigTool {
 // MCP Tool definition
 export function getToolDefinition() {
   return {
-    name: "d_ann_config",
-    description: "Configure and monitor the ANN (Approximate Nearest Neighbor) search index. Actions: 'stats' (view current config), 'set_ef_search' (tune search accuracy/speed), 'rebuild' (force index rebuild).",
+    name: 'd_ann_config',
+    description:
+      "Configure and monitor the ANN (Approximate Nearest Neighbor) search index. Actions: 'stats' (view current config), 'set_ef_search' (tune search accuracy/speed), 'rebuild' (force index rebuild).",
     inputSchema: {
-      type: "object",
+      type: 'object',
       properties: {
         action: {
-          type: "string",
-          enum: ["stats", "set_ef_search", "rebuild"],
-          description: "Action to perform. 'stats' shows current config, 'set_ef_search' changes the search parameter, 'rebuild' forces index rebuild.",
-          default: "stats"
+          type: 'string',
+          enum: ['stats', 'set_ef_search', 'rebuild'],
+          description:
+            "Action to perform. 'stats' shows current config, 'set_ef_search' changes the search parameter, 'rebuild' forces index rebuild.",
+          default: 'stats',
         },
         efSearch: {
-          type: "number",
-          description: "New efSearch value (only for set_ef_search action). Higher = more accurate but slower. Typical range: 16-512.",
+          type: 'number',
+          description:
+            'New efSearch value (only for set_ef_search action). Higher = more accurate but slower. Typical range: 16-512.',
           minimum: 1,
-          maximum: 1000
-        }
-      }
+          maximum: 1000,
+        },
+      },
     },
     annotations: {
-      title: "ANN Index Configuration",
+      title: 'ANN Index Configuration',
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
-      openWorldHint: false
-    }
+      openWorldHint: false,
+    },
   };
 }
 
@@ -115,6 +126,6 @@ export async function handleToolCall(request, annConfigTool) {
   const formattedText = annConfigTool.formatResults(result);
 
   return {
-    content: [{ type: "text", text: formattedText }]
+    content: [{ type: 'text', text: formattedText }],
   };
 }

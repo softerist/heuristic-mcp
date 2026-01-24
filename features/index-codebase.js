@@ -1,59 +1,57 @@
-import { fdir } from "fdir";
-import fs from "fs/promises";
-import chokidar from "chokidar";
-import path from "path";
-import os from "os";
-import { Worker } from "worker_threads";
-import { fileURLToPath } from "url";
-import { smartChunk, hashContent } from "../lib/utils.js";
-import { extractCallData } from "../lib/call-graph.js";
+import { fdir } from 'fdir';
+import fs from 'fs/promises';
+import chokidar from 'chokidar';
+import path from 'path';
+import os from 'os';
+import { Worker } from 'worker_threads';
+import { fileURLToPath } from 'url';
+import { smartChunk, hashContent } from '../lib/utils.js';
+import { extractCallData } from '../lib/call-graph.js';
 
 function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function globToRegExp(pattern) {
-  let regex = "^";
+  let regex = '^';
   for (let i = 0; i < pattern.length; ) {
     const char = pattern[i];
-    if (char === "*") {
-      if (pattern[i + 1] === "*") {
-        if (pattern[i + 2] === "/") {
-          regex += "(?:.*/)?";
+    if (char === '*') {
+      if (pattern[i + 1] === '*') {
+        if (pattern[i + 2] === '/') {
+          regex += '(?:.*/)?';
           i += 3;
         } else {
-          regex += ".*";
+          regex += '.*';
           i += 2;
         }
       } else {
-        regex += "[^/]*";
+        regex += '[^/]*';
         i += 1;
       }
       continue;
     }
-    if (char === "?") {
-      regex += "[^/]";
+    if (char === '?') {
+      regex += '[^/]';
       i += 1;
       continue;
     }
     regex += escapeRegExp(char);
     i += 1;
   }
-  regex += "$";
+  regex += '$';
   return new RegExp(regex);
 }
 
 function normalizePath(filePath) {
-  return filePath.split(path.sep).join("/");
+  return filePath.split(path.sep).join('/');
 }
 
 function buildExcludeMatchers(patterns) {
-  return [...new Set(patterns)]
-    .filter(Boolean)
-    .map(pattern => ({
-      matchBase: !pattern.includes("/"),
-      regex: globToRegExp(pattern)
-    }));
+  return [...new Set(patterns)].filter(Boolean).map((pattern) => ({
+    matchBase: !pattern.includes('/'),
+    regex: globToRegExp(pattern),
+  }));
 }
 
 function matchesExcludePatterns(filePath, matchers) {
@@ -89,46 +87,49 @@ export class CodebaseIndexer {
    * Initialize worker thread pool for parallel embedding
    */
   async initializeWorkers() {
-    const numWorkers = this.config.workerThreads === "auto"
-      ? Math.min(4, Math.max(1, os.cpus().length - 1)) // Cap 'auto' at 4 workers
-      : (this.config.workerThreads || 1);
+    const numWorkers =
+      this.config.workerThreads === 'auto'
+        ? Math.min(4, Math.max(1, os.cpus().length - 1)) // Cap 'auto' at 4 workers
+        : this.config.workerThreads || 1;
 
     // Only use workers if we have more than 1 CPU
     if (numWorkers <= 1) {
-      console.error("[Indexer] Single-threaded mode (1 CPU detected)");
+      console.error('[Indexer] Single-threaded mode (1 CPU detected)');
       return;
     }
 
     if (this.config.verbose) {
-      console.error(`[Indexer] Worker config: workerThreads=${this.config.workerThreads}, resolved to ${numWorkers}`);
+      console.error(
+        `[Indexer] Worker config: workerThreads=${this.config.workerThreads}, resolved to ${numWorkers}`
+      );
     }
 
     console.error(`[Indexer] Initializing ${numWorkers} worker threads...`);
 
-    const workerPath = path.join(__dirname, "../lib/embedding-worker.js");
+    const workerPath = path.join(__dirname, '../lib/embedding-worker.js');
 
     for (let i = 0; i < numWorkers; i++) {
       try {
         const worker = new Worker(workerPath, {
           workerData: {
             embeddingModel: this.config.embeddingModel,
-            verbose: this.config.verbose
-          }
+            verbose: this.config.verbose,
+          },
         });
 
         const readyPromise = new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error("Worker init timeout")), 120000);
+          const timeout = setTimeout(() => reject(new Error('Worker init timeout')), 120000);
 
-          worker.once("message", (msg) => {
+          worker.once('message', (msg) => {
             clearTimeout(timeout);
-            if (msg.type === "ready") {
+            if (msg.type === 'ready') {
               resolve(worker);
-            } else if (msg.type === "error") {
+            } else if (msg.type === 'error') {
               reject(new Error(msg.error));
             }
           });
 
-          worker.once("error", (err) => {
+          worker.once('error', (err) => {
             clearTimeout(timeout);
             reject(err);
           });
@@ -149,7 +150,9 @@ export class CodebaseIndexer {
         console.error(`[Indexer] Each worker loaded model: ${this.config.embeddingModel}`);
       }
     } catch (err) {
-      console.error(`[Indexer] Worker initialization failed: ${err.message}, falling back to single-threaded`);
+      console.error(
+        `[Indexer] Worker initialization failed: ${err.message}, falling back to single-threaded`
+      );
       await this.terminateWorkers();
     }
   }
@@ -160,8 +163,8 @@ export class CodebaseIndexer {
   async terminateWorkers() {
     const terminations = this.workers.map((worker) => {
       try {
-        worker.postMessage({ type: "shutdown" });
-      } catch {}
+        worker.postMessage({ type: 'shutdown' });
+      } catch { /* ignore */ }
       return worker.terminate().catch(() => null);
     });
     await Promise.all(terminations);
@@ -179,13 +182,13 @@ export class CodebaseIndexer {
   sendProgress(progress, total, message) {
     if (this.server) {
       try {
-        this.server.sendNotification("notifications/progress", {
-          progressToken: "indexing",
+        this.server.sendNotification('notifications/progress', {
+          progressToken: 'indexing',
           progress,
           total,
-          message
+          message,
         });
-      } catch (err) {
+      } catch (_err) {
         // Silently ignore if client doesn't support progress notifications
       }
     }
@@ -206,7 +209,9 @@ export class CodebaseIndexer {
     const WORKER_TIMEOUT = 300000; // 5 minutes per batch
 
     if (this.config.verbose) {
-      console.error(`[Indexer] Distributing ${allChunks.length} chunks across ${this.workers.length} workers (~${chunkSize} chunks each)`);
+      console.error(
+        `[Indexer] Distributing ${allChunks.length} chunks across ${this.workers.length} workers (~${chunkSize} chunks each)`
+      );
     }
 
     for (let i = 0; i < this.workers.length; i++) {
@@ -217,14 +222,16 @@ export class CodebaseIndexer {
         console.error(`[Indexer] Worker ${i}: processing ${workerChunks.length} chunks`);
       }
 
-      const promise = new Promise((resolve, reject) => {
+      const promise = new Promise((resolve, _reject) => {
         const worker = this.workers[i];
         const batchId = `batch-${i}-${Date.now()}`;
 
         // Timeout handler
         const timeout = setTimeout(() => {
-          worker.off("message", handler);
-          console.error(`[Indexer] Worker ${i} timed out, falling back to single-threaded for this batch`);
+          worker.off('message', handler);
+          console.error(
+            `[Indexer] Worker ${i} timed out, falling back to single-threaded for this batch`
+          );
           // Return empty and let fallback handle it
           resolve([]);
         }, WORKER_TIMEOUT);
@@ -232,10 +239,10 @@ export class CodebaseIndexer {
         const handler = (msg) => {
           if (msg.batchId === batchId) {
             clearTimeout(timeout);
-            worker.off("message", handler);
-            if (msg.type === "results") {
+            worker.off('message', handler);
+            if (msg.type === 'results') {
               resolve(msg.results);
-            } else if (msg.type === "error") {
+            } else if (msg.type === 'error') {
               console.error(`[Indexer] Worker ${i} error: ${msg.error}`);
               resolve([]); // Return empty, don't reject - let fallback handle
             }
@@ -245,21 +252,21 @@ export class CodebaseIndexer {
         // Handle worker crash
         const errorHandler = (err) => {
           clearTimeout(timeout);
-          worker.off("message", handler);
+          worker.off('message', handler);
           console.error(`[Indexer] Worker ${i} crashed: ${err.message}`);
           resolve([]); // Return empty, don't reject
         };
-        worker.once("error", errorHandler);
+        worker.once('error', errorHandler);
 
-        worker.on("message", handler);
-        worker.postMessage({ type: "process", chunks: workerChunks, batchId });
+        worker.on('message', handler);
+        worker.postMessage({ type: 'process', chunks: workerChunks, batchId });
       });
 
       workerPromises.push({ promise, chunks: workerChunks });
     }
 
     // Wait for all workers with error recovery
-    const workerResults = await Promise.all(workerPromises.map(p => p.promise));
+    const workerResults = await Promise.all(workerPromises.map((p) => p.promise));
 
     // Collect results and identify failed chunks that need retry
     const failedChunks = [];
@@ -274,7 +281,9 @@ export class CodebaseIndexer {
 
     // Retry failed chunks with single-threaded fallback
     if (failedChunks.length > 0) {
-      console.error(`[Indexer] Retrying ${failedChunks.length} chunks with single-threaded fallback...`);
+      console.error(
+        `[Indexer] Retrying ${failedChunks.length} chunks with single-threaded fallback...`
+      );
       const retryResults = await this.processChunksSingleThreaded(failedChunks);
       results.push(...retryResults);
     }
@@ -290,14 +299,17 @@ export class CodebaseIndexer {
 
     for (const chunk of chunks) {
       try {
-        const output = await this.embedder(chunk.text, { pooling: "mean", normalize: true });
+        const output = await this.embedder(chunk.text, {
+          pooling: 'mean',
+          normalize: true,
+        });
         results.push({
           file: chunk.file,
           startLine: chunk.startLine,
           endLine: chunk.endLine,
           content: chunk.text,
           vector: Array.from(output.data),
-          success: true
+          success: true,
         });
       } catch (error) {
         results.push({
@@ -305,7 +317,7 @@ export class CodebaseIndexer {
           startLine: chunk.startLine,
           endLine: chunk.endLine,
           error: error.message,
-          success: false
+          success: false,
         });
       }
     }
@@ -336,12 +348,14 @@ export class CodebaseIndexer {
 
       if (stats.size > this.config.maxFileSize) {
         if (this.config.verbose) {
-          console.error(`[Indexer] Skipped ${fileName} (too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB)`);
+          console.error(
+            `[Indexer] Skipped ${fileName} (too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB)`
+          );
         }
         return 0;
       }
 
-      const content = await fs.readFile(file, "utf-8");
+      const content = await fs.readFile(file, 'utf-8');
       const hash = hashContent(content);
 
       // Skip if file hasn't changed
@@ -365,14 +379,17 @@ export class CodebaseIndexer {
 
       for (const chunk of chunks) {
         try {
-          const output = await this.embedder(chunk.text, { pooling: "mean", normalize: true });
+          const output = await this.embedder(chunk.text, {
+            pooling: 'mean',
+            normalize: true,
+          });
 
           this.cache.addToStore({
             file,
             startLine: chunk.startLine,
             endLine: chunk.endLine,
             content: chunk.text,
-            vector: Array.from(output.data)
+            vector: Array.from(output.data),
           });
           addedChunks++;
         } catch (embeddingError) {
@@ -384,7 +401,9 @@ export class CodebaseIndexer {
       if (chunks.length === 0 || failedChunks === 0) {
         this.cache.setFileHash(file, hash);
       } else if (this.config.verbose) {
-        console.error(`[Indexer] Skipped hash update for ${fileName} (${addedChunks}/${chunks.length} chunks embedded)`);
+        console.error(
+          `[Indexer] Skipped hash update for ${fileName} (${addedChunks}/${chunks.length} chunks embedded)`
+        );
       }
       if (this.config.verbose) {
         console.error(`[Indexer] Completed ${fileName} (${addedChunks} chunks)`);
@@ -404,7 +423,7 @@ export class CodebaseIndexer {
     const startTime = Date.now();
 
     // Build extension filter from config
-    const extensions = new Set(this.config.fileExtensions.map(ext => `.${ext}`));
+    const extensions = new Set(this.config.fileExtensions.map((ext) => `.${ext}`));
     const allowedFileNames = new Set(this.config.fileNames || []);
 
     // Extract directory names from glob patterns in config.excludePatterns
@@ -424,7 +443,7 @@ export class CodebaseIndexer {
     }
 
     // Always exclude cache directory
-    excludeDirs.add(".smart-coding-cache");
+    excludeDirs.add('.smart-coding-cache');
 
     if (this.config.verbose) {
       console.error(`[Indexer] Using ${excludeDirs.size} exclude directories from config`);
@@ -433,7 +452,12 @@ export class CodebaseIndexer {
     const api = new fdir()
       .withFullPaths()
       .exclude((dirName) => excludeDirs.has(dirName))
-      .filter((filePath) => (extensions.has(path.extname(filePath)) || allowedFileNames.has(path.basename(filePath))) && !this.isExcluded(filePath))
+      .filter(
+        (filePath) =>
+          (extensions.has(path.extname(filePath)) ||
+            allowedFileNames.has(path.basename(filePath))) &&
+          !this.isExcluded(filePath)
+      )
       .crawl(this.config.searchDirectory);
 
     const files = await api.withPromise();
@@ -470,7 +494,7 @@ export class CodebaseIndexer {
               return null;
             }
 
-            const content = await fs.readFile(file, "utf-8");
+            const content = await fs.readFile(file, 'utf-8');
             const hash = hashContent(content);
 
             if (this.cache.getFileHash(file) === hash) {
@@ -479,7 +503,7 @@ export class CodebaseIndexer {
             }
 
             return { file, content, hash };
-          } catch (error) {
+          } catch (_error) {
             skippedCount.error++;
             return null;
           }
@@ -491,304 +515,338 @@ export class CodebaseIndexer {
       }
     }
 
-    console.error(`[Indexer] Pre-filter: ${filesToProcess.length} changed, ${skippedCount.unchanged} unchanged, ${skippedCount.tooLarge} too large, ${skippedCount.error} errors (${Date.now() - startTime}ms)`);
+    console.error(
+      `[Indexer] Pre-filter: ${filesToProcess.length} changed, ${skippedCount.unchanged} unchanged, ${skippedCount.tooLarge} too large, ${skippedCount.error} errors (${Date.now() - startTime}ms)`
+    );
     return filesToProcess;
   }
 
   async indexAll(force = false) {
     if (this.isIndexing) {
-      console.error("[Indexer] Indexing already in progress, skipping concurrent request");
-      return { skipped: true, reason: "Indexing already in progress" };
+      console.error('[Indexer] Indexing already in progress, skipping concurrent request');
+      return { skipped: true, reason: 'Indexing already in progress' };
     }
 
     this.isIndexing = true;
 
     try {
       if (force) {
-        console.error("[Indexer] Force reindex requested: clearing cache");
+        console.error('[Indexer] Force reindex requested: clearing cache');
         this.cache.setVectorStore([]);
         this.cache.fileHashes = new Map();
         await this.cache.clearCallGraphData({ removeFile: true });
       }
 
       const totalStartTime = Date.now();
-    console.error(`[Indexer] Starting optimized indexing in ${this.config.searchDirectory}...`);
+      console.error(`[Indexer] Starting optimized indexing in ${this.config.searchDirectory}...`);
 
-    // Step 1: Fast file discovery with fdir
-    const files = await this.discoverFiles();
+      // Step 1: Fast file discovery with fdir
+      const files = await this.discoverFiles();
 
-    if (files.length === 0) {
-      console.error("[Indexer] No files found to index");
-      this.sendProgress(100, 100, "No files found to index");
-      return { skipped: false, filesProcessed: 0, chunksCreated: 0, message: "No files found to index" };
-    }
-
-    // Send progress: discovery complete
-    this.sendProgress(5, 100, `Discovered ${files.length} files`);
-
-    const currentFilesSet = new Set(files);
-
-    // Step 1.5: Prune deleted or excluded files from cache
-    if (!force) {
-      const cachedFiles = Array.from(this.cache.fileHashes.keys());
-      let prunedCount = 0;
-
-      for (const cachedFile of cachedFiles) {
-        if (!currentFilesSet.has(cachedFile)) {
-          this.cache.removeFileFromStore(cachedFile);
-          this.cache.deleteFileHash(cachedFile);
-          prunedCount++;
-        }
-      }
-
-      if (prunedCount > 0) {
-        if (this.config.verbose) {
-          console.error(`[Indexer] Pruned ${prunedCount} deleted/excluded files from index`);
-        }
-        // If we pruned files, we should save these changes even if no other files changed
-      }
-
-      const prunedCallGraph = this.cache.pruneCallGraphData(currentFilesSet);
-      if (prunedCallGraph > 0 && this.config.verbose) {
-        console.error(`[Indexer] Pruned ${prunedCallGraph} call-graph entries`);
-      }
-    }
-
-    // Step 2: Pre-filter unchanged files (early hash check)
-    const filesToProcess = await this.preFilterFiles(files);
-    const filesToProcessSet = new Set(filesToProcess.map(entry => entry.file));
-
-    if (filesToProcess.length === 0) {
-      console.error("[Indexer] All files unchanged, nothing to index");
-
-      // If we have no call graph data but we have cached files, we should try to rebuild it
-      if (this.config.callGraphEnabled && this.cache.getVectorStore().length > 0) {
-        // Check for files that are in cache but missing from call graph data
-        const cachedFiles = new Set(this.cache.getVectorStore().map(c => c.file));
-        const callDataFiles = new Set(this.cache.fileCallData.keys());
-
-        const missingCallData = [];
-        for (const file of cachedFiles) {
-          if (!callDataFiles.has(file) && currentFilesSet.has(file)) {
-            missingCallData.push(file);
-          }
-        }
-
-        if (missingCallData.length > 0) {
-          console.error(`[Indexer] Found ${missingCallData.length} files missing call graph data, re-indexing...`);
-          const BATCH_SIZE = 100;
-          for (let i = 0; i < missingCallData.length; i += BATCH_SIZE) {
-            const batch = missingCallData.slice(i, i + BATCH_SIZE);
-            const results = await Promise.all(
-              batch.map(async (file) => {
-                try {
-                  const stats = await fs.stat(file);
-                  if (stats.isDirectory()) return null;
-                  if (stats.size > this.config.maxFileSize) return null;
-                  const content = await fs.readFile(file, "utf-8");
-                  const hash = hashContent(content);
-                  return { file, content, hash };
-                } catch {
-                  return null;
-                }
-              })
-            );
-
-            for (const result of results) {
-              if (!result) continue;
-              if (filesToProcessSet.has(result.file)) continue;
-              filesToProcess.push(result);
-              filesToProcessSet.add(result.file);
-            }
-          }
-        }
-      }
-
-      // If still empty after checking for missing call data, then we are truly done
-      if (filesToProcess.length === 0) {
-        this.sendProgress(100, 100, "All files up to date");
-        await this.cache.save();
-        const vectorStore = this.cache.getVectorStore();
+      if (files.length === 0) {
+        console.error('[Indexer] No files found to index');
+        this.sendProgress(100, 100, 'No files found to index');
         return {
           skipped: false,
           filesProcessed: 0,
           chunksCreated: 0,
-          totalFiles: new Set(vectorStore.map(v => v.file)).size,
-          totalChunks: vectorStore.length,
-          message: "All files up to date"
+          message: 'No files found to index',
         };
       }
-    }
 
-    // Send progress: filtering complete
-    this.sendProgress(10, 100, `Processing ${filesToProcess.length} changed files`);
+      // Send progress: discovery complete
+      this.sendProgress(5, 100, `Discovered ${files.length} files`);
 
-    // Step 3: Determine batch size based on project size
-    const adaptiveBatchSize = files.length > 10000 ? 500 :
-                              files.length > 1000 ? 200 :
-                              this.config.batchSize || 100;
+      const currentFilesSet = new Set(files);
 
-    console.error(`[Indexer] Processing ${filesToProcess.length} files (batch size: ${adaptiveBatchSize})`);
+      // Step 1.5: Prune deleted or excluded files from cache
+      if (!force) {
+        const cachedFiles = Array.from(this.cache.fileHashes.keys());
+        let prunedCount = 0;
 
-    // Step 4: Initialize worker threads (always use when multi-core available)
-    const useWorkers = os.cpus().length > 1;
+        for (const cachedFile of cachedFiles) {
+          if (!currentFilesSet.has(cachedFile)) {
+            this.cache.removeFileFromStore(cachedFile);
+            this.cache.deleteFileHash(cachedFile);
+            prunedCount++;
+          }
+        }
 
-    if (useWorkers) {
-      await this.initializeWorkers();
-      console.error(`[Indexer] Multi-threaded mode: ${this.workers.length} workers active`);
-    } else {
-      console.error(`[Indexer] Single-threaded mode (single-core system)`);
-    }
+        if (prunedCount > 0) {
+          if (this.config.verbose) {
+            console.error(`[Indexer] Pruned ${prunedCount} deleted/excluded files from index`);
+          }
+          // If we pruned files, we should save these changes even if no other files changed
+        }
 
-    let totalChunks = 0;
-    let processedFiles = 0;
+        const prunedCallGraph = this.cache.pruneCallGraphData(currentFilesSet);
+        if (prunedCallGraph > 0 && this.config.verbose) {
+          console.error(`[Indexer] Pruned ${prunedCallGraph} call-graph entries`);
+        }
+      }
 
-    // Step 5: Process files in adaptive batches
-    for (let i = 0; i < filesToProcess.length; i += adaptiveBatchSize) {
-      const batch = filesToProcess.slice(i, i + adaptiveBatchSize);
+      // Step 2: Pre-filter unchanged files (early hash check)
+      const filesToProcess = await this.preFilterFiles(files);
+      const filesToProcessSet = new Set(filesToProcess.map((entry) => entry.file));
 
-      // Generate all chunks for this batch
-      const allChunks = [];
-      const fileStats = new Map();
+      if (filesToProcess.length === 0) {
+        console.error('[Indexer] All files unchanged, nothing to index');
 
-      for (const { file, content, hash } of batch) {
-        // Remove old chunks for this file
-        this.cache.removeFileFromStore(file);
+        // If we have no call graph data but we have cached files, we should try to rebuild it
+        if (this.config.callGraphEnabled && this.cache.getVectorStore().length > 0) {
+          // Check for files that are in cache but missing from call graph data
+          const cachedFiles = new Set(this.cache.getVectorStore().map((c) => c.file));
+          const callDataFiles = new Set(this.cache.fileCallData.keys());
 
-        // Extract call graph data if enabled
-        if (this.config.callGraphEnabled) {
-          try {
-            const callData = extractCallData(content, file);
-            this.cache.setFileCallData(file, callData);
-          } catch (err) {
-            if (this.config.verbose) {
-              console.error(`[Indexer] Call graph extraction failed for ${path.basename(file)}: ${err.message}`);
+          const missingCallData = [];
+          for (const file of cachedFiles) {
+            if (!callDataFiles.has(file) && currentFilesSet.has(file)) {
+              missingCallData.push(file);
+            }
+          }
+
+          if (missingCallData.length > 0) {
+            console.error(
+              `[Indexer] Found ${missingCallData.length} files missing call graph data, re-indexing...`
+            );
+            const BATCH_SIZE = 100;
+            for (let i = 0; i < missingCallData.length; i += BATCH_SIZE) {
+              const batch = missingCallData.slice(i, i + BATCH_SIZE);
+              const results = await Promise.all(
+                batch.map(async (file) => {
+                  try {
+                    const stats = await fs.stat(file);
+                    if (stats.isDirectory()) return null;
+                    if (stats.size > this.config.maxFileSize) return null;
+                    const content = await fs.readFile(file, 'utf-8');
+                    const hash = hashContent(content);
+                    return { file, content, hash };
+                  } catch {
+                    return null;
+                  }
+                })
+              );
+
+              for (const result of results) {
+                if (!result) continue;
+                filesToProcess.push(result);
+                filesToProcessSet.add(result.file);
+              }
             }
           }
         }
 
-        const chunks = smartChunk(content, file, this.config);
-        fileStats.set(file, { hash, totalChunks: 0, successChunks: 0 });
-
-        for (const chunk of chunks) {
-          allChunks.push({
-            file,
-            text: chunk.text,
-            startLine: chunk.startLine,
-            endLine: chunk.endLine
-          });
-          const stats = fileStats.get(file);
-          if (stats) {
-            stats.totalChunks++;
-          }
+        // If still empty after checking for missing call data, then we are truly done
+        if (filesToProcess.length === 0) {
+          this.sendProgress(100, 100, 'All files up to date');
+          await this.cache.save();
+          const vectorStore = this.cache.getVectorStore();
+          return {
+            skipped: false,
+            filesProcessed: 0,
+            chunksCreated: 0,
+            totalFiles: new Set(vectorStore.map((v) => v.file)).size,
+            totalChunks: vectorStore.length,
+            message: 'All files up to date',
+          };
         }
       }
 
-      // Process chunks (with workers if available, otherwise single-threaded)
-      let results;
-      if (useWorkers && this.workers.length > 0) {
-        results = await this.processChunksWithWorkers(allChunks);
+      // Send progress: filtering complete
+      this.sendProgress(10, 100, `Processing ${filesToProcess.length} changed files`);
+
+      // Step 3: Determine batch size based on project size
+      const adaptiveBatchSize =
+        files.length > 10000 ? 500 : files.length > 1000 ? 200 : this.config.batchSize || 100;
+
+      console.error(
+        `[Indexer] Processing ${filesToProcess.length} files (batch size: ${adaptiveBatchSize})`
+      );
+
+      // Step 4: Initialize worker threads (always use when multi-core available)
+      const useWorkers = os.cpus().length > 1;
+
+      if (useWorkers) {
+        await this.initializeWorkers();
+        console.error(`[Indexer] Multi-threaded mode: ${this.workers.length} workers active`);
       } else {
-        results = await this.processChunksSingleThreaded(allChunks);
+        console.error(`[Indexer] Single-threaded mode (single-core system)`);
       }
 
-      // Store successful results
-      for (const result of results) {
-        const stats = fileStats.get(result.file);
-        if (result.success) {
-          this.cache.addToStore({
-            file: result.file,
-            startLine: result.startLine,
-            endLine: result.endLine,
-            content: result.content,
-            vector: result.vector
-          });
-          totalChunks++;
-          if (stats) {
-            stats.successChunks++;
+      let totalChunks = 0;
+      let processedFiles = 0;
+
+      // Step 5: Process files in adaptive batches
+      for (let i = 0; i < filesToProcess.length; i += adaptiveBatchSize) {
+        const batch = filesToProcess.slice(i, i + adaptiveBatchSize);
+
+        // Generate all chunks for this batch
+        const allChunks = [];
+        const fileStats = new Map();
+
+        for (const { file, content, hash } of batch) {
+          // Remove old chunks for this file
+          this.cache.removeFileFromStore(file);
+
+          // Extract call graph data if enabled
+          if (this.config.callGraphEnabled) {
+            try {
+              const callData = extractCallData(content, file);
+              this.cache.setFileCallData(file, callData);
+            } catch (err) {
+              if (this.config.verbose) {
+                console.error(
+                  `[Indexer] Call graph extraction failed for ${path.basename(file)}: ${err.message}`
+                );
+              }
+            }
+          }
+
+          const chunks = smartChunk(content, file, this.config);
+          fileStats.set(file, { hash, totalChunks: 0, successChunks: 0 });
+
+          for (const chunk of chunks) {
+            allChunks.push({
+              file,
+              text: chunk.text,
+              startLine: chunk.startLine,
+              endLine: chunk.endLine,
+            });
+            const stats = fileStats.get(file);
+            if (stats) {
+              stats.totalChunks++;
+            }
           }
         }
-      }
 
-      // Update file hashes
-      for (const [file, stats] of fileStats) {
-        if (stats.totalChunks === 0 || stats.successChunks === stats.totalChunks) {
-          this.cache.setFileHash(file, stats.hash);
-        } else if (this.config.verbose) {
-          console.error(`[Indexer] Skipped hash update for ${path.basename(file)} (${stats.successChunks}/${stats.totalChunks} chunks embedded)`);
+        // Process chunks (with workers if available, otherwise single-threaded)
+        let results;
+        if (useWorkers && this.workers.length > 0) {
+          results = await this.processChunksWithWorkers(allChunks);
+        } else {
+          results = await this.processChunksSingleThreaded(allChunks);
+        }
+
+        // Store successful results
+        for (const result of results) {
+          const stats = fileStats.get(result.file);
+          if (result.success) {
+            this.cache.addToStore({
+              file: result.file,
+              startLine: result.startLine,
+              endLine: result.endLine,
+              content: result.content,
+              vector: result.vector,
+            });
+            totalChunks++;
+            if (stats) {
+              stats.successChunks++;
+            }
+          }
+        }
+
+        // Update file hashes
+        for (const [file, stats] of fileStats) {
+          if (stats.totalChunks === 0 || stats.successChunks === stats.totalChunks) {
+            this.cache.setFileHash(file, stats.hash);
+          } else if (this.config.verbose) {
+            console.error(
+              `[Indexer] Skipped hash update for ${path.basename(file)} (${stats.successChunks}/${stats.totalChunks} chunks embedded)`
+            );
+          }
+        }
+
+        processedFiles += batch.length;
+
+        // Progress indicator every batch
+        if (
+          processedFiles % (adaptiveBatchSize * 2) === 0 ||
+          processedFiles === filesToProcess.length
+        ) {
+          const elapsed = ((Date.now() - totalStartTime) / 1000).toFixed(1);
+          const rate = (processedFiles / parseFloat(elapsed)).toFixed(0);
+          console.error(
+            `[Indexer] Progress: ${processedFiles}/${filesToProcess.length} files (${rate} files/sec)`
+          );
+
+          // Send MCP progress notification (10-95% range for batch processing)
+          const progressPercent = Math.floor(10 + (processedFiles / filesToProcess.length) * 85);
+          this.sendProgress(
+            progressPercent,
+            100,
+            `Indexed ${processedFiles}/${filesToProcess.length} files (${rate}/sec)`
+          );
         }
       }
 
-      processedFiles += batch.length;
-
-      // Progress indicator every batch
-      if (processedFiles % (adaptiveBatchSize * 2) === 0 || processedFiles === filesToProcess.length) {
-        const elapsed = ((Date.now() - totalStartTime) / 1000).toFixed(1);
-        const rate = (processedFiles / parseFloat(elapsed)).toFixed(0);
-        console.error(`[Indexer] Progress: ${processedFiles}/${filesToProcess.length} files (${rate} files/sec)`);
-
-        // Send MCP progress notification (10-95% range for batch processing)
-        const progressPercent = Math.floor(10 + (processedFiles / filesToProcess.length) * 85);
-        this.sendProgress(progressPercent, 100, `Indexed ${processedFiles}/${filesToProcess.length} files (${rate}/sec)`);
+      // Cleanup workers
+      if (useWorkers) {
+        await this.terminateWorkers();
       }
-    }
 
-    // Cleanup workers
-    if (useWorkers) {
-      await this.terminateWorkers();
-    }
+      const totalTime = ((Date.now() - totalStartTime) / 1000).toFixed(1);
+      console.error(
+        `[Indexer] Complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
+      );
 
-    const totalTime = ((Date.now() - totalStartTime) / 1000).toFixed(1);
-    console.error(`[Indexer] Complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`);
+      // Send completion progress
+      this.sendProgress(
+        100,
+        100,
+        `Complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
+      );
 
-    // Send completion progress
-    this.sendProgress(100, 100, `Complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`);
+      await this.cache.save();
 
-    await this.cache.save();
-
-    // Rebuild call graph in background
-    if (this.config.callGraphEnabled) {
-      this.cache.rebuildCallGraph();
-    }
-
-    void this.cache.ensureAnnIndex().catch((error) => {
-      if (this.config.verbose) {
-        console.error(`[ANN] Background ANN build failed: ${error.message}`);
+      // Rebuild call graph in background
+      if (this.config.callGraphEnabled) {
+        this.cache.rebuildCallGraph();
       }
-    });
 
-    const vectorStore = this.cache.getVectorStore();
-    return {
-      skipped: false,
-      filesProcessed: filesToProcess.length,
-      chunksCreated: totalChunks,
-      totalFiles: new Set(vectorStore.map(v => v.file)).size,
-      totalChunks: vectorStore.length,
-      duration: totalTime,
-      message: `Indexed ${filesToProcess.length} files (${totalChunks} chunks) in ${totalTime}s`
-    };
+      void this.cache.ensureAnnIndex().catch((error) => {
+        if (this.config.verbose) {
+          console.error(`[ANN] Background ANN build failed: ${error.message}`);
+        }
+      });
+
+      const vectorStore = this.cache.getVectorStore();
+      return {
+        skipped: false,
+        filesProcessed: filesToProcess.length,
+        chunksCreated: totalChunks,
+        totalFiles: new Set(vectorStore.map((v) => v.file)).size,
+        totalChunks: vectorStore.length,
+        duration: totalTime,
+        message: `Indexed ${filesToProcess.length} files (${totalChunks} chunks) in ${totalTime}s`,
+      };
     } finally {
       this.isIndexing = false;
     }
   }
 
-  setupFileWatcher() {
+  async setupFileWatcher() {
     if (!this.config.watchFiles) return;
 
+    // Close existing watcher if active to prevent leaks
+    if (this.watcher) {
+      await this.watcher.close();
+      this.watcher = null;
+    }
+
     const pattern = [
-      ...this.config.fileExtensions.map(ext => `**/*.${ext}`),
-      ...(this.config.fileNames || []).map(name => `**/${name}`)
+      ...this.config.fileExtensions.map((ext) => `**/*.${ext}`),
+      ...(this.config.fileNames || []).map((name) => `**/${name}`),
     ];
 
     this.watcher = chokidar.watch(pattern, {
       cwd: this.config.searchDirectory,
       ignored: this.config.excludePatterns,
       persistent: true,
-      ignoreInitial: true
+      ignoreInitial: true,
     });
 
     this.watcher
-      .on("add", async (filePath) => {
+      .on('add', async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.error(`[Indexer] New file detected: ${filePath}`);
 
@@ -800,7 +858,7 @@ export class CodebaseIndexer {
         await this.indexFile(fullPath);
         await this.cache.save();
       })
-      .on("change", async (filePath) => {
+      .on('change', async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.error(`[Indexer] File changed: ${filePath}`);
 
@@ -812,7 +870,7 @@ export class CodebaseIndexer {
         await this.indexFile(fullPath);
         await this.cache.save();
       })
-      .on("unlink", (filePath) => {
+      .on('unlink', (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.error(`[Indexer] File deleted: ${filePath}`);
 
@@ -826,32 +884,33 @@ export class CodebaseIndexer {
         this.cache.save();
       });
 
-    console.error("[Indexer] File watcher enabled for incremental indexing");
+    console.error('[Indexer] File watcher enabled for incremental indexing');
   }
 }
 
 // MCP Tool definition for this feature
 export function getToolDefinition() {
   return {
-    name: "b_index_codebase",
-    description: "Manually trigger a full reindex of the codebase. This will scan all files and update the embeddings cache. Useful after large code changes or if the index seems out of date.",
+    name: 'b_index_codebase',
+    description:
+      'Manually trigger a full reindex of the codebase. This will scan all files and update the embeddings cache. Useful after large code changes or if the index seems out of date.',
     inputSchema: {
-      type: "object",
+      type: 'object',
       properties: {
         force: {
-          type: "boolean",
+          type: 'boolean',
           description: "Force reindex even if files haven't changed",
-          default: false
-        }
-      }
+          default: false,
+        },
+      },
     },
     annotations: {
-      title: "Reindex Codebase",
+      title: 'Reindex Codebase',
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
-      openWorldHint: false
-    }
+      openWorldHint: false,
+    },
   };
 }
 
@@ -863,10 +922,12 @@ export async function handleToolCall(request, indexer) {
   // Handle case when indexing was skipped due to concurrent request
   if (result?.skipped) {
     return {
-      content: [{
-        type: "text",
-        text: `Indexing skipped: ${result.reason}\n\nPlease wait for the current indexing operation to complete before requesting another reindex.`
-      }]
+      content: [
+        {
+          type: 'text',
+          text: `Indexing skipped: ${result.reason}\n\nPlease wait for the current indexing operation to complete before requesting another reindex.`,
+        },
+      ],
     };
   }
 
@@ -874,9 +935,9 @@ export async function handleToolCall(request, indexer) {
   const vectorStore = indexer.cache.getVectorStore();
   const stats = {
     totalChunks: result?.totalChunks ?? vectorStore.length,
-    totalFiles: result?.totalFiles ?? new Set(vectorStore.map(v => v.file)).size,
+    totalFiles: result?.totalFiles ?? new Set(vectorStore.map((v) => v.file)).size,
     filesProcessed: result?.filesProcessed ?? 0,
-    chunksCreated: result?.chunksCreated ?? 0
+    chunksCreated: result?.chunksCreated ?? 0,
   };
 
   let message = result?.message
@@ -890,9 +951,11 @@ export async function handleToolCall(request, indexer) {
   }
 
   return {
-    content: [{
-      type: "text",
-      text: message
-    }]
+    content: [
+      {
+        type: 'text',
+        text: message,
+      },
+    ],
   };
 }

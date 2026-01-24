@@ -1,6 +1,6 @@
 # Contributing to Heuristic MCP
 
-Thank you for your interest in contributing! This document provides guidelines for contributing to the project.
+Thank you for your interest in contributing. This document provides guidelines for contributing to the project.
 
 ## Getting Started
 
@@ -26,7 +26,7 @@ npm run dev
 
 ## Project Structure
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed information about the modular architecture.
+See `ARCHITECTURE.md` for detailed information about the modular architecture.
 
 Key directories:
 
@@ -42,7 +42,7 @@ Key directories:
 - Follow existing code patterns
 - Use meaningful variable and function names
 - Add comments for complex logic
-- No emojis in code or documentation
+- Avoid emojis in code comments and logs unless they are part of user-facing CLI output
 
 ### File Organization
 
@@ -50,7 +50,7 @@ Key directories:
 // Standard file structure for features:
 
 // 1. Imports
-import { dependency } from "package";
+import { dependency } from 'package';
 
 // 2. Class definition
 export class FeatureName {
@@ -83,20 +83,15 @@ export async function handleToolCall(request, instance) {
 try {
   // operation
 } catch (error) {
-  console.error("[Module] Error description:", error.message);
+  console.error('[Module] Error description:', error.message);
   // Continue execution or return default value
 }
 ```
 
 ### Logging
 
-Use `console.error()` for all logs (MCP protocol requirement):
-
-```javascript
-console.error("[FeatureName] Informational message");
-console.error("[FeatureName] Warning:", details);
-console.error("[FeatureName] Error:", error.message);
-```
+- Use `console.error()` for server logs (MCP protocol standard)
+- CLI utilities and install scripts may use `console.log()` for user-friendly output
 
 ## Adding New Features
 
@@ -116,23 +111,23 @@ export class YourFeature {
 
   async execute(params) {
     // Implementation
-    return { result: "data" };
+    return { result: 'data' };
   }
 }
 
 export function getToolDefinition(config) {
   return {
-    name: "your_tool",
-    description: "Clear description of what the tool does",
+    name: 'your_tool',
+    description: 'Clear description of what the tool does',
     inputSchema: {
-      type: "object",
+      type: 'object',
       properties: {
         param: {
-          type: "string",
-          description: "Parameter description",
+          type: 'string',
+          description: 'Parameter description',
         },
       },
-      required: ["param"],
+      required: ['param'],
     },
   };
 }
@@ -144,7 +139,7 @@ export async function handleToolCall(request, instance) {
   return {
     content: [
       {
-        type: "text",
+        type: 'text',
         text: JSON.stringify(result, null, 2),
       },
     ],
@@ -157,7 +152,7 @@ export async function handleToolCall(request, instance) {
 Update `index.js`:
 
 ```javascript
-import * as YourFeature from "./features/your-feature.js";
+import * as YourFeature from './features/your-feature.js';
 
 // In initialize():
 const yourFeature = new YourFeature.YourFeature(embedder, cache, config);
@@ -172,16 +167,26 @@ features.push({
 
 3. **Test Your Feature**
 
-- Test with sample codebase
+- Test with a sample codebase
 - Verify MCP tool contract
-- Check error handling
-- Validate output format
+- Check error handling and output format
 
 4. **Document Your Feature**
 
 - Add to README.md features section
-- Create examples in EXAMPLES.md
 - Update ARCHITECTURE.md if needed
+
+## Testing
+
+```bash
+npm test
+```
+
+By default, tests use a mock embedder to avoid network/model downloads. To run the real model tests:
+
+```bash
+USE_REAL_EMBEDDER=true npm test
+```
 
 ## Pull Request Process
 
@@ -218,91 +223,3 @@ Follow commit message conventions:
 ```bash
 git push origin feature/your-feature-name
 ```
-
-6. **Create Pull Request**
-
-- Provide clear description of changes
-- Reference any related issues
-- Include examples of usage
-- Explain testing performed
-
-## Testing
-
-### Manual Testing
-
-```bash
-# Test with a sample project
-cd /path/to/test/project
-node /path/to/heuristic-mcp/index.js
-
-# In another terminal, send MCP requests
-```
-
-### Testing MCP Tools
-
-Create a test script:
-
-```javascript
-// test-tool.js
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-// ... setup and test your tool
-```
-
-## Configuration Changes
-
-If adding new configuration options:
-
-1. Update `lib/config.js` with new default values
-2. Document in README.md
-3. Add examples to EXAMPLES.md
-4. Consider backward compatibility
-
-## Documentation
-
-All documentation should:
-
-- Be clear and concise
-- Include code examples
-- Avoid emojis
-- Use proper markdown formatting
-- Be kept up-to-date with code changes
-
-## Code Review Checklist
-
-Before submitting a PR, verify:
-
-- [ ] Code follows project style guidelines
-- [ ] No console.log (use console.error for MCP)
-- [ ] Error handling is implemented
-- [ ] Configuration changes are documented
-- [ ] README.md is updated if needed
-- [ ] No breaking changes without discussion
-- [ ] Comments explain complex logic
-- [ ] No emojis in code or documentation
-
-## Feature Ideas
-
-Looking for ideas? Consider implementing:
-
-- Code complexity analysis
-- Pattern detection and anti-pattern identification
-- Documentation generation
-- Refactoring suggestions
-- Test coverage analysis
-- Dependency graph visualization
-- Performance profiling integration
-- Multi-language translation support
-
-## Questions and Support
-
-- **Issues**: Use GitHub Issues for bugs and feature requests
-- **Discussions**: Use GitHub Discussions for questions
-- **Email**: Contact Softerist via website
-
-## License
-
-By contributing, you agree that your contributions will be licensed under the MIT License.
-
----
-
-Thank you for contributing to Heuristic MCP!

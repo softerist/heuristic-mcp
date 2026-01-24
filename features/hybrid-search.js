@@ -1,7 +1,7 @@
-import path from "path";
-import fs from "fs/promises";
-import { dotSimilarity } from "../lib/utils.js";
-import { extractSymbolsFromContent } from "../lib/call-graph.js";
+import path from 'path';
+import fs from 'fs/promises';
+import { dotSimilarity } from '../lib/utils.js';
+import { extractSymbolsFromContent } from '../lib/call-graph.js';
 
 export class HybridSearch {
   constructor(embedder, cache, config) {
@@ -37,14 +37,16 @@ export class HybridSearch {
     const BATCH_SIZE = 200;
     for (let i = 0; i < missing.length; i += BATCH_SIZE) {
       const batch = missing.slice(i, i + BATCH_SIZE);
-      await Promise.all(batch.map(async file => {
-        try {
-          const stats = await fs.stat(file);
-          this.fileModTimes.set(file, stats.mtimeMs);
-        } catch {
-          this.fileModTimes.set(file, null);
-        }
-      }));
+      await Promise.all(
+        batch.map(async (file) => {
+          try {
+            const stats = await fs.stat(file);
+            this.fileModTimes.set(file, stats.mtimeMs);
+          } catch {
+            this.fileModTimes.set(file, null);
+          }
+        })
+      );
     }
   }
 
@@ -59,12 +61,15 @@ export class HybridSearch {
     if (vectorStore.length === 0) {
       return {
         results: [],
-        message: "No code has been indexed yet. Please wait for initial indexing to complete."
+        message: 'No code has been indexed yet. Please wait for initial indexing to complete.',
       };
     }
 
     // Generate query embedding
-    const queryEmbed = await this.embedder(query, { pooling: "mean", normalize: true });
+    const queryEmbed = await this.embedder(query, {
+      pooling: 'mean',
+      normalize: true,
+    });
     const queryVector = Array.from(queryEmbed.data);
     const queryVectorTyped = queryEmbed.data;
 
@@ -92,11 +97,11 @@ export class HybridSearch {
     }
 
     if (this.config.recencyBoost > 0) {
-      await this.populateFileModTimes(candidates.map(chunk => chunk.file));
+      await this.populateFileModTimes(candidates.map((chunk) => chunk.file));
     }
 
     // Score all chunks (synchronous map now, much faster)
-    const scoredChunks = candidates.map(chunk => {
+    const scoredChunks = candidates.map((chunk) => {
       // Semantic similarity (vectors are normalized)
       let score = dotSimilarity(queryVector, chunk.vector) * this.config.semanticWeight;
 
@@ -109,8 +114,8 @@ export class HybridSearch {
       } else {
         // Partial word matching
         const queryWords = lowerQuery.split(/\s+/);
-        const matchedWords = queryWords.filter(word =>
-          word.length > 2 && lowerContent.includes(word)
+        const matchedWords = queryWords.filter(
+          (word) => word.length > 2 && lowerContent.includes(word)
         ).length;
         score += (matchedWords / queryWords.length) * 0.3;
       }
@@ -118,12 +123,12 @@ export class HybridSearch {
       // Recency boost - recently modified files rank higher
       if (this.config.recencyBoost > 0) {
         const mtime = this.fileModTimes.get(chunk.file);
-        if (typeof mtime === "number") {
+        if (typeof mtime === 'number') {
           const daysSinceModified = (Date.now() - mtime) / (1000 * 60 * 60 * 24);
           const decayDays = this.config.recencyDecayDays || 30;
 
           // Linear decay: full boost at 0 days, no boost after decayDays
-          const recencyScore = Math.max(0, 1 - (daysSinceModified / decayDays));
+          const recencyScore = Math.max(0, 1 - daysSinceModified / decayDays);
           score += recencyScore * this.config.recencyBoost;
         }
       }
@@ -171,48 +176,57 @@ export class HybridSearch {
 
   formatResults(results) {
     if (results.length === 0) {
-      return "No matching code found for your query.";
+      return 'No matching code found for your query.';
     }
 
-    return results.map((r, idx) => {
-      const relPath = path.relative(this.config.searchDirectory, r.file);
-      return `## Result ${idx + 1} (Relevance: ${(r.score * 100).toFixed(1)}%)\n` +
-             `**File:** \`${relPath}\`\n` +
-             `**Lines:** ${r.startLine}-${r.endLine}\n\n` +
-             "```" + path.extname(r.file).slice(1) + "\n" +
-             r.content + "\n" +
-             "```\n";
-    }).join("\n");
+    return results
+      .map((r, idx) => {
+        const relPath = path.relative(this.config.searchDirectory, r.file);
+        return (
+          `## Result ${idx + 1} (Relevance: ${(r.score * 100).toFixed(1)}%)\n` +
+          `**File:** \`${relPath}\`\n` +
+          `**Lines:** ${r.startLine}-${r.endLine}\n\n` +
+          '```' +
+          path.extname(r.file).slice(1) +
+          '\n' +
+          r.content +
+          '\n' +
+          '```\n'
+        );
+      })
+      .join('\n');
   }
 }
 
 // MCP Tool definition for this feature
 export function getToolDefinition(config) {
   return {
-    name: "a_semantic_search",
-    description: "Performs intelligent hybrid code search combining semantic understanding with exact text matching. Ideal for finding code by meaning (e.g., 'authentication logic', 'database queries') even with typos or variations. Returns the most relevant code snippets with file locations and line numbers.",
+    name: 'a_semantic_search',
+    description:
+      "Performs intelligent hybrid code search combining semantic understanding with exact text matching. Ideal for finding code by meaning (e.g., 'authentication logic', 'database queries') even with typos or variations. Returns the most relevant code snippets with file locations and line numbers.",
     inputSchema: {
-      type: "object",
+      type: 'object',
       properties: {
         query: {
-          type: "string",
-          description: "Search query - can be natural language (e.g., 'where do we handle user login') or specific terms"
+          type: 'string',
+          description:
+            "Search query - can be natural language (e.g., 'where do we handle user login') or specific terms",
         },
         maxResults: {
-          type: "number",
-          description: "Maximum number of results to return (default: from config)",
-          default: config.maxResults
-        }
+          type: 'number',
+          description: 'Maximum number of results to return (default: from config)',
+          default: config.maxResults,
+        },
       },
-      required: ["query"]
+      required: ['query'],
     },
     annotations: {
-      title: "Semantic Code Search",
+      title: 'Semantic Code Search',
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
-      openWorldHint: false
-    }
+      openWorldHint: false,
+    },
   };
 }
 
@@ -225,13 +239,13 @@ export async function handleToolCall(request, hybridSearch) {
 
   if (message) {
     return {
-      content: [{ type: "text", text: message }]
+      content: [{ type: 'text', text: message }],
     };
   }
 
   const formattedText = hybridSearch.formatResults(results);
 
   return {
-    content: [{ type: "text", text: formattedText }]
+    content: [{ type: 'text', text: formattedText }],
   };
 }

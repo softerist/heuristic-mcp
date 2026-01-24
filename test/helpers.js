@@ -10,7 +10,6 @@ import { CacheClearer } from '../features/clear-cache.js';
 import { HybridSearch } from '../features/hybrid-search.js';
 import { pipeline } from '@xenova/transformers';
 import fs from 'fs/promises';
-import path from 'path';
 
 // Cached embedder instance (shared across tests for speed)
 let sharedEmbedder = null;
@@ -62,10 +61,10 @@ function normalizeVector(vector) {
 function createMockEmbedder({ dimensions = DEFAULT_MOCK_DIMENSIONS } = {}) {
   return async (text, options = {}) => {
     const vector = new Float32Array(dimensions);
-    const tokens = String(text ?? "")
+    const tokens = String(text ?? '')
       .toLowerCase()
       .split(/[^a-z0-9_]+/g)
-      .filter(token => token.length > 1);
+      .filter((token) => token.length > 1);
 
     for (const token of tokens) {
       const index = hashToken(token) % dimensions;
@@ -112,7 +111,7 @@ export async function createTestFixtures(options = {}) {
     cache,
     indexer,
     cacheClearer,
-    hybridSearch
+    hybridSearch,
   };
 }
 
@@ -151,8 +150,8 @@ export function createMockRequest(toolName, args = {}) {
   return {
     params: {
       name: toolName,
-      arguments: args
-    }
+      arguments: args,
+    },
   };
 }
 
@@ -167,7 +166,7 @@ export async function waitFor(condition, timeout = 5000, interval = 100) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     if (await condition()) return true;
-    await new Promise(resolve => setTimeout(resolve, interval));
+    await new Promise((resolve) => setTimeout(resolve, interval));
   }
   return false;
 }

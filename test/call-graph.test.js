@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { extractCallData, extractDefinitions, extractCalls, buildCallGraph, getRelatedFiles } from '../lib/call-graph.js';
+import {
+  extractCallData,
+  extractDefinitions,
+  extractCalls,
+  buildCallGraph,
+  getRelatedFiles,
+} from '../lib/call-graph.js';
 
 describe('Call Graph Extractor', () => {
   describe('extractDefinitions', () => {
@@ -52,6 +58,48 @@ describe('Call Graph Extractor', () => {
       expect(defs).toContain('main');
       expect(defs).toContain('Start');
     });
+
+    it('should extract Rust function declarations', () => {
+      const content = `
+        fn main() {}
+        impl Server {
+          fn start() {}
+        }
+      `;
+      const defs = extractDefinitions(content, 'test.rs');
+      expect(defs).toContain('main');
+      expect(defs).toContain('Server');
+      expect(defs).toContain('start');
+    });
+
+    it('should extract Java function declarations', () => {
+      const content = `
+        class Main {
+          public static void main(String[] args) {}
+        }
+      `;
+      const defs = extractDefinitions(content, 'test.java');
+      expect(defs).toContain('Main');
+      expect(defs).toContain('main');
+    });
+
+    it('should extract JavaScript function declarations from jsx', () => {
+      const content = `
+        function foo() {}
+        const bar = () => {};
+      `;
+      const defs = extractDefinitions(content, 'test.jsx');
+      expect(defs).toContain('foo');
+      expect(defs).toContain('bar');
+    });
+
+    it('should default to JavaScript patterns for unknown extensions', () => {
+      const content = `
+        function defaulted() {}
+      `;
+      const defs = extractDefinitions(content, 'notes.txt');
+      expect(defs).toContain('defaulted');
+    });
   });
 
   describe('extractCalls', () => {
@@ -84,11 +132,25 @@ describe('Call Graph Extractor', () => {
     it('should not extract calls from strings', () => {
       const content = `
         const str = "someFunction()";
-        const template = \`anotherFunction()\`;
+        const template = 
       `;
       const calls = extractCalls(content, 'test.js');
       expect(calls).not.toContain('someFunction');
       expect(calls).not.toContain('anotherFunction');
+    });
+
+    it('should ignore Python comments and docstrings', () => {
+      const content = `
+        def foo():
+            """docstring call inDocstring()"""
+            bar()
+            # commentCall()
+            return
+      `;
+      const calls = extractCalls(content, 'test.py');
+      expect(calls).toContain('bar');
+      expect(calls).not.toContain('inDocstring');
+      expect(calls).not.toContain('commentCall');
     });
   });
 
@@ -112,7 +174,7 @@ describe('Call Graph Extractor', () => {
       const fileData = new Map([
         ['/path/a.js', { definitions: ['funcA'], calls: ['funcB'] }],
         ['/path/b.js', { definitions: ['funcB'], calls: ['funcC'] }],
-        ['/path/c.js', { definitions: ['funcC'], calls: [] }]
+        ['/path/c.js', { definitions: ['funcC'], calls: [] }],
       ]);
 
       const graph = buildCallGraph(fileData);
@@ -128,13 +190,35 @@ describe('Call Graph Extractor', () => {
     it('should find callers and callees', () => {
       const fileData = new Map([
         ['/path/a.js', { definitions: ['funcA'], calls: ['funcB'] }],
-        ['/path/b.js', { definitions: ['funcB'], calls: [] }]
+        ['/path/b.js', { definitions: ['funcB'], calls: [] }],
       ]);
 
       const graph = buildCallGraph(fileData);
       const related = getRelatedFiles(graph, ['funcB'], 1);
 
       // funcB is defined in b.js and called by a.js
+      expect(related.has('/path/a.js')).toBe(true);
+      expect(related.has('/path/b.js')).toBe(true);
+    });
+
+    it('should stop immediately when maxHops is negative', () => {
+      const graph = buildCallGraph(
+        new Map([['/path/a.js', { definitions: ['funcA'], calls: ['funcB'] }]])
+      );
+
+      const related = getRelatedFiles(graph, ['funcB'], -1);
+
+      expect(related.size).toBe(0);
+    });
+
+    it('should handle missing fileCalls entries on deeper hops', () => {
+      const defines = new Map([['funcA', ['/path/a.js']]]);
+      const calledBy = new Map([['funcA', ['/path/b.js']]]);
+      const fileCalls = new Map([['/path/a.js', ['funcA']]]);
+      const graph = { defines, calledBy, fileCalls };
+
+      const related = getRelatedFiles(graph, ['funcA'], 2);
+
       expect(related.has('/path/a.js')).toBe(true);
       expect(related.has('/path/b.js')).toBe(true);
     });

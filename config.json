@@ -1,210 +1,462 @@
 {
   "searchDirectory": ".",
   "fileExtensions": [
-    "js", "ts", "jsx", "tsx", "mjs", "cjs", "mts", "cts", "mjsx", "cjsx",
+    "js",
+    "ts",
+    "jsx",
+    "tsx",
+    "mjs",
+    "cjs",
+    "mts",
+    "cts",
+    "mjsx",
+    "cjsx",
 
-    "css", "scss", "sass", "less", "styl", "stylus", "postcss",
+    "css",
+    "scss",
+    "sass",
+    "less",
+    "styl",
+    "stylus",
+    "postcss",
 
-    "html", "htm", "xml", "svg", "xhtml", "vue", "svelte", "astro", "wxml", "wxs",
+    "html",
+    "htm",
+    "xml",
+    "svg",
+    "xhtml",
+    "vue",
+    "svelte",
+    "astro",
+    "wxml",
+    "wxs",
 
-    "py", "pyw", "pyx", "pxd", "pxi", "ipynb",
+    "py",
+    "pyw",
+    "pyx",
+    "pxd",
+    "pxi",
+    "ipynb",
 
-    "java", "kt", "kts", "groovy", "gvy", "gradle", "j", "class",
+    "java",
+    "kt",
+    "kts",
+    "groovy",
+    "gvy",
+    "gradle",
+    "j",
+    "class",
 
-    "c", "cpp", "cc", "cxx", "h", "hpp", "hxx", "h++", "m", "mm", "objc", "metal", "cu", "cuh",
+    "c",
+    "cpp",
+    "cc",
+    "cxx",
+    "h",
+    "hpp",
+    "hxx",
+    "h++",
+    "m",
+    "mm",
+    "objc",
+    "metal",
+    "cu",
+    "cuh",
 
-    "cs", "csx", "vb", "vbs", "vba", "fs", "fsx", "fsi",
+    "cs",
+    "csx",
+    "vb",
+    "vbs",
+    "vba",
+    "fs",
+    "fsx",
+    "fsi",
 
-    "go", "rs", "rlib",
+    "go",
+    "rs",
+    "rlib",
 
-    "rb", "erb", "rake", "gemspec",
+    "rb",
+    "erb",
+    "rake",
+    "gemspec",
 
-    "php", "phtml", "php3", "php4", "php5", "phps",
+    "php",
+    "phtml",
+    "php3",
+    "php4",
+    "php5",
+    "phps",
 
     "swift",
 
-    "sh", "bash", "zsh", "fish", "ksh", "csh", "tcsh", "bat", "cmd", "ps1", "psm1", "psd1",
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
+    "ksh",
+    "csh",
+    "tcsh",
+    "bat",
+    "cmd",
+    "ps1",
+    "psm1",
+    "psd1",
 
-    "json", "json5", "jsonc", "yaml", "yml", "toml", "ini", "cfg", "conf", "properties", "env",
-    "dhall", "jsonnet", "cue", "kdl",
+    "json",
+    "json5",
+    "jsonc",
+    "yaml",
+    "yml",
+    "toml",
+    "ini",
+    "cfg",
+    "conf",
+    "properties",
+    "env",
+    "dhall",
+    "jsonnet",
+    "cue",
+    "kdl",
 
-    "sql", "pgsql", "mysql", "sqlite", "sqlpl",
+    "sql",
+    "pgsql",
+    "mysql",
+    "sqlite",
+    "sqlpl",
 
-    "md", "markdown", "mdx", "txt", "rst", "adoc", "asciidoc", "tex", "latex", "sty",
+    "md",
+    "markdown",
+    "mdx",
+    "txt",
+    "rst",
+    "adoc",
+    "asciidoc",
+    "tex",
+    "latex",
+    "sty",
 
-    "r", "rmd", "rdata", "rds", "rda", "jl",
+    "r",
+    "rmd",
+    "rdata",
+    "rds",
+    "rda",
+    "jl",
 
     "lua",
 
-    "pl", "pm", "t", "pl6", "pm6",
+    "pl",
+    "pm",
+    "t",
+    "pl6",
+    "pm6",
 
-    "clj", "cljs", "cljc", "edn",
+    "clj",
+    "cljs",
+    "cljc",
+    "edn",
 
-    "scala", "sbt",
+    "scala",
+    "sbt",
 
-    "dart", "drt",
+    "dart",
+    "drt",
 
-    "el", "elc", "lisp", "lsp", "scm", "ss",
+    "el",
+    "elc",
+    "lisp",
+    "lsp",
+    "scm",
+    "ss",
 
-    "erl", "hrl", "ex", "exs",
+    "erl",
+    "hrl",
+    "ex",
+    "exs",
 
-    "hs", "lhs",
+    "hs",
+    "lhs",
 
-    "ml", "mli",
+    "ml",
+    "mli",
 
-    "v", "vh", "sv", "svh", "vhd", "vhdl",
+    "v",
+    "vh",
+    "sv",
+    "svh",
+    "vhd",
+    "vhdl",
 
-    "coffee", "litcoffee",
+    "coffee",
+    "litcoffee",
 
-    "pug", "jade", "handlebars", "hbs", "mustache", "ejs", "njk", "liquid",
-    "jinja", "jinja2", "j2", "twig", "razor", "cshtml", "asp", "aspx", "jsp", "jspx",
-    "haml", "slim", "rhtml", "blade", "webc", "marko",
+    "pug",
+    "jade",
+    "handlebars",
+    "hbs",
+    "mustache",
+    "ejs",
+    "njk",
+    "liquid",
+    "jinja",
+    "jinja2",
+    "j2",
+    "twig",
+    "razor",
+    "cshtml",
+    "asp",
+    "aspx",
+    "jsp",
+    "jspx",
+    "haml",
+    "slim",
+    "rhtml",
+    "blade",
+    "webc",
+    "marko",
 
-    "proto", "graphql", "gql",
+    "proto",
+    "graphql",
+    "gql",
 
-    "sol", "vy",
+    "sol",
+    "vy",
 
-    "tf", "tfvars", "hcl",
+    "tf",
+    "tfvars",
+    "hcl",
 
-    "nix", "nixos",
+    "nix",
+    "nixos",
 
-    "wasm", "wat", "asm", "s",
+    "wasm",
+    "wat",
+    "asm",
+    "s",
 
-    "vim", "vimrc", "elm",
+    "vim",
+    "vimrc",
+    "elm",
 
-    "pas", "pp", "p",
+    "pas",
+    "pp",
+    "p",
 
-    "ada", "adb", "ads",
+    "ada",
+    "adb",
+    "ads",
 
-    "f", "f77", "f90", "f95", "f03", "f08", "for", "fortran",
+    "f",
+    "f77",
+    "f90",
+    "f95",
+    "f03",
+    "f08",
+    "for",
+    "fortran",
 
-    "d", "di",
+    "d",
+    "di",
 
-    "nim", "nimble",
+    "nim",
+    "nimble",
 
-    "cr", "crystal", "ecr",
+    "cr",
+    "crystal",
+    "ecr",
 
-    "zig", "odin",
+    "zig",
+    "odin",
 
-    "glsl", "hlsl", "wgsl",
+    "glsl",
+    "hlsl",
+    "wgsl",
 
-    "prisma", "bicep", "pkl", "ron",
+    "prisma",
+    "bicep",
+    "pkl",
+    "ron",
 
-    "dockerfile", "containerfile", "mk", "cmake", "cmake.in",
+    "dockerfile",
+    "containerfile",
+    "mk",
+    "cmake",
+    "cmake.in",
 
-    "diff", "patch",
+    "diff",
+    "patch",
 
-    "dot", "gv", "graphviz",
+    "dot",
+    "gv",
+    "graphviz",
 
-    "awk", "gawk",
+    "awk",
+    "gawk",
 
-    "tcl", "exp",
+    "tcl",
+    "exp",
 
-    "ps", "eps",
+    "ps",
+    "eps",
 
-    "mat", "mata",
+    "mat",
+    "mata",
 
-    "abap", "acds", "asa",
+    "abap",
+    "acds",
+    "asa",
 
-    "applescript", "scpt",
+    "applescript",
+    "scpt",
 
     "au3",
 
-    "bas", "bi", "bm", "cls", "frm", "ctl", "blitzbasic", "bb",
+    "bas",
+    "bi",
+    "bm",
+    "cls",
+    "frm",
+    "ctl",
+    "blitzbasic",
+    "bb",
 
     "chpl",
 
-    "cbl", "cob", "cpy", "cobol",
+    "cbl",
+    "cob",
+    "cpy",
+    "cobol",
 
-    "cfm", "cfc",
+    "cfm",
+    "cfc",
 
     "cl",
 
     "coq",
 
-    "dylan", "dyl", "intr",
+    "dylan",
+    "dyl",
+    "intr",
 
-    "e", "ecl", "eclxml",
+    "e",
+    "ecl",
+    "eclxml",
 
     "eiffel",
 
-    "fancy", "fy",
+    "fancy",
+    "fy",
 
     "factor",
 
-    "forth", "fth", "4th",
+    "forth",
+    "fth",
+    "4th",
 
-    "frege", "fr",
+    "frege",
+    "fr",
 
     "gml",
 
-    "gnuplot", "gp", "gpi",
+    "gnuplot",
+    "gp",
+    "gpi",
 
-    "gd", "tres", "tscn",
+    "gd",
+    "tres",
+    "tscn",
 
     "golo",
 
-    "gosu", "gs", "gst", "gsx",
+    "gosu",
+    "gs",
+    "gst",
+    "gsx",
 
-    "hack", "hh",
+    "hack",
+    "hh",
 
-    "haxe", "hx", "hxsl",
+    "haxe",
+    "hx",
+    "hxsl",
 
     "hy",
 
-    "idr", "lidr",
+    "idr",
+    "lidr",
 
     "io",
 
-    "ioke", "ik",
+    "ioke",
+    "ik",
 
-    "isabelle", "thy",
+    "isabelle",
+    "thy",
 
     "ijs",
 
-    "jflex", "flex",
+    "jflex",
+    "flex",
 
-    "labview", "lvproj",
+    "labview",
+    "lvproj",
 
     "lfe",
 
     "livecode",
 
-    "livescript", "ls",
+    "livescript",
+    "ls",
 
-    "llvm", "ll",
+    "llvm",
+    "ll",
 
-    "logos", "xm", "xmi",
+    "logos",
+    "xm",
+    "xmi",
 
-    "logtalk", "lgt",
+    "logtalk",
+    "lgt",
 
     "lookml",
 
-    "mako", "mao",
+    "mako",
+    "mao",
 
-    "mathematica", "nb", "cdf", "nbp", "ma",
+    "mathematica",
+    "nb",
+    "cdf",
+    "nbp",
+    "ma",
 
     "matlab",
 
-    "maxscript", "ms",
+    "maxscript",
+    "ms",
 
     "mercury",
 
-    "meson", "wrap",
+    "meson",
+    "wrap",
 
-    "mirah", "druby",
+    "mirah",
+    "druby",
 
-    "modelica", "mo",
+    "modelica",
+    "mo",
 
-    "modula2", "mod",
+    "modula2",
+    "mod",
 
-    "monkey", "monkey2",
+    "monkey",
+    "monkey2",
 
     "nanomsg",
 
-    "nesc", "nc",
+    "nesc",
+    "nc",
 
-    "nginx", "nginxconf",
+    "nginx",
+    "nginxconf",
 
     "nit",
 
@@ -212,7 +464,8 @@
 
     "objdump",
 
-    "omgrofl", "lol",
+    "omgrofl",
+    "lol",
 
     "ooc",
 
@@ -224,105 +477,157 @@
 
     "pan",
 
-    "papyrus", "psc",
+    "papyrus",
+    "psc",
 
-    "parrot", "pasm", "pir",
+    "parrot",
+    "pasm",
+    "pir",
 
-    "pawn", "pwn", "inc",
+    "pawn",
+    "pwn",
+    "inc",
 
     "pig",
 
     "pike",
 
-    "pogoscript", "pogo",
+    "pogoscript",
+    "pogo",
 
     "pony",
 
     "postscript",
 
-    "povray", "pov",
+    "povray",
+    "pov",
 
-    "powerbuilder", "pbl", "srw",
+    "powerbuilder",
+    "pbl",
+    "srw",
 
-    "processing", "pde",
+    "processing",
+    "pde",
 
-    "prolog", "pro",
+    "prolog",
+    "pro",
 
-    "propeller", "spin",
+    "propeller",
+    "spin",
 
     "puppet",
 
-    "purebasic", "pb", "pbi",
+    "purebasic",
+    "pb",
+    "pbi",
 
-    "purescript", "purs",
+    "purescript",
+    "purs",
 
-    "q", "k",
+    "q",
+    "k",
 
-    "qmake", "pri",
+    "qmake",
+    "pri",
 
     "qml",
 
-    "racket", "rkt", "rktl", "rktd", "scrbl",
+    "racket",
+    "rkt",
+    "rktl",
+    "rktd",
+    "scrbl",
 
-    "ragel", "rl",
+    "ragel",
+    "rl",
 
     "raml",
 
     "rdoc",
 
-    "realbasic", "rbbas", "rbfrm", "rbmnu", "rbres", "rbtbar", "rbuistate",
+    "realbasic",
+    "rbbas",
+    "rbfrm",
+    "rbmnu",
+    "rbres",
+    "rbtbar",
+    "rbuistate",
 
-    "rebol", "r2", "r3",
+    "rebol",
+    "r2",
+    "r3",
 
-    "red", "reds",
+    "red",
+    "reds",
 
-    "redcode", "cw",
+    "redcode",
+    "cw",
 
-    "renpy", "rpy",
+    "renpy",
+    "rpy",
 
-    "rexx", "pprx", "rex",
+    "rexx",
+    "pprx",
+    "rex",
 
-    "roboconf", "graph", "instances",
+    "roboconf",
+    "graph",
+    "instances",
 
     "robot",
 
     "rg",
 
-    "sage", "sagews",
+    "sage",
+    "sagews",
 
-    "saltstack", "sls",
+    "saltstack",
+    "sls",
 
     "sas",
 
     "scheme",
 
-    "scilab", "sci", "sce",
+    "scilab",
+    "sci",
+    "sce",
 
     "self",
 
     "shen",
 
-    "slash", "sl",
+    "slash",
+    "sl",
 
-    "smalltalk", "st",
+    "smalltalk",
+    "st",
 
-    "smarty", "tpl",
+    "smarty",
+    "tpl",
 
-    "sourcepawn", "sp",
+    "sourcepawn",
+    "sp",
 
-    "sparql", "rq",
+    "sparql",
+    "rq",
 
-    "splunk", "spl",
+    "splunk",
+    "spl",
 
     "sqf",
 
-    "squirrel", "nut",
+    "squirrel",
+    "nut",
 
     "stan",
 
-    "stata", "do", "ado",
+    "stata",
+    "do",
+    "ado",
 
-    "supercollider", "sc", "scd",
+    "supercollider",
+    "sc",
+    "scd",
 
     "systemverilog",
 
@@ -338,17 +643,22 @@
 
     "tl",
 
-    "turing", "tu",
+    "turing",
+    "tu",
 
     "txl",
 
-    "unifiedparallelc", "upc",
+    "unifiedparallelc",
+    "upc",
 
-    "unity3d", "shader",
+    "unity3d",
+    "shader",
 
-    "unrealscript", "uc",
+    "unrealscript",
+    "uc",
 
-    "vala", "vapi",
+    "vala",
+    "vapi",
 
     "vcl",
 
@@ -362,42 +672,71 @@
 
     "xc",
 
-    "xojo_code", "xojo_menu", "xojo_report", "xojo_script", "xojo_toolbar", "xojo_window",
+    "xojo_code",
+    "xojo_menu",
+    "xojo_report",
+    "xojo_script",
+    "xojo_toolbar",
+    "xojo_window",
 
-    "xquery", "xq", "xql", "xqm", "xqy",
+    "xquery",
+    "xq",
+    "xql",
+    "xqm",
+    "xqy",
 
     "xs",
 
-    "xslt", "xsl",
+    "xslt",
+    "xsl",
 
     "xtend",
 
-    "yacc", "y",
+    "yacc",
+    "y",
 
-    "yara", "yar",
+    "yara",
+    "yar",
 
-    "zephir", "zep",
+    "zephir",
+    "zep",
 
     "zimpl",
 
-    "webmanifest", "manifest",
+    "webmanifest",
+    "manifest",
 
-    "lock", "sum", "log",
+    "lock",
+    "sum",
+    "log",
 
-    "csv", "tsv",
+    "csv",
+    "tsv",
 
-    "xls", "xlsx", "xlsm", "xlsb",
-    "doc", "docx", "pdf", "ppt", "pptx",
+    "xls",
+    "xlsx",
+    "xlsm",
+    "xlsb",
+    "doc",
+    "docx",
+    "pdf",
+    "ppt",
+    "pptx",
     "rtf",
-    "odt", "ods", "odp",
+    "odt",
+    "ods",
+    "odp",
     "ics",
     "vcf",
-    "idx", "sub",
+    "idx",
+    "sub",
     "srt",
-    "ass", "ssa",
+    "ass",
+    "ssa",
     "avs",
     "d2v",
-    "m3u", "m3u8",
+    "m3u",
+    "m3u8",
     "pls",
     "nfo",
     "sfv",
@@ -405,8 +744,15 @@
     "torrent",
     "magnet",
     "dockerignore",
-    "babelrc", "eslintrc", "prettierrc", "stylelintrc",
-    "gitignore", "gitattributes", "editorconfig", "npmrc", "yarnrc"
+    "babelrc",
+    "eslintrc",
+    "prettierrc",
+    "stylelintrc",
+    "gitignore",
+    "gitattributes",
+    "editorconfig",
+    "npmrc",
+    "yarnrc"
   ],
 
   "fileNames": [
@@ -484,7 +830,7 @@
     "makefile.am",
     "makefile.in"
   ],
-  
+
   "excludePatterns": [
     "**/node_modules/**",
     "**/dist/**",

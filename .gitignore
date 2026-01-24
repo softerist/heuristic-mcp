@@ -4,3 +4,5 @@ node_modules/
 *.log
 .cache/
 .smart-coding-cache/
+coverage/
+.vitest-coverage/
