@@ -51,6 +51,13 @@ let originalConsole = {
   error: console.error,
 };
 
+function enableStderrOnlyLogging() {
+  // Keep MCP stdout clean by routing all console output to stderr.
+  console.log = (...args) => originalConsole.error(...args);
+  console.warn = (...args) => originalConsole.error(...args);
+  console.error = (...args) => originalConsole.error(...args);
+}
+
 function formatMb(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
@@ -591,8 +598,24 @@ export async function main(argv = process.argv) {
     process.exit(1);
   }
 
+  const isServerMode = !(
+    args.includes('--status') ||
+    args.includes('--clear-cache') ||
+    args.includes('--logs') ||
+    args.includes('--start') ||
+    args.includes('--stop') ||
+    args.includes('--register')
+  );
+
+  if (isServerMode) {
+    enableStderrOnlyLogging();
+  }
+
   const { startBackgroundTasks } = await initialize(workspaceDir);
   await setupPidFile();
+
+  // Load cache before connecting to ensure tools are ready
+  await startBackgroundTasks();
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -600,7 +623,6 @@ export async function main(argv = process.argv) {
   console.log('[Server] MCP transport connected.');
   console.log('[Server] Heuristic MCP server started.');
   console.log('[Server] MCP server is now fully ready to accept requests.');
-  startBackgroundTasks();
 }
 
 // Graceful shutdown

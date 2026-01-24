@@ -66,6 +66,7 @@ export class HybridSearch {
     }
 
     // Generate query embedding
+    console.error(`[Search] Query: "${query}"`);
     const queryEmbed = await this.embedder(query, {
       pooling: 'mean',
       normalize: true,
@@ -80,6 +81,7 @@ export class HybridSearch {
       const annLabels = await this.cache.queryAnn(queryVectorTyped, candidateCount);
       if (annLabels && annLabels.length >= maxResults) {
         usedAnn = true;
+        console.error(`[Search] Using ANN index (${annLabels.length} candidates)`);
         const seen = new Set();
         candidates = annLabels
           .map((index) => {
@@ -89,6 +91,10 @@ export class HybridSearch {
           })
           .filter(Boolean);
       }
+    }
+
+    if (!usedAnn) {
+      console.error(`[Search] Using full scan (${vectorStore.length} chunks)`);
     }
 
     if (usedAnn && candidates.length < maxResults) {
@@ -217,6 +223,12 @@ export class HybridSearch {
 
     // Get top results
     const results = scoredChunks.slice(0, maxResults);
+
+    if (results.length > 0) {
+      console.error(`[Search] Found ${results.length} results. Top score: ${results[0].score.toFixed(4)}`);
+    } else {
+      console.error('[Search] No results found.');
+    }
 
     return { results, message: null };
   }
