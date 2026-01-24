@@ -343,6 +343,62 @@ describe('HybridSearch', () => {
       expect(files).toContain('c.js');
     });
 
+    it('should add exact matches missed by ANN and avoid duplicates (lines 110, 113 coverage)', async () => {
+      // Setup:
+      // - 2 chunks in store, both are exact matches.
+      // - ANN returns only the first one.
+      // - maxResults = 2.
+      //
+      // Expected flow:
+      // 1. ANN returns chunk 0. candidates = [chunk0].
+      // 2. exactMatchCount = 1.
+      // 3. exactMatchCount (1) < maxResults (2), so we enter the fallback block (line 110).
+      // 4. We iterate over vectorStore.
+      //    - Chunk 0 is already in 'seen', so we skip it (line 113 coverage).
+      //    - Chunk 1 is not in 'seen', so we add it.
+      const vectorStore = [
+        {
+          file: 'a.js',
+          content: 'target match',
+          vector: [1, 0],
+          startLine: 1,
+          endLine: 1,
+        },
+        {
+          file: 'b.js',
+          content: 'target match',
+          vector: [0, 1],
+          startLine: 1,
+          endLine: 1,
+        },
+      ];
+      const cache = {
+        getVectorStore: () => vectorStore,
+        queryAnn: async () => [0], // ANN only finds the first one
+        getRelatedFiles: async () => new Map(),
+      };
+      const config = {
+        annEnabled: true,
+        annMinCandidates: 0,
+        annMaxCandidates: 10,
+        annCandidateMultiplier: 1,
+        semanticWeight: 1,
+        exactMatchBoost: 1,
+        recencyBoost: 0,
+        callGraphEnabled: false,
+        callGraphBoost: 0,
+        searchDirectory: process.cwd(),
+      };
+      const embedder = async () => ({ data: new Float32Array([1, 0]) });
+      const hybrid = new HybridSearch(embedder, cache, config);
+
+      const { results } = await hybrid.search('target', 2);
+
+      expect(results).toHaveLength(2);
+      const files = results.map((r) => r.file).sort();
+      expect(files).toEqual(['a.js', 'b.js']);
+    });
+
     it('should add exact-match chunks when ANN misses them', async () => {
       const vectorStore = [
         {

@@ -97,20 +97,27 @@ export class HybridSearch {
     }
 
     const lowerQuery = query.toLowerCase();
-    if (usedAnn) {
-      const hasExactInCandidates = candidates.some(
-        (chunk) => chunk?.content?.toLowerCase().includes(lowerQuery),
-      );
+    if (usedAnn && lowerQuery.length > 1) {
+      let exactMatchCount = 0;
+      for (const chunk of candidates) {
+        if (chunk.content?.toLowerCase().includes(lowerQuery)) {
+          exactMatchCount++;
+        }
+      }
 
-      if (!hasExactInCandidates && lowerQuery.length > 1) {
+      if (exactMatchCount < maxResults) {
         const seen = new Set(
-          candidates.map((chunk) => `${chunk.file}:${chunk.startLine}:${chunk.endLine}`),
+          candidates.map((chunk) => `${chunk.file}:${chunk.startLine}:${chunk.endLine}`)
         );
         for (const chunk of vectorStore) {
-          if (!chunk?.content) continue;
-          if (!chunk.content.toLowerCase().includes(lowerQuery)) continue;
+          const content = chunk.content?.toLowerCase() || '';
+          if (!content.includes(lowerQuery)) continue;
+          
           const key = `${chunk.file}:${chunk.startLine}:${chunk.endLine}`;
-          if (seen.has(key)) continue;
+          if (seen.has(key)) {
+            continue;
+          }
+          
           seen.add(key);
           candidates.push(chunk);
         }
@@ -127,11 +134,11 @@ export class HybridSearch {
       let score = dotSimilarity(queryVector, chunk.vector) * this.config.semanticWeight;
 
       // Exact match boost
-      const lowerContent = chunk.content.toLowerCase();
+      const lowerContent = chunk.content?.toLowerCase() || '';
 
-      if (lowerContent.includes(lowerQuery)) {
+      if (lowerContent && lowerContent.includes(lowerQuery)) {
         score += this.config.exactMatchBoost;
-      } else {
+      } else if (lowerContent) {
         // Partial word matching
         const queryWords = lowerQuery.split(/\s+/);
         const matchedWords = queryWords.filter(

@@ -55,20 +55,18 @@ describe('embedding-worker', () => {
       batchId: 'batch-1',
     });
 
-    expect(parentPort.postMessage).toHaveBeenCalledWith({
-      type: 'results',
-      results: [
-        {
-          file: 'a.js',
-          startLine: 1,
-          endLine: 2,
-          content: 'code',
-          vector: [1, 2],
-          success: true,
-        },
-      ],
-      batchId: 'batch-1',
-    });
+    const resultsCall = parentPort.postMessage.mock.calls.find(
+      (call) => call[0]?.type === 'results'
+    );
+    expect(resultsCall).toBeDefined();
+    const [payload, transferList] = resultsCall;
+    expect(payload.batchId).toBe('batch-1');
+    expect(payload.done).toBe(true);
+    expect(payload.results).toHaveLength(1);
+    const result = payload.results[0];
+    expect(result.vector).toBeInstanceOf(Float32Array);
+    expect(Array.from(result.vector)).toEqual([1, 2]);
+    expect(transferList).toEqual([result.vector.buffer]);
   });
 
   it('captures embedding errors per chunk', async () => {

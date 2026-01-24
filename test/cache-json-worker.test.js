@@ -140,4 +140,51 @@ describe('EmbeddingsCache JSON worker parsing', () => {
 
     consoleSpy.mockRestore();
   });
+
+  it('ignores subsequent events after settlement (covers settled guard)', async () => {
+    // This targets the "if (settled) return;" line in the finish function.
+    // We manually invoke the message handler twice to force a second finish call.
+    const Worker = vi.fn(function () {
+      const worker = {
+        once(event, handler) {
+          if (event === 'message') {
+            setImmediate(() => {
+              handler({ ok: true, data: [] });
+              handler({ ok: false, error: 'late' });
+            });
+          }
+          return worker;
+        },
+        removeAllListeners: vi.fn(),
+        terminate: vi.fn(() => Promise.resolve()),
+      };
+      return worker;
+    });
+
+    const fsMock = {
+      mkdir: vi.fn().mockResolvedValue(undefined),
+      stat: vi.fn().mockResolvedValue({ size: 6 * 1024 * 1024 }),
+      readFile: vi.fn((filePath) => {
+        if (filePath.endsWith('meta.json')) {
+          return Promise.resolve(
+            JSON.stringify({ version: 1, embeddingModel: baseConfig.embeddingModel })
+          );
+        }
+        return Promise.reject(new Error('missing'));
+      }),
+    };
+
+    vi.doMock('worker_threads', () => ({ Worker }));
+    vi.doMock('fs/promises', () => ({
+      default: fsMock,
+      ...fsMock,
+    }));
+
+    const { EmbeddingsCache } = await import('../lib/cache.js');
+    const cache = new EmbeddingsCache(baseConfig);
+    // Should not throw or log an error about double-resolution
+    await cache.load();
+    
+    expect(Worker).toHaveBeenCalled();
+  });
 });

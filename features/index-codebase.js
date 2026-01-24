@@ -48,6 +48,13 @@ function normalizePath(filePath) {
   return filePath.split(path.sep).join('/');
 }
 
+function toFloat32Array(vector) {
+  if (vector instanceof Float32Array) {
+    return vector;
+  }
+  return Float32Array.from(vector);
+}
+
 function buildExcludeMatchers(patterns) {
   return [...new Set(patterns)].filter(Boolean).map((pattern) => ({
     matchBase: !pattern.includes('/'),
@@ -85,6 +92,8 @@ export class CodebaseIndexer {
     this.workers = [];
     this.workerReady = [];
     this.isIndexing = false;
+    this.processingWatchEvents = false;
+    this.pendingWatchEvents = new Map();
     this.excludeMatchers = buildExcludeMatchers(this.config.excludePatterns || []);
   }
 
@@ -251,10 +260,12 @@ export class CodebaseIndexer {
       const promise = new Promise((resolve, _reject) => {
         const worker = this.workers[i];
         const batchId = `batch-${i}-${Date.now()}`;
+        const batchResults = [];
 
         // Timeout handler
-        const timeout = setTimeout(() => {
+        let timeout = setTimeout(() => {
           worker.off('message', handler);
+          worker.off('error', errorHandler);
           console.error(
             `[Indexer] Worker ${i} timed out, falling back to single-threaded for this batch`
           );
@@ -262,30 +273,57 @@ export class CodebaseIndexer {
           resolve([]);
         }, WORKER_TIMEOUT);
 
+        const resetTimeout = () => {
+          clearTimeout(timeout);
+          timeout = setTimeout(() => {
+            worker.off('message', handler);
+            worker.off('error', errorHandler);
+            console.error(
+              `[Indexer] Worker ${i} timed out, falling back to single-threaded for this batch`
+            );
+            resolve([]);
+          }, WORKER_TIMEOUT);
+        };
+
+        const finalize = (results) => {
+          clearTimeout(timeout);
+          worker.off('message', handler);
+          worker.off('error', errorHandler);
+          resolve(results);
+        };
+
         const handler = (msg) => {
           if (msg.batchId === batchId) {
-            clearTimeout(timeout);
-            worker.off('message', handler);
+            resetTimeout();
             if (msg.type === 'results') {
-              resolve(msg.results);
+              if (Array.isArray(msg.results) && msg.results.length > 0) {
+                batchResults.push(...msg.results);
+              }
+              if (msg.done === false) {
+                return;
+              }
+              finalize(batchResults);
             } else if (msg.type === 'error') {
               console.error(`[Indexer] Worker ${i} error: ${msg.error}`);
-              resolve([]); // Return empty, don't reject - let fallback handle
+              finalize([]); // Return empty, don't reject - let fallback handle
             }
           }
         };
 
         // Handle worker crash
         const errorHandler = (err) => {
-          clearTimeout(timeout);
-          worker.off('message', handler);
           console.error(`[Indexer] Worker ${i} crashed: ${err.message}`);
-          resolve([]); // Return empty, don't reject
+          finalize([]); // Return empty, don't reject
         };
         worker.once('error', errorHandler);
 
         worker.on('message', handler);
-        worker.postMessage({ type: 'process', chunks: workerChunks, batchId });
+        try {
+          worker.postMessage({ type: 'process', chunks: workerChunks, batchId });
+        } catch (error) {
+          console.error(`[Indexer] Worker ${i} postMessage failed: ${error.message}`);
+          finalize([]);
+        }
       });
 
       workerPromises.push({ promise, chunks: workerChunks });
@@ -325,18 +363,18 @@ export class CodebaseIndexer {
 
     for (const chunk of chunks) {
       try {
-        const output = await this.embedder(chunk.text, {
-          pooling: 'mean',
-          normalize: true,
-        });
-        results.push({
-          file: chunk.file,
-          startLine: chunk.startLine,
-          endLine: chunk.endLine,
-          content: chunk.text,
-          vector: Array.from(output.data),
-          success: true,
-        });
+          const output = await this.embedder(chunk.text, {
+            pooling: 'mean',
+            normalize: true,
+          });
+          results.push({
+            file: chunk.file,
+            startLine: chunk.startLine,
+            endLine: chunk.endLine,
+            content: chunk.text,
+            vector: toFloat32Array(output.data),
+            success: true,
+          });
       } catch (error) {
         results.push({
           file: chunk.file,
@@ -415,7 +453,7 @@ export class CodebaseIndexer {
             startLine: chunk.startLine,
             endLine: chunk.endLine,
             content: chunk.text,
-            vector: Array.from(output.data),
+            vector: toFloat32Array(output.data),
           });
           addedChunks++;
         } catch (embeddingError) {
@@ -589,9 +627,12 @@ export class CodebaseIndexer {
   }
 
   async indexAll(force = false) {
-    if (this.isIndexing) {
+    if (this.isIndexing || this.processingWatchEvents) {
       console.error('[Indexer] Indexing already in progress, skipping concurrent request');
-      return { skipped: true, reason: 'Indexing already in progress' };
+      return {
+        skipped: true,
+        reason: 'Indexing already in progress or pending file updates are being applied',
+      };
     }
 
     this.isIndexing = true;
@@ -984,6 +1025,54 @@ export class CodebaseIndexer {
       }
       logMemory('end');
       this.isIndexing = false;
+      try {
+        await this.processPendingWatchEvents();
+      } catch (error) {
+        console.error(`[Indexer] Failed to apply queued file updates: ${error.message}`);
+      }
+    }
+  }
+
+  enqueueWatchEvent(type, filePath) {
+    const existing = this.pendingWatchEvents.get(filePath);
+    if (type === 'unlink') {
+      this.pendingWatchEvents.set(filePath, 'unlink');
+      return;
+    }
+    if (existing === 'unlink') {
+      return;
+    }
+    this.pendingWatchEvents.set(filePath, type);
+  }
+
+  async processPendingWatchEvents() {
+    if (this.processingWatchEvents || this.pendingWatchEvents.size === 0) {
+      return;
+    }
+
+    this.processingWatchEvents = true;
+    try {
+      while (this.pendingWatchEvents.size > 0) {
+        const pending = Array.from(this.pendingWatchEvents.entries());
+        this.pendingWatchEvents.clear();
+
+        for (const [filePath, type] of pending) {
+          if (this.server && this.server.hybridSearch) {
+            this.server.hybridSearch.clearFileModTime(filePath);
+          }
+
+          if (type === 'unlink') {
+            this.cache.removeFileFromStore(filePath);
+            this.cache.deleteFileHash(filePath);
+          } else {
+            await this.indexFile(filePath);
+          }
+        }
+
+        await this.cache.save();
+      }
+    } finally {
+      this.processingWatchEvents = false;
     }
   }
 
@@ -1013,6 +1102,14 @@ export class CodebaseIndexer {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.error(`[Indexer] New file detected: ${filePath}`);
 
+        if (this.isIndexing || this.processingWatchEvents) {
+          if (this.config.verbose) {
+            console.error(`[Indexer] Queued add event during indexing: ${filePath}`);
+          }
+          this.enqueueWatchEvent('add', fullPath);
+          return;
+        }
+
         // Invalidate recency cache
         if (this.server && this.server.hybridSearch) {
           this.server.hybridSearch.clearFileModTime(fullPath);
@@ -1025,6 +1122,14 @@ export class CodebaseIndexer {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.error(`[Indexer] File changed: ${filePath}`);
 
+        if (this.isIndexing || this.processingWatchEvents) {
+          if (this.config.verbose) {
+            console.error(`[Indexer] Queued change event during indexing: ${filePath}`);
+          }
+          this.enqueueWatchEvent('change', fullPath);
+          return;
+        }
+
         // Invalidate recency cache
         if (this.server && this.server.hybridSearch) {
           this.server.hybridSearch.clearFileModTime(fullPath);
@@ -1036,6 +1141,14 @@ export class CodebaseIndexer {
       .on('unlink', async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.error(`[Indexer] File deleted: ${filePath}`);
+
+        if (this.isIndexing || this.processingWatchEvents) {
+          if (this.config.verbose) {
+            console.error(`[Indexer] Queued delete event during indexing: ${filePath}`);
+          }
+          this.enqueueWatchEvent('unlink', fullPath);
+          return;
+        }
 
         // Invalidate recency cache
         if (this.server && this.server.hybridSearch) {

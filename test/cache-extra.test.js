@@ -253,4 +253,42 @@ describe('EmbeddingsCache additional coverage', () => {
       expect(built).toBeNull();
     });
   });
+
+  it('uses default error message when JSON worker fails without error details (line 38)', async () => {
+    const { EventEmitter } = await import('events');
+    const Worker = vi.fn(function () {
+      const worker = new EventEmitter();
+      setImmediate(() => {
+        worker.emit('message', { ok: false });
+      });
+      return worker;
+    });
+
+    const fsMock = {
+      stat: vi.fn().mockResolvedValue({ size: 10 * 1024 * 1024 }),
+      readFile: vi.fn().mockResolvedValue(JSON.stringify({ version: 1, embeddingModel: 'test-model' })),
+      mkdir: vi.fn().mockResolvedValue(undefined),
+    };
+
+    vi.doMock('worker_threads', () => ({ Worker }));
+    vi.doMock('fs/promises', () => ({ default: fsMock, ...fsMock }));
+
+    const { EmbeddingsCache } = await import('../lib/cache.js');
+    const cache = new EmbeddingsCache(makeConfig('/tmp'));
+    
+    await cache.load();
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('JSON worker failed'));
+  });
+
+  it('handles non-array store in setVectorStore (line 320)', async () => {
+    const { EmbeddingsCache } = await import('../lib/cache.js');
+    const cache = new EmbeddingsCache(makeConfig('/tmp'));
+    
+    cache.setVectorStore(null);
+    expect(cache.vectorStore).toBeNull();
+    
+    cache.setVectorStore({ not: 'an array' });
+    expect(cache.vectorStore).toEqual({ not: 'an array' });
+  });
 });

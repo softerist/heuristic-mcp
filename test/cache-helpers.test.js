@@ -79,6 +79,16 @@ describe('EmbeddingsCache Helper Methods', () => {
     });
   });
 
+  describe('Vector Store Helpers', () => {
+    it('normalizes vectors when setting the store', () => {
+      const store = [{ file: 'a.js', vector: [1, 2, 3] }];
+      cache.setVectorStore(store);
+
+      const [chunk] = cache.getVectorStore();
+      expect(chunk.vector).toBeInstanceOf(Float32Array);
+    });
+  });
+
   describe('Call Graph Helper Methods', () => {
     it('should manage file call data', () => {
       const file = 'test.js';

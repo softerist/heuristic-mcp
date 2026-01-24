@@ -127,4 +127,131 @@ describe('CodebaseIndexer watcher', () => {
       expect(globalThis.__heuristicWatcher).not.toBe(firstWatcher);
     });
   });
+
+  it('queues change and unlink events during active indexing', async () => {
+    await withTempDir(async (dir) => {
+      const config = {
+        fileExtensions: ['js'],
+        fileNames: [],
+        searchDirectory: dir,
+        excludePatterns: [],
+        watchFiles: true,
+        enableCache: true,
+        callGraphEnabled: false,
+        embeddingModel: 'test',
+        verbose: true,
+      };
+
+      const cache = {
+        save: vi.fn().mockResolvedValue(),
+        removeFileFromStore: vi.fn(),
+        deleteFileHash: vi.fn(),
+      };
+
+      const indexer = new CodebaseIndexer(async () => ({ data: [] }), cache, config, null);
+      indexer.indexFile = vi.fn().mockResolvedValue();
+      indexer.isIndexing = true;
+
+      const enqueueSpy = vi.spyOn(indexer, 'enqueueWatchEvent');
+
+      await indexer.setupFileWatcher();
+
+      const relPath = path.join('src', 'file.js');
+      globalThis.__heuristicWatcher.emit('add', relPath);
+      globalThis.__heuristicWatcher.emit('change', relPath);
+      globalThis.__heuristicWatcher.emit('unlink', relPath);
+      await flushPromises();
+
+      expect(enqueueSpy).toHaveBeenCalledWith('add', path.join(dir, relPath));
+      expect(enqueueSpy).toHaveBeenCalledWith('change', path.join(dir, relPath));
+      expect(enqueueSpy).toHaveBeenCalledWith('unlink', path.join(dir, relPath));
+      expect(indexer.indexFile).not.toHaveBeenCalled();
+      expect(cache.save).not.toHaveBeenCalled();
+    });
+  });
+
+  it('queues events without verbose logging when indexing', async () => {
+    await withTempDir(async (dir) => {
+      const config = {
+        fileExtensions: ['js'],
+        fileNames: [],
+        searchDirectory: dir,
+        excludePatterns: [],
+        watchFiles: true,
+        enableCache: true,
+        callGraphEnabled: false,
+        embeddingModel: 'test',
+        verbose: false,
+      };
+
+      const cache = {
+        save: vi.fn().mockResolvedValue(),
+        removeFileFromStore: vi.fn(),
+        deleteFileHash: vi.fn(),
+      };
+
+      const indexer = new CodebaseIndexer(async () => ({ data: [] }), cache, config, null);
+      indexer.indexFile = vi.fn().mockResolvedValue();
+      indexer.isIndexing = true;
+
+      const enqueueSpy = vi.spyOn(indexer, 'enqueueWatchEvent');
+
+      await indexer.setupFileWatcher();
+
+      const relPath = path.join('src', 'file.js');
+      globalThis.__heuristicWatcher.emit('add', relPath);
+      globalThis.__heuristicWatcher.emit('change', relPath);
+      globalThis.__heuristicWatcher.emit('unlink', relPath);
+      await flushPromises();
+
+      expect(enqueueSpy).toHaveBeenCalledWith('add', path.join(dir, relPath));
+      expect(enqueueSpy).toHaveBeenCalledWith('change', path.join(dir, relPath));
+      expect(enqueueSpy).toHaveBeenCalledWith('unlink', path.join(dir, relPath));
+    });
+  });
+
+  it('processes pending watch events and clears hybrid search cache', async () => {
+    await withTempDir(async (dir) => {
+      const config = {
+        fileExtensions: ['js'],
+        fileNames: [],
+        searchDirectory: dir,
+        excludePatterns: [],
+        watchFiles: true,
+        enableCache: true,
+        callGraphEnabled: false,
+        embeddingModel: 'test',
+        verbose: false,
+      };
+
+      const cache = {
+        save: vi.fn().mockResolvedValue(),
+        removeFileFromStore: vi.fn(),
+        deleteFileHash: vi.fn(),
+      };
+
+      const server = {
+        hybridSearch: {
+          clearFileModTime: vi.fn(),
+        },
+      };
+
+      const indexer = new CodebaseIndexer(async () => ({ data: [] }), cache, config, server);
+      indexer.indexFile = vi.fn().mockResolvedValue();
+
+      const changePath = path.join(dir, 'change.js');
+      const unlinkPath = path.join(dir, 'unlink.js');
+      indexer.pendingWatchEvents.set(changePath, 'change');
+      indexer.pendingWatchEvents.set(unlinkPath, 'unlink');
+
+      await indexer.processPendingWatchEvents();
+
+      expect(server.hybridSearch.clearFileModTime).toHaveBeenCalledWith(changePath);
+      expect(server.hybridSearch.clearFileModTime).toHaveBeenCalledWith(unlinkPath);
+      expect(indexer.indexFile).toHaveBeenCalledWith(changePath);
+      expect(cache.removeFileFromStore).toHaveBeenCalledWith(unlinkPath);
+      expect(cache.deleteFileHash).toHaveBeenCalledWith(unlinkPath);
+      expect(cache.save).toHaveBeenCalled();
+    });
+  });
 });

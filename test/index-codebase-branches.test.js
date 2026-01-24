@@ -200,6 +200,58 @@ describe('CodebaseIndexer Branch Coverage', () => {
     expect(fallbackSpy).toHaveBeenCalled();
   });
 
+  it('covers processChunksWithWorkers reset timeout and done=false branch', async () => {
+    vi.useFakeTimers();
+    const mockWorker = {
+      on: vi.fn(),
+      off: vi.fn(),
+      once: vi.fn(),
+      postMessage: vi.fn(),
+    };
+    indexer.workers = [mockWorker];
+    const fallbackSpy = vi
+      .spyOn(indexer, 'processChunksSingleThreaded')
+      .mockResolvedValue([{ success: true }]);
+
+    const promise = indexer.processChunksWithWorkers([{ file: 'a.js', text: 'c' }]);
+    const handler = mockWorker.on.mock.calls.find((call) => call[0] === 'message')[1];
+    const batchId = mockWorker.postMessage.mock.calls[0][0].batchId;
+
+    handler({
+      batchId,
+      type: 'results',
+      results: [{ success: true }],
+      done: false,
+    });
+
+    vi.advanceTimersByTime(1000);
+
+    await promise;
+    expect(fallbackSpy).toHaveBeenCalled();
+  });
+
+  it('covers processChunksWithWorkers postMessage failure', async () => {
+    const mockWorker = {
+      on: vi.fn(),
+      off: vi.fn(),
+      once: vi.fn(),
+      postMessage: vi.fn(() => {
+        throw new Error('post boom');
+      }),
+    };
+    indexer.workers = [mockWorker];
+    const fallbackSpy = vi
+      .spyOn(indexer, 'processChunksSingleThreaded')
+      .mockResolvedValue([{ success: true }]);
+
+    await indexer.processChunksWithWorkers([{ file: 'a.js', text: 'c' }]);
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('postMessage failed')
+    );
+    expect(fallbackSpy).toHaveBeenCalled();
+  });
+
   it('covers processChunksWithWorkers L287 false branch', async () => {
     const mockWorker = {
       on: vi.fn(),
@@ -234,6 +286,21 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     await promise;
     await promise2;
+  });
+
+  it('covers missing call-graph stats guard (invalid stat)', async () => {
+    indexer.config.callGraphEnabled = true;
+    indexer.config.verbose = false;
+    indexer.discoverFiles = vi.fn().mockResolvedValue(['/test/a.js']);
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([]);
+    mockCache.getVectorStore.mockReturnValue([{ file: '/test/a.js' }]);
+    mockCache.fileCallData = new Map();
+    vi.spyOn(fs, 'stat').mockResolvedValue({});
+
+    const result = await indexer.indexAll();
+
+    expect(result?.message).toBe('All files up to date');
+    expect(fs.stat).toHaveBeenCalledWith('/test/a.js');
   });
 
   it('covers indexFile verbose=true failure (L417 block)', async () => {
@@ -339,6 +406,28 @@ describe('CodebaseIndexer Branch Coverage', () => {
     await indexer.indexAll();
   });
 
+  it('logs when queued watch events processing fails', async () => {
+    indexer.discoverFiles = vi.fn().mockResolvedValue([]);
+    indexer.processPendingWatchEvents = vi
+      .fn()
+      .mockRejectedValue(new Error('queue boom'));
+
+    await indexer.indexAll();
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to apply queued file updates')
+    );
+  });
+
+  it('skips enqueue when unlink already queued', () => {
+    const filePath = '/test/file.js';
+    indexer.pendingWatchEvents.set(filePath, 'unlink');
+
+    indexer.enqueueWatchEvent('change', filePath);
+
+    expect(indexer.pendingWatchEvents.get(filePath)).toBe('unlink');
+  });
+
   it('covers setupFileWatcher branches', async () => {
     indexer.config.watchFiles = true;
     await indexer.setupFileWatcher();
@@ -352,5 +441,128 @@ describe('CodebaseIndexer Branch Coverage', () => {
     // FALSE branches
     indexer.server = null;
     await handlers['add']('file.js');
+  });
+
+  it('skips files provided with content if too large (lines 825-837)', async () => {
+    indexer.discoverFiles = vi.fn().mockResolvedValue(['file-large-content.js']);
+    // Mock preFilterFiles to return an entry with content that exceeds maxFileSize
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([
+      { 
+        file: 'file-large-content.js', 
+        content: 'x'.repeat(mockConfig.maxFileSize + 100), 
+        hash: 'hash1',
+        force: false
+      }
+    ]);
+
+    await indexer.indexAll();
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('Skipped file-large-content.js (too large:')
+    );
+    expect(mockEmbedder).not.toHaveBeenCalled();
+  });
+
+  it('skips files with invalid stat results (line 846)', async () => {
+    indexer.discoverFiles = vi.fn().mockResolvedValue(['invalid-stat.js']);
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([
+      { file: 'invalid-stat.js', force: false }
+    ]);
+    
+    vi.spyOn(fs, 'stat').mockResolvedValue(null);
+
+    await indexer.indexAll();
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid stat result for invalid-stat.js')
+    );
+  });
+
+  it('skips files that are too large via stat check (lines 859-864)', async () => {
+    indexer.discoverFiles = vi.fn().mockResolvedValue(['large-stat.js']);
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([
+      { file: 'large-stat.js', force: false }
+    ]);
+    
+    vi.spyOn(fs, 'stat').mockResolvedValue({
+      isDirectory: () => false,
+      size: mockConfig.maxFileSize + 100
+    });
+
+    await indexer.indexAll();
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('Skipped large-stat.js (too large:')
+    );
+  });
+
+  it('handles read file failures (lines 867-870)', async () => {
+    indexer.discoverFiles = vi.fn().mockResolvedValue(['read-error.js']);
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([
+      { file: 'read-error.js', force: false }
+    ]);
+    
+    vi.spyOn(fs, 'stat').mockResolvedValue({
+      isDirectory: () => false,
+      size: 50
+    });
+    vi.spyOn(fs, 'readFile').mockRejectedValue(new Error('Read failed'));
+
+    await indexer.indexAll();
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to read read-error.js: Read failed')
+    );
+  });
+
+  it('skips unchanged files when hash matches (line 882)', async () => {
+    indexer.discoverFiles = vi.fn().mockResolvedValue(['unchanged.js']);
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([
+      { file: 'unchanged.js', force: false }
+    ]);
+    
+    vi.spyOn(fs, 'stat').mockResolvedValue({
+      isDirectory: () => false,
+      size: 50
+    });
+    vi.spyOn(fs, 'readFile').mockResolvedValue('content');
+    
+    vi.spyOn(utils, 'hashContent').mockReturnValue('same-hash');
+    mockCache.getFileHash.mockReturnValue('same-hash');
+
+    await indexer.indexAll();
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('Skipped unchanged.js (unchanged)')
+    );
+    expect(mockEmbedder).not.toHaveBeenCalled();
+  });
+
+  it('queues watch events when indexing is in progress (lines 1106, 1126, 1146)', async () => {
+    await indexer.setupFileWatcher();
+    
+    // Simulate indexing in progress
+    indexer.isIndexing = true;
+    
+    // Trigger ADD event
+    await handlers['add']('added.js');
+    expect(indexer.pendingWatchEvents.get(path.join('/test', 'added.js'))).toBe('add');
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('Queued add event during indexing')
+    );
+
+    // Trigger CHANGE event
+    await handlers['change']('changed.js');
+    expect(indexer.pendingWatchEvents.get(path.join('/test', 'changed.js'))).toBe('change');
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('Queued change event during indexing')
+    );
+
+    // Trigger UNLINK event
+    await handlers['unlink']('deleted.js');
+    expect(indexer.pendingWatchEvents.get(path.join('/test', 'deleted.js'))).toBe('unlink');
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('Queued delete event during indexing')
+    );
   });
 });

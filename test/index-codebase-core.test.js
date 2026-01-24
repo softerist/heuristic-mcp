@@ -675,4 +675,353 @@ describe('index-codebase branch coverage focused', () => {
     expect(hasBatchSize).toBe(true);
     expect(processSpy.mock.calls[0][0]).toHaveLength(1);
   });
+
+  it('accepts allowed file names without matching extensions', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: ['SPECIAL'],
+      verbose: false,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    mockFiles = ['/root/SPECIAL'];
+    const files = await indexer.discoverFiles();
+
+    expect(files).toEqual(['/root/SPECIAL']);
+  });
+
+  it('treats NODE_ENV=test as test environment', async () => {
+    const oldVitest = process.env.VITEST;
+    const oldNodeEnv = process.env.NODE_ENV;
+    delete process.env.VITEST;
+    process.env.NODE_ENV = 'test';
+
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      workerThreads: 2,
+      verbose: true,
+      embeddingModel: 'test-model',
+      excludePatterns: [],
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    try {
+      workerMessageType = 'ready';
+      await indexer.initializeWorkers();
+    } finally {
+      if (oldVitest === undefined) {
+        delete process.env.VITEST;
+      } else {
+        process.env.VITEST = oldVitest;
+      }
+      process.env.NODE_ENV = oldNodeEnv;
+    }
+  });
+
+  it('uses production timeouts when not in test env', async () => {
+    const oldVitest = process.env.VITEST;
+    const oldNodeEnv = process.env.NODE_ENV;
+    delete process.env.VITEST;
+    process.env.NODE_ENV = 'production';
+
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      workerThreads: 2,
+      verbose: false,
+      embeddingModel: 'test-model',
+      excludePatterns: [],
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    try {
+      workerMessageType = 'ready';
+      await indexer.initializeWorkers();
+
+      const worker = {
+        postMessage: vi.fn(),
+        once: (event, handler) => {
+          if (event === 'exit') handler();
+        },
+        terminate: vi.fn().mockResolvedValue(undefined),
+      };
+      indexer.workers = [worker];
+      await indexer.terminateWorkers();
+
+      let handler;
+      const worker2 = {
+        on: (event, fn) => {
+          if (event === 'message') handler = fn;
+        },
+        once: () => {},
+        off: () => {},
+        postMessage: (msg) => {
+          handler({ type: 'results', results: [{ success: true }], batchId: msg.batchId });
+        },
+      };
+      indexer.workers = [worker2];
+      await indexer.processChunksWithWorkers([{ file: 'a.js', text: 'x' }]);
+    } finally {
+      if (oldVitest === undefined) {
+        delete process.env.VITEST;
+      } else {
+        process.env.VITEST = oldVitest;
+      }
+      process.env.NODE_ENV = oldNodeEnv;
+    }
+  });
+
+  it('sets memory timer when verbose is true', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1000,
+      callGraphEnabled: false,
+      verbose: true,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    mockFiles = ['/root/a.js'];
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/root/a.js', content: 'code', hash: 'h' }]);
+    smartChunkMock.mockReturnValueOnce([{ text: 'a', startLine: 1, endLine: 1 }]);
+    vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue([
+      { file: '/root/a.js', startLine: 1, endLine: 1, content: 'a', vector: [1], success: true },
+    ]);
+
+    const intervalSpy = vi.spyOn(globalThis, 'setInterval').mockImplementation((fn) => {
+      if (typeof fn === 'function') {
+        fn();
+      }
+      return 0;
+    });
+
+    try {
+      await indexer.indexAll(false);
+      expect(intervalSpy).toHaveBeenCalled();
+    } finally {
+      intervalSpy.mockRestore();
+    }
+  });
+
+  it('skips large preset content without verbose log', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1,
+      callGraphEnabled: false,
+      verbose: false,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    mockFiles = ['/root/large.js'];
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/root/large.js', content: 'xx', hash: 'h', force: true }]);
+
+    await indexer.indexAll(false);
+  });
+
+  it('skips stat errors without verbose log', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1000,
+      callGraphEnabled: false,
+      verbose: false,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    mockFiles = ['/root/stat.js'];
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/root/stat.js', hash: 'h', force: true }]);
+    fsMock.stat.mockRejectedValueOnce(new Error('stat fail'));
+
+    await indexer.indexAll(false);
+  });
+
+  it('skips invalid stat results without verbose log', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1000,
+      callGraphEnabled: false,
+      verbose: false,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    mockFiles = ['/root/invalid.js'];
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/root/invalid.js', hash: 'h', force: true }]);
+    fsMock.stat.mockResolvedValueOnce({});
+
+    await indexer.indexAll(false);
+  });
+
+  it('skips oversized files without verbose log', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1,
+      callGraphEnabled: false,
+      verbose: false,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    mockFiles = ['/root/big.js'];
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/root/big.js', hash: 'h', force: true }]);
+    fsMock.stat.mockResolvedValueOnce({ isDirectory: () => false, size: 10 });
+
+    await indexer.indexAll(false);
+  });
+
+  it('skips read failures without verbose log', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1000,
+      callGraphEnabled: false,
+      verbose: false,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    mockFiles = ['/root/read.js'];
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/root/read.js', hash: 'h', force: true }]);
+    fsMock.stat.mockResolvedValueOnce({ isDirectory: () => false, size: 1 });
+    fsMock.readFile.mockRejectedValueOnce(new Error('read fail'));
+
+    await indexer.indexAll(false);
+  });
+
+  it('skips unchanged files without verbose log', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1000,
+      callGraphEnabled: false,
+      verbose: false,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    mockFiles = ['/root/same.js'];
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/root/same.js', content: 'code', hash: 'h', force: false }]);
+    cache.getFileHash.mockReturnValueOnce('h');
+
+    await indexer.indexAll(false);
+  });
+
+  it('covers non-verbose branches in the batch loop', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 10,
+      maxFileSize: 5,
+      callGraphEnabled: false,
+      verbose: false,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    cpuCount = 1;
+    mockFiles = [
+      '/root/large-content.js',
+      '/root/stat-fail.js',
+      '/root/invalid.js',
+      '/root/big.js',
+      '/root/read-fail.js',
+      '/root/unchanged.js',
+      '/root/ok.js',
+    ];
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([
+      { file: '/root/large-content.js', content: 'xxxxxx', hash: 'h1', force: true },
+      { file: '/root/stat-fail.js', hash: 'h2', force: true },
+      { file: '/root/invalid.js', hash: 'h3', force: true },
+      { file: '/root/big.js', hash: 'h4', force: true },
+      { file: '/root/read-fail.js', hash: 'h5', force: true },
+      { file: '/root/unchanged.js', content: 'same', hash: 'samehash', force: false },
+      { file: '/root/ok.js', hash: 'h6', force: true },
+    ]);
+
+    fsMock.stat.mockImplementation(async (filePath) => {
+      const file = String(filePath);
+      if (file.endsWith('stat-fail.js')) {
+        throw new Error('stat fail');
+      }
+      if (file.endsWith('invalid.js')) {
+        return {};
+      }
+      if (file.endsWith('big.js')) {
+        return { isDirectory: () => false, size: 10 };
+      }
+      return { isDirectory: () => false, size: 1 };
+    });
+
+    fsMock.readFile.mockImplementation(async (filePath) => {
+      const file = String(filePath);
+      if (file.endsWith('read-fail.js')) {
+        throw new Error('read fail');
+      }
+      return 'ok';
+    });
+
+    cache.getFileHash.mockImplementation((file) =>
+      String(file).endsWith('unchanged.js') ? 'samehash' : 'other'
+    );
+    smartChunkMock.mockReturnValueOnce([{ text: 'a', startLine: 1, endLine: 1 }]);
+    vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue([]);
+
+    await indexer.indexAll(false);
+  });
 });
