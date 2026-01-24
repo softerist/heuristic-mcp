@@ -117,7 +117,6 @@ export async function register(filter = null) {
     command: binaryPath,
     args: [scriptPath, '--workspace', workspacePath],
     disabled: false,
-    autoRegistered: true, // Marker to know we did this
   };
 
   const configPaths = getConfigPaths();
@@ -229,7 +228,8 @@ export async function register(filter = null) {
 \x1b[90mPATHS:\x1b[0m
 - \x1b[1mMCP Config:\x1b[0m ${configPaths.map((p) => p.path).join(', ')}
 - \x1b[1mCache:\x1b[0m ${cacheRoot}
-- \x1b[1mCheck status:\x1b[0m heuristic-mcp --logs
+- \x1b[1mCheck status:\x1b[0m heuristic-mcp --status
+- \x1b[1mView logs:\x1b[0m heuristic-mcp --logs
 
 \x1b[36mHappy Coding! 🤖\x1b[0m
     `);

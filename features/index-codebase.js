@@ -116,7 +116,7 @@ export class CodebaseIndexer {
       const memCappedWorkers = Math.max(1, Math.floor(freeMemGb / memPerWorker));
       if (memCappedWorkers < numWorkers) {
         if (this.config.verbose) {
-          console.error(
+          console.log(
             `[Indexer] Throttling workers from ${numWorkers} to ${memCappedWorkers} due to available RAM (${freeMemGb.toFixed(1)}GB)`
           );
         }
@@ -126,12 +126,12 @@ export class CodebaseIndexer {
 
     // Only use workers if we have more than 1 CPU AND enough memory
     if (numWorkers <= 1) {
-      console.error('[Indexer] Single-threaded mode (CPU or memory constrained)');
+      console.log('[Indexer] Single-threaded mode (CPU or memory constrained)');
       return;
     }
 
     if (this.config.verbose) {
-      console.error(
+      console.log(
         `[Indexer] Worker config: workerThreads=${this.config.workerThreads}, resolved to ${numWorkers}`
       );
     }
@@ -139,10 +139,11 @@ export class CodebaseIndexer {
     // Dynamic CPU allocation: distribute available cores among workers
     // This provides "dynamic" optimization instead of hardcoding to 1,
     // solving the user's request for elegance while still preventing saturation.
-    const totalCores = os.cpus().length;
+    const cpus = os.cpus() || [];
+    const totalCores = cpus.length || 1;
     const threadsPerWorker = Math.max(1, Math.floor(totalCores / numWorkers));
 
-    console.error(`[Indexer] Initializing ${numWorkers} worker threads (${threadsPerWorker} threads per worker)...`);
+    console.log(`[Indexer] Initializing ${numWorkers} worker threads (${threadsPerWorker} threads per worker)...`);
 
     const workerPath = path.join(__dirname, '../lib/embedding-worker.js');
 
@@ -188,9 +189,9 @@ export class CodebaseIndexer {
     // Wait for all workers to be ready
     try {
       await Promise.all(this.workerReady);
-      console.error(`[Indexer] ${this.workers.length} workers ready`);
+      console.log(`[Indexer] ${this.workers.length} workers ready`);
       if (this.config.verbose) {
-        console.error(`[Indexer] Each worker loaded model: ${this.config.embeddingModel}`);
+        console.log(`[Indexer] Each worker loaded model: ${this.config.embeddingModel}`);
       }
     } catch (err) {
       console.error(
@@ -535,7 +536,7 @@ export class CodebaseIndexer {
     excludeDirs.add('.smart-coding-cache');
 
     if (this.config.verbose) {
-      console.error(`[Indexer] Using ${excludeDirs.size} exclude directories from config`);
+      console.log(`[Indexer] Using ${excludeDirs.size} exclude directories from config`);
     }
 
     const api = new fdir()
@@ -551,7 +552,7 @@ export class CodebaseIndexer {
 
     const files = await api.withPromise();
 
-    console.error(`[Indexer] File discovery: ${files.length} files in ${Date.now() - startTime}ms`);
+    console.log(`[Indexer] File discovery: ${files.length} files in ${Date.now() - startTime}ms`);
     return files;
   }
 
@@ -645,7 +646,7 @@ export class CodebaseIndexer {
       }
     }
 
-    console.error(
+    console.log(
       `[Indexer] Pre-filter: ${filesToProcess.length} changed, ${skippedCount.unchanged} unchanged, ${skippedCount.tooLarge} too large, ${skippedCount.error} errors (${Date.now() - startTime}ms)`
     );
     return filesToProcess;
@@ -666,7 +667,7 @@ export class CodebaseIndexer {
       if (!this.config.verbose) return;
       const { rss, heapUsed, heapTotal } = process.memoryUsage();
       const toMb = (value) => `${(value / 1024 / 1024).toFixed(1)}MB`;
-      console.error(
+      console.log(
         `[Indexer] Memory ${label}: rss=${toMb(rss)} heap=${toMb(heapUsed)}/${toMb(heapTotal)}`,
       );
     };
@@ -678,20 +679,20 @@ export class CodebaseIndexer {
       }
 
       if (force) {
-        console.error('[Indexer] Force reindex requested: clearing cache');
+        console.log('[Indexer] Force reindex requested: clearing cache');
         this.cache.setVectorStore([]);
         this.cache.fileHashes = new Map();
         await this.cache.clearCallGraphData({ removeFile: true });
       }
 
       const totalStartTime = Date.now();
-      console.error(`[Indexer] Starting optimized indexing in ${this.config.searchDirectory}...`);
+        console.log(`[Indexer] Starting optimized indexing in ${this.config.searchDirectory}...`);
 
       // Step 1: Fast file discovery with fdir
       const files = await this.discoverFiles();
 
       if (files.length === 0) {
-        console.error('[Indexer] No files found to index');
+        console.log('[Indexer] No files found to index');
         this.sendProgress(100, 100, 'No files found to index');
         return {
           skipped: false,
@@ -721,14 +722,14 @@ export class CodebaseIndexer {
 
         if (prunedCount > 0) {
           if (this.config.verbose) {
-            console.error(`[Indexer] Pruned ${prunedCount} deleted/excluded files from index`);
+            console.log(`[Indexer] Pruned ${prunedCount} deleted/excluded files from index`);
           }
           // If we pruned files, we should save these changes even if no other files changed
         }
 
         const prunedCallGraph = this.cache.pruneCallGraphData(currentFilesSet);
         if (prunedCallGraph > 0 && this.config.verbose) {
-          console.error(`[Indexer] Pruned ${prunedCallGraph} call-graph entries`);
+          console.log(`[Indexer] Pruned ${prunedCallGraph} call-graph entries`);
         }
       }
 
@@ -737,7 +738,7 @@ export class CodebaseIndexer {
       const filesToProcessSet = new Set(filesToProcess.map((entry) => entry.file));
 
       if (filesToProcess.length === 0) {
-        console.error('[Indexer] All files unchanged, nothing to index');
+        console.log('[Indexer] All files unchanged, nothing to index');
 
         // If we have no call graph data but we have cached files, we should try to rebuild it
         if (this.config.callGraphEnabled && this.cache.getVectorStore().length > 0) {
@@ -753,7 +754,7 @@ export class CodebaseIndexer {
           }
 
           if (missingCallData.length > 0) {
-            console.error(
+            console.log(
               `[Indexer] Found ${missingCallData.length} files missing call graph data, re-indexing...`
             );
             const BATCH_SIZE = 100;
@@ -809,7 +810,7 @@ export class CodebaseIndexer {
       const adaptiveBatchSize =
         files.length > 10000 ? 500 : files.length > 1000 ? 200 : this.config.batchSize || 100;
 
-      console.error(
+      console.log(
         `[Indexer] Processing ${filesToProcess.length} files (batch size: ${adaptiveBatchSize})`
       );
 
@@ -818,9 +819,9 @@ export class CodebaseIndexer {
 
       if (useWorkers) {
         await this.initializeWorkers();
-        console.error(`[Indexer] Multi-threaded mode: ${this.workers.length} workers active`);
+        console.log(`[Indexer] Multi-threaded mode: ${this.workers.length} workers active`);
       } else {
-        console.error(`[Indexer] Single-threaded mode (single-core system)`);
+        console.log(`[Indexer] Single-threaded mode (single-core system)`);
       }
 
       let totalChunks = 0;
@@ -990,7 +991,7 @@ export class CodebaseIndexer {
         ) {
           const elapsed = ((Date.now() - totalStartTime) / 1000).toFixed(1);
           const rate = (processedFiles / parseFloat(elapsed)).toFixed(0);
-          console.error(
+          console.log(
             `[Indexer] Progress: ${processedFiles}/${filesToProcess.length} files (${rate} files/sec)`
           );
 
@@ -1010,7 +1011,7 @@ export class CodebaseIndexer {
       }
 
       const totalTime = ((Date.now() - totalStartTime) / 1000).toFixed(1);
-      console.error(
+      console.log(
         `[Indexer] Complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
       );
 
@@ -1125,11 +1126,11 @@ export class CodebaseIndexer {
     this.watcher
       .on('add', async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
-        console.error(`[Indexer] New file detected: ${filePath}`);
+        console.log(`[Indexer] New file detected: ${filePath}`);
 
         if (this.isIndexing || this.processingWatchEvents) {
           if (this.config.verbose) {
-            console.error(`[Indexer] Queued add event during indexing: ${filePath}`);
+            console.log(`[Indexer] Queued add event during indexing: ${filePath}`);
           }
           this.enqueueWatchEvent('add', fullPath);
           return;
@@ -1145,11 +1146,11 @@ export class CodebaseIndexer {
       })
       .on('change', async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
-        console.error(`[Indexer] File changed: ${filePath}`);
+        console.log(`[Indexer] File changed: ${filePath}`);
 
         if (this.isIndexing || this.processingWatchEvents) {
           if (this.config.verbose) {
-            console.error(`[Indexer] Queued change event during indexing: ${filePath}`);
+            console.log(`[Indexer] Queued change event during indexing: ${filePath}`);
           }
           this.enqueueWatchEvent('change', fullPath);
           return;
@@ -1165,11 +1166,11 @@ export class CodebaseIndexer {
       })
       .on('unlink', async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
-        console.error(`[Indexer] File deleted: ${filePath}`);
+        console.log(`[Indexer] File deleted: ${filePath}`);
 
         if (this.isIndexing || this.processingWatchEvents) {
           if (this.config.verbose) {
-            console.error(`[Indexer] Queued delete event during indexing: ${filePath}`);
+            console.log(`[Indexer] Queued delete event during indexing: ${filePath}`);
           }
           this.enqueueWatchEvent('unlink', fullPath);
           return;
@@ -1185,7 +1186,7 @@ export class CodebaseIndexer {
         await this.cache.save();
       });
 
-    console.error('[Indexer] File watcher enabled for incremental indexing');
+    console.log('[Indexer] File watcher enabled for incremental indexing');
   }
 }
 

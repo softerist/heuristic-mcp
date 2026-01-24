@@ -104,6 +104,7 @@ vi.mock('../features/lifecycle.js', () => ({
   stop: (...args) => stopMock(...args),
   start: (...args) => startMock(...args),
   status: (...args) => statusMock(...args),
+  logs: vi.fn(),
 }));
 
 const baseConfig = {
@@ -167,7 +168,8 @@ describe('index.js CLI coverage', () => {
     });
 
     try {
-      await import('../index.js');
+      const { main } = await import('../index.js');
+      await main();
     } catch (err) {
       expect(err).toBe(exitError);
     }
@@ -185,7 +187,8 @@ describe('index.js CLI coverage', () => {
     });
 
     try {
-      await import('../index.js');
+      const { main } = await import('../index.js');
+      await main();
     } catch (err) {
       expect(err).toBe(exitError);
     }
@@ -203,7 +206,8 @@ describe('index.js CLI coverage', () => {
     });
 
     try {
-      await import('../index.js');
+      const { main } = await import('../index.js');
+      await main();
     } catch (err) {
       expect(err).toBe(exitError);
     }
@@ -221,11 +225,15 @@ describe('index.js CLI coverage', () => {
     pipelineMock.mockResolvedValue(() => ({}));
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    await import('../index.js');
+    const { main } = await import('../index.js');
+    await main();
 
     const called = logSpy.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes('Starting server with verbose')
     );
+    if (!called) {
+      console.error('Log calls:', JSON.stringify(logSpy.mock.calls));
+    }
     expect(process.env.SMART_CODING_VERBOSE).toBe('true');
     expect(called).toBe(true);
     logSpy.mockRestore();
@@ -247,7 +255,8 @@ describe('index.js CLI coverage', () => {
     vi.useFakeTimers();
     const clearSpy = vi.spyOn(global, 'clearInterval');
 
-    const importPromise = import('../index.js');
+    const { main } = await import('../index.js');
+    const importPromise = main();
     await Promise.resolve();
     await vi.advanceTimersByTimeAsync(15000);
     accessResolve();
@@ -282,7 +291,8 @@ describe('index.js CLI coverage', () => {
     process.argv = ['node', 'index.js', '--stop'];
     stopMock.mockResolvedValue(undefined);
     try {
-      await import('../index.js');
+      const { main } = await import('../index.js');
+      await main();
     } catch { /* ignore */ }
     expect(stopMock).toHaveBeenCalled();
 
@@ -290,7 +300,8 @@ describe('index.js CLI coverage', () => {
     process.argv = ['node', 'index.js', '--start'];
     startMock.mockResolvedValue(undefined);
     try {
-      await import('../index.js');
+      const { main } = await import('../index.js');
+      await main();
     } catch { /* ignore */ }
     expect(startMock).toHaveBeenCalled();
 
@@ -298,7 +309,8 @@ describe('index.js CLI coverage', () => {
     process.argv = ['node', 'index.js', '--status'];
     statusMock.mockResolvedValue(undefined);
     try {
-      await import('../index.js');
+      const { main } = await import('../index.js');
+      await main();
     } catch { /* ignore */ }
     expect(statusMock).toHaveBeenCalled();
   });
@@ -310,7 +322,8 @@ describe('index.js CLI coverage', () => {
     fsMock.access.mockResolvedValue(undefined);
     pipelineMock.mockResolvedValue(() => ({}));
 
-    await import('../index.js');
+    const { main } = await import('../index.js');
+    await main();
 
     const errors = errorSpy.mock.calls.map((call) => call[0]);
     const hasFallback = errors.some(
@@ -329,7 +342,8 @@ describe('index.js CLI coverage', () => {
     fsMock.access.mockResolvedValue(undefined);
     pipelineMock.mockResolvedValue(() => ({}));
 
-    await import('../index.js');
+    const { main } = await import('../index.js');
+    await main();
 
     expect(setupFileWatcherMock).toHaveBeenCalled();
   });
@@ -341,7 +355,8 @@ describe('index.js CLI coverage', () => {
     fsMock.access.mockResolvedValue(undefined);
     pipelineMock.mockResolvedValue(() => ({}));
 
-    await import('../index.js');
+    const { main } = await import('../index.js');
+    await main();
 
     const errors = errorSpy.mock.calls.map((call) => call[0]);
     const hasWorkspace = errors.some(
@@ -358,7 +373,8 @@ describe('index.js CLI coverage', () => {
     pipelineMock.mockResolvedValue(() => ({}));
     indexAllMock.mockRejectedValue(new Error('index fail'));
 
-    await import('../index.js');
+    const { main } = await import('../index.js');
+    await main();
 
     const errors = errorSpy.mock.calls.map((call) => call[0]);
     const hasError = errors.some(
@@ -374,7 +390,8 @@ describe('index.js CLI coverage', () => {
     fsMock.access.mockResolvedValue(undefined);
     pipelineMock.mockResolvedValue(() => ({}));
 
-    await import('../index.js');
+    const { main } = await import('../index.js');
+    await main();
 
     const errors = errorSpy.mock.calls.map((call) => call[0]);
     const hasWorkspace = errors.some(
@@ -413,7 +430,8 @@ describe('index.js CLI coverage', () => {
     fsMock.access.mockResolvedValue(undefined);
     pipelineMock.mockResolvedValue(() => ({}));
 
-    await import('../index.js');
+    const { main } = await import('../index.js');
+    await main();
 
     lastIndexer.watcher = null;
     lastIndexer.terminateWorkers = null;
@@ -436,7 +454,8 @@ describe('index.js CLI coverage', () => {
     fsMock.access.mockResolvedValue(undefined);
     pipelineMock.mockResolvedValue(() => ({}));
 
-    await import('../index.js');
+    const { main } = await import('../index.js');
+    await main();
 
     const listHandler = lastServer.handlers.get(listSchema);
     const callHandler = lastServer.handlers.get(callSchema);
@@ -459,7 +478,8 @@ describe('index.js CLI coverage', () => {
     configMock.loadConfig.mockRejectedValue(new Error('pre-cache fail'));
 
     try {
-      await import('../index.js');
+      const { main } = await import('../index.js');
+      await main();
     } catch (err) {
       // Expected failure
     }

@@ -128,40 +128,53 @@ export class HybridSearch {
       await this.populateFileModTimes(candidates.map((chunk) => chunk.file));
     }
 
-    // Score all chunks (synchronous map now, much faster)
-    const scoredChunks = candidates.map((chunk) => {
-      // Semantic similarity (vectors are normalized)
-      let score = dotSimilarity(queryVector, chunk.vector) * this.config.semanticWeight;
-
-      // Exact match boost
-      const lowerContent = chunk.content?.toLowerCase() || '';
-
-      if (lowerContent && lowerContent.includes(lowerQuery)) {
-        score += this.config.exactMatchBoost;
-      } else if (lowerContent) {
-        // Partial word matching
-        const queryWords = lowerQuery.split(/\s+/);
-        const matchedWords = queryWords.filter(
-          (word) => word.length > 2 && lowerContent.includes(word)
-        ).length;
-        score += (matchedWords / queryWords.length) * 0.3;
+    // Score all chunks (batched to prevent blocking event loop)
+    const BATCH_SIZE = 500;
+    const scoredChunks = [];
+    
+    // Process in batches
+    for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+      const batch = candidates.slice(i, i + BATCH_SIZE);
+      
+      // Allow event loop to tick between batches
+      if (i > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
       }
+      
+      for (const chunk of batch) {
+        // Semantic similarity (vectors are normalized)
+        let score = dotSimilarity(queryVector, chunk.vector) * this.config.semanticWeight;
 
-      // Recency boost - recently modified files rank higher
-      if (this.config.recencyBoost > 0) {
-        const mtime = this.fileModTimes.get(chunk.file);
-        if (typeof mtime === 'number') {
-          const daysSinceModified = (Date.now() - mtime) / (1000 * 60 * 60 * 24);
-          const decayDays = this.config.recencyDecayDays || 30;
+        // Exact match boost
+        const lowerContent = chunk.content?.toLowerCase() || '';
 
-          // Linear decay: full boost at 0 days, no boost after decayDays
-          const recencyScore = Math.max(0, 1 - daysSinceModified / decayDays);
-          score += recencyScore * this.config.recencyBoost;
+        if (lowerContent && lowerContent.includes(lowerQuery)) {
+          score += this.config.exactMatchBoost;
+        } else if (lowerContent) {
+          // Partial word matching
+          const queryWords = lowerQuery.split(/\s+/);
+          const matchedWords = queryWords.filter(
+            (word) => word.length > 2 && lowerContent.includes(word)
+          ).length;
+          score += (matchedWords / queryWords.length) * 0.3;
         }
-      }
 
-      return { ...chunk, score };
-    });
+        // Recency boost - recently modified files rank higher
+        if (this.config.recencyBoost > 0) {
+          const mtime = this.fileModTimes.get(chunk.file);
+          if (typeof mtime === 'number') {
+            const daysSinceModified = (Date.now() - mtime) / (1000 * 60 * 60 * 24);
+            const decayDays = this.config.recencyDecayDays || 30;
+
+            // Linear decay: full boost at 0 days, no boost after decayDays
+            const recencyScore = Math.max(0, 1 - daysSinceModified / decayDays);
+            score += recencyScore * this.config.recencyBoost;
+          }
+        }
+
+        scoredChunks.push({ ...chunk, score });
+      }
+    }
 
     // Sort by initial score
     scoredChunks.sort((a, b) => b.score - a.score);

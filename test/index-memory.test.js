@@ -164,8 +164,9 @@ describe('Index.js Memory Logging', () => {
     });
     fsPromises.default.access.mockReturnValueOnce(accessPromise);
 
-    // Import the module to run it
-    const importPromise = import('../index.js');
+    // Import the module and call main
+    const { main } = await import('../index.js');
+    const importPromise = main();
     
     // Wait for the first memory log to ensure initialize has reached the interval setup
     await vi.waitFor(() => {

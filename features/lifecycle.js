@@ -4,6 +4,9 @@ import util from 'util';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
+import fsSync from 'fs';
+import { loadConfig } from '../lib/config.js';
+import { getLogFilePath } from '../lib/logging.js';
 
 const execPromise = util.promisify(exec);
 
@@ -15,13 +18,40 @@ export async function stop() {
     let pids = [];
 
     if (platform === 'win32') {
-      const { stdout } = await execPromise(
-        `wmic process where "CommandLine like '%heuristic-mcp/index.js%'" get ProcessId`
-      );
-      pids = stdout
-        .trim()
-        .split(/\s+/)
-        .filter((p) => p && !isNaN(p) && parseInt(p) !== currentPid);
+      // 1. Try PID file first for reliability
+      const home = os.homedir();
+      const pidFile = path.join(home, '.heuristic-mcp.pid');
+      try {
+        const content = await fs.readFile(pidFile, 'utf-8');
+        const p = content.trim();
+        if (p && !isNaN(p)) {
+          const pid = parseInt(p, 10);
+          if (pid !== currentPid) {
+            try {
+              process.kill(pid, 0);
+              pids.push(p);
+            } catch (_e) {
+              // Stale PID file
+              await fs.unlink(pidFile).catch(() => {});
+            }
+          }
+        }
+      } catch (_e) { /* ignore */ }
+
+      // 2. Fallback to process list with fuzzier matching
+      try {
+        const { stdout } = await execPromise(
+          `powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"CommandLine LIKE '%index.js%'\\" | Where-Object { $_.CommandLine -like '*heuristic-mcp*' -or $_.CommandLine -like '*node*' } | Select-Object -ExpandProperty ProcessId"`
+        );
+        const listPids = stdout
+          .trim()
+          .split(/\s+/)
+          .filter((p) => p && !isNaN(p) && parseInt(p) !== currentPid);
+        
+        for (const p of listPids) {
+          if (!pids.includes(p)) pids.push(p);
+        }
+      } catch (_e) { /* ignore */ }
     } else {
       // Unix: Use pgrep to get all matching PIDs
       try {
@@ -86,6 +116,69 @@ export async function start() {
   }
 }
 
+async function readTail(filePath, maxLines) {
+  const data = await fs.readFile(filePath, 'utf-8');
+  if (!data) return '';
+  const lines = data.split(/\r?\n/);
+  const tail = lines.slice(-maxLines).join('\n');
+  return tail.trimEnd();
+}
+
+async function followFile(filePath, startPosition) {
+  let position = startPosition;
+  const watcher = fsSync.watch(filePath, { persistent: true }, async (event) => {
+    if (event !== 'change') return;
+    try {
+      const stats = await fs.stat(filePath);
+      if (stats.size < position) {
+        position = 0;
+      }
+      if (stats.size === position) return;
+      const stream = fsSync.createReadStream(filePath, { start: position, end: stats.size - 1 });
+      stream.pipe(process.stdout, { end: false });
+      position = stats.size;
+    } catch {
+      // ignore read errors while watching
+    }
+  });
+
+  const stop = () => {
+    watcher.close();
+    process.exit(0);
+  };
+
+  process.on('SIGINT', stop);
+  process.on('SIGTERM', stop);
+}
+
+export async function logs({ workspaceDir = null, tailLines = 200, follow = true } = {}) {
+  const config = await loadConfig(workspaceDir);
+  const logPath = getLogFilePath(config);
+
+  try {
+    const stats = await fs.stat(logPath);
+    const tail = await readTail(logPath, tailLines);
+    if (tail) {
+      process.stdout.write(tail + '\n');
+    }
+
+    if (!follow) {
+      return;
+    }
+
+    console.log(`[Logs] Following ${logPath} (Ctrl+C to stop)...`);
+    await followFile(logPath, stats.size);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      console.log(`[Logs] No log file found for workspace.`);
+      console.log(`[Logs] Expected location: ${logPath}`);
+      console.log(`[Logs] Start the server from your IDE, then run: heuristic-mcp --logs`);
+      return;
+    }
+    console.error(`[Logs] Failed to read log file: ${err.message}`);
+  }
+}
+
 // Helper to get global cache dir
 function getGlobalCacheDir() {
   if (process.platform === 'win32') {
@@ -126,7 +219,20 @@ export async function status() {
       try {
         // Simplified ps check for Linux/Mac
         if (process.platform === 'win32') {
-          // Skip Win32 complex ps logic for now
+          const { stdout } = await execPromise(
+            `powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"CommandLine LIKE '%heuristic-mcp%index.js%'\\" | Select-Object -ExpandProperty ProcessId"`
+          );
+          const winPids = stdout
+            .trim()
+            .split(/\s+/)
+            .filter((p) => p && !isNaN(p));
+
+          for (const p of winPids) {
+            const pid = parseInt(p, 10);
+            if (pid && pid !== myPid) {
+              validPids.push(pid);
+            }
+          }
         } else {
           const { stdout } = await execPromise('ps aux');
           const lines = stdout.split('\n');

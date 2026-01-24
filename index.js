@@ -1,20 +1,25 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { stop, start, status } from './features/lifecycle.js';
+import { stop, start, status, logs } from './features/lifecycle.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { pipeline } from '@xenova/transformers';
 import fs from 'fs/promises';
+import fsSync, { createWriteStream } from 'fs';
 import path from 'path';
+import util from 'util';
+import os from 'os';
 
 import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
 
 // Import package.json for version
 const require = createRequire(import.meta.url);
 const packageJson = require('./package.json');
 
 import { loadConfig, getGlobalCacheDir } from './lib/config.js';
+import { ensureLogDirectory } from './lib/logging.js';
 
 import { EmbeddingsCache } from './lib/cache.js';
 import { CodebaseIndexer } from './features/index-codebase.js';
@@ -28,6 +33,15 @@ import * as AnnConfigFeature from './features/ann-config.js';
 import { register } from './features/register.js';
 
 const MEMORY_LOG_INTERVAL_MS = 15000;
+const DEFAULT_LOG_TAIL_LINES = 200;
+const PID_FILE_NAME = '.heuristic-mcp.pid';
+
+let logStream = null;
+let originalConsole = {
+  log: console.log,
+  warn: console.warn,
+  error: console.error,
+};
 
 function formatMb(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
@@ -40,80 +54,113 @@ function logMemory(prefix) {
   );
 }
 
-// Log cache directory logic for debugging
-try {
-  const globalCache = path.join(getGlobalCacheDir(), 'heuristic-mcp');
-  const localCache = path.join(process.cwd(), '.heuristic-mcp');
-  console.error(`[Server] Cache debug: Global=${globalCache}, Local=${localCache}`);
-  console.error(`[Server] Process CWD: ${process.cwd()}`);
-} catch (_e) { /* ignore */ }
+function printHelp() {
+  console.log(`Heuristic MCP Server
 
-// Parse workspace from command line arguments
-let args = process.argv.slice(2);
+Usage:
+  heuristic-mcp [options]
 
-if (args.includes('--version') || args.includes('-v')) {
-  console.log(packageJson.version);
-  process.exit(0);
+Options:
+  --status                 Show server and cache status
+  --logs                   Tail server logs (defaults to last 200 lines, follows)
+  --tail <lines>           Lines to show with --logs (default: ${DEFAULT_LOG_TAIL_LINES})
+  --no-follow              Do not follow log output with --logs
+  --start                  Ensure IDE config is registered (does not start server)
+  --stop                   Stop running server instances
+  --register [ide]         Register MCP server with IDE (antigravity|cursor|"Claude Desktop")
+  --workspace <path>       Workspace path (used by IDE launch / log viewer)
+  --version, -v            Show version
+  --help, -h               Show this help
+`);
 }
 
-const hadLogs = args.includes('--logs');
-if (hadLogs) {
-  process.env.SMART_CODING_VERBOSE = 'true';
-  args = args.filter((arg) => arg !== '--logs');
-  console.log('[Logs] Starting server with verbose console output (Ctrl+C to stop)...');
-}
-
-if (args.includes('--stop')) {
-  await stop();
-  process.exit(0);
-}
-
-if (args.includes('--start')) {
-  await start();
-  process.exit(0);
-}
-
-if (args.includes('--status')) {
-  await status();
-  process.exit(0);
-}
-
-// Check if --register flag is present
-if (args.includes('--register')) {
-  // Extract optional filter (e.g. --register antigravity)
-  const filterIndex = args.indexOf('--register');
-  const filter =
-    args[filterIndex + 1] && !args[filterIndex + 1].startsWith('-') ? args[filterIndex + 1] : null;
-
-  await register(filter);
-  process.exit(0);
-}
-
-const workspaceIndex = args.findIndex((arg) => arg.startsWith('--workspace'));
-let workspaceDir = null;
-
-if (workspaceIndex !== -1) {
-  const arg = args[workspaceIndex];
-  let rawWorkspace = null;
-
-  if (arg.includes('=')) {
-    rawWorkspace = arg.split('=')[1];
-  } else if (workspaceIndex + 1 < args.length) {
-    rawWorkspace = args[workspaceIndex + 1];
+async function setupPidFile() {
+  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
+    return null;
   }
 
-  // Check if IDE variable wasn't expanded (contains ${})
-  if (rawWorkspace && rawWorkspace.includes('${')) {
-    console.error(`[Server] IDE variable not expanded: ${rawWorkspace}, using current directory`);
-    workspaceDir = process.cwd();
-  } else if (rawWorkspace) {
-    workspaceDir = rawWorkspace;
+  const pidPath = path.join(os.homedir(), PID_FILE_NAME);
+  try {
+    await fs.writeFile(pidPath, `${process.pid}`, 'utf-8');
+  } catch (err) {
+    console.error(`[Server] Warning: Failed to write PID file: ${err.message}`);
+    return null;
   }
 
-  if (workspaceDir) {
-    console.error(`[Server] Workspace mode: ${workspaceDir}`);
+  const cleanup = () => {
+    try {
+      const current = fsSync.readFileSync(pidPath, 'utf-8').trim();
+      if (current === `${process.pid}`) {
+        fsSync.unlinkSync(pidPath);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  process.on('exit', cleanup);
+  process.on('SIGINT', () => {
+    cleanup();
+    process.exit(0);
+  });
+  process.on('SIGTERM', () => {
+    cleanup();
+    process.exit(0);
+  });
+
+  return pidPath;
+}
+
+async function setupFileLogging(activeConfig) {
+  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
+    return null;
+  }
+
+  try {
+    const logPath = await ensureLogDirectory(activeConfig);
+    logStream = createWriteStream(logPath, { flags: 'a' });
+
+    const writeLine = (level, args) => {
+      if (!logStream) return;
+      const message = util.format(...args);
+      const timestamp = new Date().toISOString();
+      const lines = message.split(/\r?\n/);
+      const payload =
+        lines.map((line) => `${timestamp} [${level}] ${line}`).join('\n') + '\n';
+      logStream.write(payload);
+    };
+
+    const wrap = (method, level) => {
+      const originalError = originalConsole.error;
+      console[method] = (...args) => {
+        // Always send to original stderr to avoid MCP protocol pollution on stdout
+        originalError(...args);
+        writeLine(level, args);
+      };
+    };
+
+    wrap('log', 'INFO');
+    wrap('warn', 'WARN');
+    wrap('error', 'ERROR');
+
+    logStream.on('error', (err) => {
+      originalConsole.error(`[Logs] Failed to write log file: ${err.message}`);
+    });
+
+    process.on('exit', () => {
+      if (logStream) logStream.end();
+    });
+
+    return logPath;
+  } catch (err) {
+    originalConsole.error(`[Logs] Failed to initialize log file: ${err.message}`);
+    return null;
   }
 }
+
+// Arguments parsed in main()
+
+
 
 // Global state
 let embedder = null;
@@ -152,9 +199,26 @@ const features = [
 ];
 
 // Initialize application
-async function initialize() {
+async function initialize(workspaceDir) {
   // Load configuration with workspace support
   config = await loadConfig(workspaceDir);
+  const pidPath = await setupPidFile();
+  const logPath = await setupFileLogging(config);
+  if (logPath) {
+    console.error(`[Logs] Writing server logs to ${logPath}`);
+    console.error(`[Logs] Log viewer: heuristic-mcp --logs --workspace "${config.searchDirectory}"`);
+  }
+  if (pidPath) {
+    console.error(`[Server] PID file: ${pidPath}`);
+  }
+
+  // Log cache directory logic for debugging
+  try {
+    const globalCache = path.join(getGlobalCacheDir(), 'heuristic-mcp');
+    const localCache = path.join(process.cwd(), '.heuristic-mcp');
+    console.log(`[Server] Cache debug: Global=${globalCache}, Local=${localCache}`);
+    console.log(`[Server] Process CWD: ${process.cwd()}`);
+  } catch (_e) { /* ignore */ }
 
   let startupMemoryTimer = null;
   if (config.verbose) {
@@ -174,17 +238,20 @@ async function initialize() {
   }
 
   // Create a transparent lazy-loading embedder closure
-  console.error('[Server] Initializing features...');
-  let cachedEmbedder = null;
+  console.log('[Server] Initializing features...');
+  let cachedEmbedderPromise = null;
   const lazyEmbedder = async (...args) => {
-    if (!cachedEmbedder) {
+    if (!cachedEmbedderPromise) {
       console.error(`[Server] Loading AI embedding model: ${config.embeddingModel}...`);
-      cachedEmbedder = await pipeline('feature-extraction', config.embeddingModel);
-      if (config.verbose) {
-        logMemory('[Server] Memory (after model load)');
-      }
+      cachedEmbedderPromise = pipeline('feature-extraction', config.embeddingModel).then((model) => {
+        if (config.verbose) {
+          logMemory('[Server] Memory (after model load)');
+        }
+        return model;
+      });
     }
-    return cachedEmbedder(...args);
+    const model = await cachedEmbedderPromise;
+    return model(...args);
   };
   embedder = lazyEmbedder;
 
@@ -200,7 +267,7 @@ async function initialize() {
 
   // Initialize cache
   cache = new EmbeddingsCache(config);
-  console.error(`[Server] Cache directory: ${config.cacheDirectory}`);
+  console.log(`[Server] Cache directory: ${config.cacheDirectory}`);
   await cache.load();
   if (config.verbose) {
     logMemory('[Server] Memory (after cache load)');
@@ -227,7 +294,7 @@ async function initialize() {
   server.hybridSearch = hybridSearch;
 
   // Start indexing in background (non-blocking)
-  console.error('[Server] Starting background indexing...');
+  console.log('[Server] Starting background indexing...');
   indexer
     .indexAll()
     .then(() => {
@@ -287,55 +354,179 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 // Main entry point
-async function main() {
-  await initialize();
+export async function main(argv = process.argv) {
+  // Parse workspace from command line arguments
+  let args = argv.slice(2);
+  const rawArgs = [...args];
+
+  if (args.includes('--version') || args.includes('-v')) {
+    console.log(packageJson.version);
+    process.exit(0);
+  }
+
+  if (args.includes('--help') || args.includes('-h')) {
+    printHelp();
+    process.exit(0);
+  }
+
+  const wantsLogs = args.includes('--logs');
+  const wantsNoFollow = args.includes('--no-follow');
+  let tailLines = DEFAULT_LOG_TAIL_LINES;
+  if (wantsLogs) {
+    const tailIndex = args.indexOf('--tail');
+    if (tailIndex !== -1 && args[tailIndex + 1]) {
+      const parsed = parseInt(args[tailIndex + 1], 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        tailLines = parsed;
+      }
+    }
+  }
+
+  if (args.includes('--stop')) {
+    await stop();
+    process.exit(0);
+  }
+
+  if (args.includes('--start')) {
+    await start();
+    process.exit(0);
+  }
+
+  if (args.includes('--status')) {
+    await status();
+    process.exit(0);
+  }
+
+  // Check if --register flag is present
+  if (args.includes('--register')) {
+    // Extract optional filter (e.g. --register antigravity)
+    const filterIndex = args.indexOf('--register');
+    const filter =
+      args[filterIndex + 1] && !args[filterIndex + 1].startsWith('-') ? args[filterIndex + 1] : null;
+
+    await register(filter);
+    process.exit(0);
+  }
+
+  const workspaceIndex = args.findIndex((arg) => arg.startsWith('--workspace'));
+  let workspaceDir = null;
+
+  if (workspaceIndex !== -1) {
+    const arg = args[workspaceIndex];
+    let rawWorkspace = null;
+
+    if (arg.includes('=')) {
+      rawWorkspace = arg.split('=')[1];
+    } else if (workspaceIndex + 1 < args.length) {
+      rawWorkspace = args[workspaceIndex + 1];
+    }
+
+    // Check if IDE variable wasn't expanded (contains ${})
+    if (rawWorkspace && rawWorkspace.includes('${')) {
+      console.error(`[Server] IDE variable not expanded: ${rawWorkspace}, using current directory`);
+      workspaceDir = process.cwd();
+    } else if (rawWorkspace) {
+      workspaceDir = rawWorkspace;
+    }
+
+    if (workspaceDir) {
+      console.error(`[Server] Workspace mode: ${workspaceDir}`);
+    }
+  }
+
+  if (wantsLogs) {
+    await logs({
+      workspaceDir,
+      tailLines,
+      follow: !wantsNoFollow,
+    });
+    process.exit(0);
+  }
+
+  const knownFlags = new Set([
+    '--status',
+    '--logs',
+    '--tail',
+    '--no-follow',
+    '--start',
+    '--stop',
+    '--register',
+    '--workspace',
+    '--version',
+    '-v',
+    '--help',
+    '-h',
+  ]);
+  const flagsWithValue = new Set(['--tail', '--workspace', '--register']);
+  const unknownFlags = [];
+  for (let i = 0; i < rawArgs.length; i += 1) {
+    const arg = rawArgs[i];
+    if (flagsWithValue.has(arg)) {
+      if (arg.includes('=')) continue;
+      const next = rawArgs[i + 1];
+      if (next && !next.startsWith('-')) {
+        i += 1;
+      }
+      continue;
+    }
+    if (arg.startsWith('-') && !knownFlags.has(arg) && !arg.startsWith('--workspace=')) {
+      unknownFlags.push(arg);
+    }
+  }
+  if (unknownFlags.length > 0) {
+    console.error(`[Error] Unknown option(s): ${unknownFlags.join(', ')}`);
+    printHelp();
+    process.exit(1);
+  }
+
+  await initialize(workspaceDir);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  console.error('[Server] Heuristic MCP server ready!');
+  console.log('[Server] Heuristic MCP server ready!');
 }
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.error('\n[Server] Shutting down gracefully...');
+  console.log('\n[Server] Shutting down gracefully...');
 
   // Stop file watcher
   if (indexer && indexer.watcher) {
     await indexer.watcher.close();
-    console.error('[Server] File watcher stopped');
+    console.log('[Server] File watcher stopped');
   }
 
   // Give workers time to finish current batch (prevents core dump)
   if (indexer && indexer.terminateWorkers) {
     try {
-      console.error('[Server] Waiting for workers to finish...');
+      console.log('[Server] Waiting for workers to finish...');
       await new Promise((resolve) => setTimeout(resolve, 500));
       await indexer.terminateWorkers();
-      console.error('[Server] Workers terminated');
+      console.log('[Server] Workers terminated');
     } catch (_err) {
       // Suppress native module errors during shutdown
-      console.error('[Server] Workers shutdown (with warnings)');
+      console.log('[Server] Workers shutdown (with warnings)');
     }
   }
 
   // Save cache
   if (cache) {
     await cache.save();
-    console.error('[Server] Cache saved');
+    console.log('[Server] Cache saved');
   }
 
-  console.error('[Server] Goodbye!');
+  console.log('[Server] Goodbye!');
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.error('\n[Server] Received SIGTERM, shutting down...');
+  console.log('\n[Server] Received SIGTERM, shutting down...');
 
   // Stop file watcher
   if (indexer && indexer.watcher) {
     await indexer.watcher.close();
-    console.error('[Server] File watcher stopped');
+    console.log('[Server] File watcher stopped');
   }
 
   // Give workers time to finish current batch (prevents core dump)
@@ -354,11 +545,20 @@ process.on('SIGTERM', async () => {
   // Save cache
   if (cache) {
     await cache.save();
-    console.error('[Server] Cache saved');
+    console.log('[Server] Cache saved');
   }
 
-  console.error('[Server] Goodbye!');
+  console.log('[Server] Goodbye!');
   process.exit(0);
 });
 
-main().catch(console.error);
+const isMain = process.argv[1] && (
+  path.resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase() ||
+  process.argv[1].endsWith('heuristic-mcp') ||
+  process.argv[1].endsWith('heuristic-mcp.js') ||
+  path.basename(process.argv[1]) === 'index.js'
+);
+
+if (isMain) {
+  main().catch(console.error);
+}

@@ -54,7 +54,14 @@ Shows server PID(s) and cache stats.
 heuristic-mcp --logs
 ```
 
-Starts the server with verbose logging in the current terminal.
+Tails the server log for the current workspace (defaults to last 200 lines and follows).
+
+Optional flags:
+
+```bash
+heuristic-mcp --logs --tail 100
+heuristic-mcp --logs --no-follow
+```
 
 ### Version
 
