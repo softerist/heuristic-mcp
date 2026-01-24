@@ -263,6 +263,7 @@ async function initialize(workspaceDir) {
       }).then((model) => {
         const loadSeconds = ((Date.now() - modelLoadStart) / 1000).toFixed(1);
         console.log(`[Server] Embedding model loaded (${loadSeconds}s). Starting intensive indexing (expect high CPU)...`);
+        console.log(`[Server] Embedding model ready: ${config.embeddingModel}`);
         if (config.verbose) {
           logMemory('[Server] Memory (after model load)');
         }
@@ -273,9 +274,22 @@ async function initialize(workspaceDir) {
     return model(...args);
   };
   embedder = lazyEmbedder;
+  let embedderPreloaded = false;
+
+  // Preload the embedding model to ensure deterministic startup logs
+  try {
+    console.log('[Server] Preloading embedding model...');
+    await embedder(' ');
+    embedderPreloaded = true;
+  } catch (err) {
+    console.warn(`[Server] Embedding model preload failed: ${err.message}`);
+  }
 
   // In verbose mode, we trigger an early load to provide immediate resource feedback
   if (config.verbose) {
+    if (embedderPreloaded) {
+      return;
+    }
     embedder('').catch((err) => {
       // Ignore "text may not be null" errors as we are just pre-warming
       if (!err.message.includes('text may not be null')) {
@@ -503,7 +517,7 @@ export async function main(argv = process.argv) {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  console.log('[Server] Heuristic MCP server ready!');
+  console.log('[Server] Heuristic MCP server started.');
 }
 
 // Graceful shutdown
