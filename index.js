@@ -607,7 +607,10 @@ export async function main(argv = process.argv) {
     args.includes('--register')
   );
 
-  if (isServerMode) {
+  if (
+    isServerMode &&
+    !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test')
+  ) {
     enableStderrOnlyLogging();
   }
 

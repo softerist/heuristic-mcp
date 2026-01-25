@@ -854,6 +854,7 @@
   "cacheWriteHighWaterMark": 262144,
   "cacheVectorFlushChars": 262144,
   "cacheVectorCheckFinite": true,
+  "cacheVectorNoMutation": false,
   "cacheVectorJoinThreshold": 8192,
   "cacheVectorJoinChunkSize": 2048,
   "watchFiles": false,

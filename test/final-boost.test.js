@@ -90,8 +90,15 @@ describe('Final Coverage Boost', () => {
     });
 
     it('should handle worker error event', async () => {
+      let embeddingsStatCalls = 0;
       fs.stat.mockImplementation(async (path) => {
-          if (path && path.includes('embeddings.json')) return { size: 6 * 1024 * 1024 };
+          if (path && path.includes('embeddings.json')) {
+              embeddingsStatCalls++;
+              // Only trigger worker (large size) on first attempt.
+              // On retry (triggered by load() seeing null result), return small size to use fs.readFile.
+              if (embeddingsStatCalls === 1) return { size: 6 * 1024 * 1024 };
+              return { size: 100 };
+          }
           return { size: 100 };
       });
       fs.readFile.mockImplementation(async (path) => {
@@ -128,8 +135,13 @@ describe('Final Coverage Boost', () => {
     });
 
     it('should handle worker exit with non-zero code', async () => {
+      let embeddingsStatCalls = 0;
       fs.stat.mockImplementation(async (path) => {
-          if (path && path.includes('embeddings.json')) return { size: 6 * 1024 * 1024 };
+          if (path && path.includes('embeddings.json')) {
+              embeddingsStatCalls++;
+              if (embeddingsStatCalls === 1) return { size: 6 * 1024 * 1024 };
+              return { size: 100 };
+          }
           return { size: 100 };
       });
       fs.readFile.mockImplementation(async (path) => {

@@ -147,8 +147,12 @@ describe('embedding-worker', () => {
 
     await messageHandler({ type: 'unknown' });
 
-    // Should not throw and not call postMessage after initial ready
-    expect(parentPort.postMessage).toHaveBeenCalledTimes(1);
+    // Should throw error for unknown message type
+    expect(parentPort.postMessage).toHaveBeenCalledTimes(2);
     expect(parentPort.postMessage).toHaveBeenCalledWith({ type: 'ready' });
+    expect(parentPort.postMessage).toHaveBeenCalledWith({ 
+      type: 'error', 
+      error: 'Unknown message type: unknown' 
+    });
   });
 });
