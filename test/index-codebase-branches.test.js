@@ -117,7 +117,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     indexer = new CodebaseIndexer(mockEmbedder, mockCache, mockConfig, mockServer);
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'info').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -306,7 +306,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
   it('covers indexFile verbose=true failure (L417 block)', async () => {
     indexer.config.verbose = true;
-    vi.spyOn(fs, 'stat').mockResolvedValue({ isDirectory: () => false, size: 100 });
+    vi.spyOn(fs, 'stat').mockResolvedValue({ isDirectory: () => false, size: 100, mtimeMs: 123 });
     vi.spyOn(fs, 'readFile').mockResolvedValue('content');
     vi.spyOn(utils, 'hashContent').mockReturnValue('new-hash');
     mockCache.getFileHash.mockReturnValue('old-hash');
@@ -420,13 +420,13 @@ describe('CodebaseIndexer Branch Coverage', () => {
     );
   });
 
-  it('skips enqueue when unlink already queued', () => {
+  it('overwrites queued unlink when a new event arrives', () => {
     const filePath = '/test/file.js';
     indexer.pendingWatchEvents.set(filePath, 'unlink');
 
-    indexer.enqueueWatchEvent('change', filePath);
+    CodebaseIndexer.prototype.enqueueWatchEvent.call(indexer, 'change', filePath);
 
-    expect(indexer.pendingWatchEvents.get(filePath)).toBe('unlink');
+    expect(indexer.pendingWatchEvents.get(filePath)).toBe('change');
   });
 
   it('covers setupFileWatcher branches', async () => {
@@ -487,7 +487,8 @@ describe('CodebaseIndexer Branch Coverage', () => {
     
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => false,
-      size: mockConfig.maxFileSize + 100
+      size: mockConfig.maxFileSize + 100,
+      mtimeMs: 123
     });
 
     await indexer.indexAll();
@@ -505,7 +506,8 @@ describe('CodebaseIndexer Branch Coverage', () => {
     
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => false,
-      size: 50
+      size: 50,
+      mtimeMs: 123
     });
     vi.spyOn(fs, 'readFile').mockRejectedValue(new Error('Read failed'));
 
@@ -524,7 +526,8 @@ describe('CodebaseIndexer Branch Coverage', () => {
     
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => false,
-      size: 50
+      size: 50,
+      mtimeMs: 123
     });
     vi.spyOn(fs, 'readFile').mockResolvedValue('content');
     
@@ -533,7 +536,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     await indexer.indexAll();
 
-    expect(console.log).toHaveBeenCalledWith(
+    expect(console.info).toHaveBeenCalledWith(
       expect.stringContaining('Skipped unchanged.js (unchanged)')
     );
     expect(mockEmbedder).not.toHaveBeenCalled();
@@ -548,21 +551,21 @@ describe('CodebaseIndexer Branch Coverage', () => {
     // Trigger ADD event
     await handlers['add']('added.js');
     expect(indexer.pendingWatchEvents.get(path.join('/test', 'added.js'))).toBe('add');
-    expect(console.log).toHaveBeenCalledWith(
+    expect(console.info).toHaveBeenCalledWith(
       expect.stringContaining('Queued add event during indexing')
     );
 
     // Trigger CHANGE event
     await handlers['change']('changed.js');
     expect(indexer.pendingWatchEvents.get(path.join('/test', 'changed.js'))).toBe('change');
-    expect(console.log).toHaveBeenCalledWith(
+    expect(console.info).toHaveBeenCalledWith(
       expect.stringContaining('Queued change event during indexing')
     );
 
     // Trigger UNLINK event
     await handlers['unlink']('deleted.js');
     expect(indexer.pendingWatchEvents.get(path.join('/test', 'deleted.js'))).toBe('unlink');
-    expect(console.log).toHaveBeenCalledWith(
+    expect(console.info).toHaveBeenCalledWith(
       expect.stringContaining('Queued delete event during indexing')
     );
   });

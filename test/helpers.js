@@ -106,7 +106,7 @@ export async function createTestFixtures(options = {}) {
   // This prevents tests from indexing the real heuristic-mcp codebase
   await fs.writeFile(
     path.join(searchDir, 'test.js'),
-    'function hello() {\n  console.log("hello world");\n}\n\n// embedder CodebaseIndexer test fixture\nmodule.exports = { hello };'
+    'function hello() {\n  console.info("hello world");\n}\n\n// embedder CodebaseIndexer test fixture\nmodule.exports = { hello };'
   );
   await fs.writeFile(
     path.join(searchDir, 'utils.py'),

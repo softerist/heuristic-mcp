@@ -76,7 +76,7 @@ describe('Model Token Limits', () => {
   describe('MODEL_TOKEN_LIMITS', () => {
     it('should have default limit', () => {
       expect(MODEL_TOKEN_LIMITS['default']).toBeDefined();
-      expect(MODEL_TOKEN_LIMITS['default']).toBe(8192);
+      expect(MODEL_TOKEN_LIMITS['default']).toBe(512);
     });
 
     it('should have limits for Jina models', () => {
@@ -90,12 +90,12 @@ describe('Model Token Limits', () => {
     });
 
     it('should return default for unknown models', () => {
-      expect(getModelTokenLimit('unknown/model-name')).toBe(8192);
+      expect(getModelTokenLimit('unknown/model-name')).toBe(512);
     });
 
     it('should return default for null/undefined', () => {
-      expect(getModelTokenLimit(null)).toBe(8192);
-      expect(getModelTokenLimit(undefined)).toBe(8192);
+      expect(getModelTokenLimit(null)).toBe(512);
+      expect(getModelTokenLimit(undefined)).toBe(512);
     });
 
     it('should be case-insensitive', () => {
@@ -148,8 +148,8 @@ describe('Chunking Parameters', () => {
     it('should handle unknown models with defaults', () => {
       const params = getChunkingParams('unknown/model');
 
-      expect(params.maxTokens).toBe(8192);
-      expect(params.targetTokens).toBeLessThan(8192);
+      expect(params.maxTokens).toBe(512);
+      expect(params.targetTokens).toBeLessThan(512);
     });
   });
 });

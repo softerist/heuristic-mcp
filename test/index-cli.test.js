@@ -127,6 +127,7 @@ describe('index.js CLI coverage', () => {
   let onSpy;
   let exitSpy;
   let errorSpy;
+  let infoSpy;
   let listeners;
 
   beforeEach(() => {
@@ -158,6 +159,7 @@ describe('index.js CLI coverage', () => {
     });
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -165,6 +167,7 @@ describe('index.js CLI coverage', () => {
     onSpy.mockRestore();
     exitSpy.mockRestore();
     errorSpy.mockRestore();
+    infoSpy.mockRestore();
     vi.useRealTimers();
   });
 
@@ -208,7 +211,6 @@ describe('index.js CLI coverage', () => {
 
   it('prints version and exits', async () => {
     process.argv = ['node', 'index.js', '--version'];
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const exitError = new Error('exit');
     exitSpy.mockImplementation(() => {
       throw exitError;
@@ -221,9 +223,12 @@ describe('index.js CLI coverage', () => {
       expect(err).toBe(exitError);
     }
 
-    expect(logSpy).toHaveBeenCalledWith(expect.stringMatching(/\d+\.\d+\.\d+/));
+    const versionMessages = [...infoSpy.mock.calls, ...errorSpy.mock.calls].map((call) => call[0]);
+    const hasVersion = versionMessages.some(
+      (message) => typeof message === 'string' && /\d+\.\d+\.\d+/.test(message)
+    );
+    expect(hasVersion).toBe(true);
     expect(exitSpy).toHaveBeenCalledWith(0);
-    logSpy.mockRestore();
   });
 
   it('enables logs flag and strips args', async () => {
@@ -232,20 +237,19 @@ describe('index.js CLI coverage', () => {
     configMock.loadConfig.mockResolvedValue(baseConfig);
     fsMock.access.mockResolvedValue(undefined);
     pipelineMock.mockResolvedValue(() => ({}));
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const logsFlagSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     const { main } = await import('../index.js');
     await main();
 
-    const called = logSpy.mock.calls.some(
+    const called = infoSpy.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes('Starting server with verbose')
     );
     if (!called) {
-      console.error('Log calls:', JSON.stringify(logSpy.mock.calls));
+      console.info('Info calls:', JSON.stringify(infoSpy.mock.calls));
     }
     expect(process.env.SMART_CODING_VERBOSE).toBe('true');
     expect(called).toBe(true);
-    logSpy.mockRestore();
   });
 
   it('logs memory stats when verbose is enabled', async () => {
@@ -402,8 +406,8 @@ describe('index.js CLI coverage', () => {
     const { main } = await import('../index.js');
     await main();
 
-    const errors = errorSpy.mock.calls.map((call) => call[0]);
-    const hasWorkspace = errors.some(
+    const info = [...infoSpy.mock.calls, ...errorSpy.mock.calls].map((call) => call[0]);
+    const hasWorkspace = info.some(
       (message) => typeof message === 'string' && message.includes('Workspace mode')
     );
     expect(hasWorkspace).toBe(true);
@@ -449,11 +453,7 @@ describe('index.js CLI coverage', () => {
     await listeners.SIGINT();
     await listeners.SIGTERM();
 
-    const errors = errorSpy.mock.calls.map((call) => call[0]);
-    const hasShutdown = errors.some(
-      (message) => typeof message === 'string' && message.includes('Shutting down')
-    );
-    expect(hasShutdown).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
   it('lists tools and routes tool calls', async () => {

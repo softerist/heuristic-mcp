@@ -108,7 +108,7 @@ describe('CodebaseIndexer Error Handling', () => {
     // We expect it to log error and resolve with empty array (and then retry single threaded)
     // Since we mock embedder, the single threaded retry should succeed.
 
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await indexer.processChunksWithWorkers(chunks);
 

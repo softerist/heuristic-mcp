@@ -80,7 +80,7 @@ const createCache = () => ({
 
 describe('index-codebase branch coverage focused', () => {
   let consoleWarn;
-  let consoleLog;
+  let consoleInfo;
 
   beforeEach(() => {
     vi.resetModules();
@@ -91,12 +91,12 @@ describe('index-codebase branch coverage focused', () => {
     fsMock.readFile = vi.fn();
     fsMock.mkdir = vi.fn();
     consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => {});
   });
 
   afterEach(() => {
     consoleWarn.mockRestore();
-    consoleLog.mockRestore();
+    consoleInfo.mockRestore();
   });
 
   it('handles auto worker init failures', async () => {
@@ -672,7 +672,7 @@ describe('index-codebase branch coverage focused', () => {
 
     await indexer.indexAll(false);
 
-    const hasBatchSize = consoleLog.mock.calls.some(
+    const hasBatchSize = consoleInfo.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes('batch size: 500')
     );
     expect(hasBatchSize).toBe(true);

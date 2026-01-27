@@ -91,7 +91,7 @@ try {
 ### Logging
 
 - Use `console.error()` for server logs (MCP protocol standard)
-- CLI utilities and install scripts may use `console.log()` for user-friendly output
+- CLI utilities and install scripts may use `console.info()` for user-friendly output
 
 ## Adding New Features
 

@@ -9,8 +9,8 @@ async function clearCache() {
 
     // Remove cache directory
     await fs.rm(cacheDir, { recursive: true, force: true });
-    console.log(`Cache cleared successfully: ${cacheDir}`);
-    console.log('Next startup will perform a full reindex.');
+    console.info(`Cache cleared successfully: ${cacheDir}`);
+    console.info('Next startup will perform a full reindex.');
   } catch (error) {
     console.error(`Error clearing cache: ${error.message}`);
     process.exit(1);

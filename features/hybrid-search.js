@@ -26,7 +26,13 @@ export class HybridSearch {
 
     for (const file of uniqueFiles) {
       if (!this.fileModTimes.has(file)) {
-        missing.push(file);
+        // Try to get from cache metadata first (fast)
+        const meta = this.cache.getFileMeta?.(file);
+        if (meta && typeof meta.mtimeMs === 'number') {
+          this.fileModTimes.set(file, meta.mtimeMs);
+        } else {
+          missing.push(file);
+        }
       }
     }
 
@@ -71,8 +77,8 @@ export class HybridSearch {
       pooling: 'mean',
       normalize: true,
     });
-    const queryVector = Array.from(queryEmbed.data);
-    const queryVectorTyped = queryEmbed.data;
+    const queryVector = queryEmbed.data; // Keep as Float32Array for performance
+    const queryVectorTyped = queryVector;
 
     let candidates = vectorStore;
     let usedAnn = false;
@@ -103,6 +109,10 @@ export class HybridSearch {
     }
 
     const lowerQuery = query.toLowerCase();
+    const queryWords =
+      lowerQuery.length > 1 ? lowerQuery.split(/\s+/).filter((word) => word.length > 2) : [];
+    const queryWordCount = queryWords.length;
+
     if (usedAnn && lowerQuery.length > 1) {
       let exactMatchCount = 0;
       for (const chunk of candidates) {
@@ -118,70 +128,84 @@ export class HybridSearch {
         for (const chunk of vectorStore) {
           const content = chunk.content?.toLowerCase() || '';
           if (!content.includes(lowerQuery)) continue;
-          
+
           const key = `${chunk.file}:${chunk.startLine}:${chunk.endLine}`;
           if (seen.has(key)) {
             continue;
           }
-          
+
           seen.add(key);
           candidates.push(chunk);
         }
       }
     }
 
-    if (this.config.recencyBoost > 0) {
+    // Recency pre-processing
+    let recencyBoostEnabled = this.config.recencyBoost > 0;
+    let now = Date.now();
+    let recencyDecayMs = (this.config.recencyDecayDays || 30) * 24 * 60 * 60 * 1000;
+    let semanticWeight = this.config.semanticWeight;
+    let exactMatchBoost = this.config.exactMatchBoost;
+    let recencyBoost = this.config.recencyBoost;
+
+    if (recencyBoostEnabled) {
       // optimization: avoid IO storm during full scan fallbacks
-      // Only check recency on demand if we have a reasonable number of candidates
+      // For large candidate sets, we strictly rely on cached metadata
+      // For small sets, we allow best-effort fs.stat
       if (candidates.length <= 1000) {
         await this.populateFileModTimes(candidates.map((chunk) => chunk.file));
       } else {
-         // for large sets, relied on cached times only (or 0 if missing)
-         // this prevents blocking the search request with thousands of fs.stat calls
+        // Bulk pre-populate from cache only (no syscalls)
+        for (const chunk of candidates) {
+          if (!this.fileModTimes.has(chunk.file)) {
+            const meta = this.cache.getFileMeta?.(chunk.file);
+            if (meta && typeof meta.mtimeMs === 'number') {
+              this.fileModTimes.set(chunk.file, meta.mtimeMs);
+            }
+          }
+        }
       }
     }
 
     // Score all chunks (batched to prevent blocking event loop)
     const BATCH_SIZE = 500;
     const scoredChunks = [];
-    
+
     // Process in batches
     for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
       const batch = candidates.slice(i, i + BATCH_SIZE);
-      
+
       // Allow event loop to tick between batches
       if (i > 0) {
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
-      
+
       for (const chunk of batch) {
         // Semantic similarity (vectors are normalized)
-        let score = dotSimilarity(queryVector, chunk.vector) * this.config.semanticWeight;
+        let score = dotSimilarity(queryVector, chunk.vector) * semanticWeight;
 
         // Exact match boost
         const lowerContent = chunk.content?.toLowerCase() || '';
 
         if (lowerContent && lowerContent.includes(lowerQuery)) {
-          score += this.config.exactMatchBoost;
-        } else if (lowerContent) {
-          // Partial word matching
-          const queryWords = lowerQuery.split(/\s+/);
-          const matchedWords = queryWords.filter(
-            (word) => word.length > 2 && lowerContent.includes(word)
-          ).length;
-          score += (matchedWords / queryWords.length) * 0.3;
+          score += exactMatchBoost;
+        } else if (lowerContent && queryWordCount > 0) {
+          // Partial word matching (optimized)
+          let matchedWords = 0;
+          for (let j = 0; j < queryWordCount; j++) {
+            if (lowerContent.includes(queryWords[j])) matchedWords++;
+          }
+          score += (matchedWords / queryWordCount) * 0.3;
         }
 
         // Recency boost - recently modified files rank higher
-        if (this.config.recencyBoost > 0) {
+        if (recencyBoostEnabled) {
           const mtime = this.fileModTimes.get(chunk.file);
           if (typeof mtime === 'number') {
-            const daysSinceModified = (Date.now() - mtime) / (1000 * 60 * 60 * 24);
-            const decayDays = this.config.recencyDecayDays || 30;
-
-            // Linear decay: full boost at 0 days, no boost after decayDays
-            const recencyScore = Math.max(0, 1 - daysSinceModified / decayDays);
-            score += recencyScore * this.config.recencyBoost;
+            const ageMs = now - mtime;
+            // Linear decay: full boost at 0 age, 0 boost at recencyDecayMs
+            const recencyFactor = Math.max(0, 1 - ageMs / recencyDecayMs);
+            score += recencyFactor * recencyBoost;
           }
         }
 
@@ -215,7 +239,6 @@ export class HybridSearch {
             chunk.score += proximity * this.config.callGraphBoost;
           }
         }
-
         // Re-sort after applying call graph boost
         scoredChunks.sort((a, b) => b.score - a.score);
       }

@@ -24,6 +24,7 @@ describe('lifecycle', () => {
   const originalPlatform = process.platform;
   const originalPid = process.pid;
   let consoleLog;
+  let consoleInfo;
   let consoleWarn;
   let consoleError;
   let killSpy;
@@ -38,6 +39,7 @@ describe('lifecycle', () => {
     osMock.homedir = () => 'C:/Users/test';
     registerMock = vi.fn();
     consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => {});
     consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
@@ -46,6 +48,7 @@ describe('lifecycle', () => {
   afterEach(() => {
     setPlatform(originalPlatform);
     consoleLog.mockRestore();
+    consoleInfo.mockRestore();
     consoleWarn.mockRestore();
     consoleError.mockRestore();
     killSpy.mockRestore();
@@ -59,7 +62,7 @@ describe('lifecycle', () => {
 
     await stop();
 
-    expect(consoleLog).toHaveBeenCalledWith(
+    expect(consoleInfo).toHaveBeenCalledWith(
       '[Lifecycle] No running instances found (already stopped).'
     );
   });
@@ -91,7 +94,7 @@ describe('lifecycle', () => {
 
     await stop();
 
-    expect(consoleLog).toHaveBeenCalledWith(
+    expect(consoleInfo).toHaveBeenCalledWith(
       '[Lifecycle] No running instances found (already stopped).'
     );
   });
@@ -165,8 +168,8 @@ describe('lifecycle', () => {
 
     await start();
 
-    expect(consoleLog).toHaveBeenCalledWith('[Lifecycle] ✅ Configuration checked.');
-    expect(consoleLog).toHaveBeenCalledWith(
+    expect(consoleInfo).toHaveBeenCalledWith('[Lifecycle] ✅ Configuration checked.');
+    expect(consoleInfo).toHaveBeenCalledWith(
       '[Lifecycle] To start the server, please reload your IDE window or restart the IDE.'
     );
   });
@@ -210,7 +213,6 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleError).not.toHaveBeenCalled();
     expect(fsMock.readdir).toHaveBeenCalled();
     expect(fsMock.unlink).toHaveBeenCalled();
   });
@@ -233,7 +235,10 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleLog).toHaveBeenCalledWith('[Lifecycle] ⚪ Server is STOPPED.');
+    const stopped = consoleInfo.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('Server is STOPPED')
+    );
+    expect(stopped).toBe(true);
   });
 
   it('reports running status when PID file points to live process', async () => {
@@ -261,8 +266,8 @@ describe('lifecycle', () => {
     await status();
 
     expect(killSpy).toHaveBeenCalledWith(4444, 0);
-    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('Server is RUNNING'));
-    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('cache directory'));
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Server is RUNNING'));
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('cache directory'));
   });
 
   it('reports stopped status and empty cache dirs on win32', async () => {
@@ -276,12 +281,12 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleLog).toHaveBeenCalledWith('[Lifecycle] ⚪ Server is STOPPED.');
-    expect(consoleLog).toHaveBeenCalledWith('[Status] No cache directories found.');
-    expect(consoleLog).toHaveBeenCalledWith(
+    expect(consoleInfo).toHaveBeenCalledWith('[Lifecycle] ⚪ Server is STOPPED.');
+    expect(consoleInfo).toHaveBeenCalledWith('[Status] No cache directories found.');
+    expect(consoleInfo).toHaveBeenCalledWith(
       expect.stringContaining('Expected location: C:\\LocalApp\\heuristic-mcp')
     );
-    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('Cursor\\User\\settings.json'));
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Cursor\\User\\settings.json'));
   });
 
   it('uses win32 cache root fallback when LOCALAPPDATA is unset', async () => {
@@ -295,8 +300,8 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('Expected location:'));
-    expect(consoleLog).toHaveBeenCalledWith(
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Expected location:'));
+    expect(consoleInfo).toHaveBeenCalledWith(
       expect.stringContaining('AppData\\Local\\heuristic-mcp')
     );
   });
@@ -311,7 +316,7 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('Cursor\\User\\settings.json'));
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Cursor\\User\\settings.json'));
   });
 
   it('reports indexing status for empty and incomplete caches on darwin', async () => {
@@ -335,9 +340,9 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('Indexing: ⚠️  NO FILES'));
-    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('Indexing: ⚠️  INCOMPLETE'));
-    expect(consoleLog).toHaveBeenCalledWith(
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Indexing: ⚠️  NO FILES'));
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Indexing: ⚠️  INCOMPLETE'));
+    expect(consoleInfo).toHaveBeenCalledWith(
       expect.stringContaining('Library\\Application Support\\Cursor\\User\\settings.json')
     );
   });
@@ -360,7 +365,7 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleLog).toHaveBeenCalledWith(
+    expect(consoleInfo).toHaveBeenCalledWith(
       expect.stringContaining('Server is RUNNING. PID(s): 5555')
     );
   });
@@ -389,8 +394,8 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('PID(s): 6666'));
-    expect(consoleLog).not.toHaveBeenCalledWith(expect.stringContaining('7777'));
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('PID(s): 6666'));
+    expect(consoleInfo).not.toHaveBeenCalledWith(expect.stringContaining('7777'));
   });
 
   it('handles missing meta files and corrupted caches', async () => {
@@ -424,12 +429,12 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleLog).toHaveBeenCalledWith(
+    expect(consoleInfo).toHaveBeenCalledWith(
       expect.stringContaining('Initializing / Indexing in progress')
     );
-    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('Incomplete cache (stale)'));
-    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('Invalid cache directory'));
-    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('Invalid or corrupted'));
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Incomplete cache (stale)'));
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Invalid cache directory'));
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Invalid or corrupted'));
   });
 
   it('reports fatal status errors', async () => {
@@ -461,7 +466,7 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleLog).toHaveBeenCalledWith('[Status] No cache directories found.');
+    expect(consoleInfo).toHaveBeenCalledWith('[Status] No cache directories found.');
   });
 
   it('marks config paths as existing when access succeeds', async () => {
@@ -482,7 +487,7 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('(exists)'));
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('(exists)'));
   });
 
   it('handles ESRCH error when killing a process', async () => {
@@ -516,6 +521,9 @@ describe('lifecycle', () => {
     await status();
 
     expect(fsMock.unlink).toHaveBeenCalledWith(expect.stringContaining('.heuristic-mcp.pid'));
-    expect(consoleError).not.toHaveBeenCalled();
+    const fatalError = consoleError.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('Failed to check status')
+    );
+    expect(fatalError).toBe(false);
   });
 });

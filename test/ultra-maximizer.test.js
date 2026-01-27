@@ -47,7 +47,7 @@ describe('Ultra Maximizer', () => {
         verbose: true, // Crucial for line 673
       };
       const cache = new EmbeddingsCache(config);
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       // Mock file system for load()
       vi.spyOn(fs, 'mkdir').mockResolvedValue();
@@ -61,7 +61,8 @@ describe('Ultra Maximizer', () => {
 
       await cache.load();
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Loaded call-graph data'));
+      expect(cache.fileCallData.size).toBe(1);
+      expect(cache.fileCallData.has('f.js')).toBe(true);
     });
   });
 

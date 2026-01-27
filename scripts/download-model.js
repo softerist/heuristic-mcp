@@ -12,15 +12,15 @@ async function downloadModel() {
     // Force cache directory to global location
     env.cacheDir = globalCacheDir;
 
-    console.log(`[Model Setup] Pre-caching model to: ${globalCacheDir}`);
+    console.info(`[Model Setup] Pre-caching model to: ${globalCacheDir}`);
     // Check if network is available by pinging HF (simple check)
     // Actually, pipeline() will fail fast if network is down
-    console.log(`[Model Setup] Downloading 'jinaai/jina-embeddings-v2-base-code'...`);
+    console.info(`[Model Setup] Downloading 'jinaai/jina-embeddings-v2-base-code'...`);
 
     // This will download the model to the cache directory
     await pipeline('feature-extraction', 'jinaai/jina-embeddings-v2-base-code');
 
-    console.log(`[Model Setup] ✅ Model cached successfully!`);
+    console.info(`[Model Setup] ✅ Model cached successfully!`);
   } catch (error) {
     if (error && error.code === 'ERR_MODULE_NOT_FOUND') {
       console.warn(

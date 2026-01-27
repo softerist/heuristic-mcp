@@ -104,7 +104,7 @@ describe('Features Coverage Maximizer', () => {
       };
       const result = await findSimilar.handleToolCall(request, tool);
       if (!result.content[0].text.includes('Similar Code')) {
-        console.log('DEBUG [features]: Result text:', result.content[0].text);
+        console.info('DEBUG [features]: Result text:', result.content[0].text);
       }
       expect(result.content[0].text).toContain('Similar Code');
     });

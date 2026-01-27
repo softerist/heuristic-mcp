@@ -27,7 +27,7 @@ async function searchConfigs() {
   const searcher = new HybridSearch(embedder, cache, config);
   const { results } = await searcher.search('configuration files, config, settings');
 
-  console.log(JSON.stringify(results, null, 2));
+  console.info(JSON.stringify(results, null, 2));
 }
 
 searchConfigs().catch(err => {

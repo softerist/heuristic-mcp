@@ -55,7 +55,7 @@ describe('CodebaseIndexer batch processing presets', () => {
 
     hashContent.mockReturnValueOnce('hash');
 
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await indexer.indexAll(false);
 
@@ -87,7 +87,7 @@ describe('CodebaseIndexer batch processing presets', () => {
 
     fs.stat.mockRejectedValueOnce(new Error('stat fail'));
 
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await indexer.indexAll(false);
 

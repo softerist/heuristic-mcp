@@ -46,16 +46,19 @@ const PID_FILE_NAME = '.heuristic-mcp.pid';
 
 let logStream = null;
 let originalConsole = {
-  log: console.log,
+  log: console.info,
   warn: console.warn,
   error: console.error,
+  info: console.info,
 };
 
 function enableStderrOnlyLogging() {
   // Keep MCP stdout clean by routing all console output to stderr.
-  console.log = (...args) => originalConsole.error(...args);
-  console.warn = (...args) => originalConsole.error(...args);
-  console.error = (...args) => originalConsole.error(...args);
+  const redirect = (...args) => originalConsole.error(...args);
+  console.info = redirect;
+  console.warn = redirect;
+  console.error = redirect;
+  console.info = redirect;
 }
 
 function formatMb(bytes) {
@@ -70,7 +73,7 @@ function logMemory(prefix) {
 }
 
 function printHelp() {
-  console.log(`Heuristic MCP Server
+  console.info(`Heuristic MCP Server
 
 Usage:
   heuristic-mcp [options]
@@ -112,16 +115,8 @@ async function setupPidFile() {
   };
 
   process.on('exit', cleanup);
-  process.on('SIGINT', () => {
-    console.error('\n[Server] Shutting down...');
-    cleanup();
-    process.exit(0);
-  });
-  process.on('SIGTERM', () => {
-    console.error('\n[Server] Shutting down...');
-    cleanup();
-    process.exit(0);
-  });
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
   return pidPath;
 }
@@ -163,6 +158,7 @@ async function setupFileLogging(activeConfig) {
     wrap('log', 'INFO');
     wrap('warn', 'WARN');
     wrap('error', 'ERROR');
+    wrap('info', 'INFO');
 
     logStream.on('error', (err) => {
       originalConsole.error(`[Logs] Failed to write log file: ${err.message}`);
@@ -233,7 +229,7 @@ async function clearStaleCaches() {
   }
 
   if (removed > 0) {
-    console.log(`[Cache] Removed ${removed} stale cache director${removed === 1 ? 'y' : 'ies'}.`);
+    console.info(`[Cache] Removed ${removed} stale cache director${removed === 1 ? 'y' : 'ies'}.`);
   }
 }
 
@@ -242,13 +238,13 @@ async function clearCache(workspaceDir) {
   const activeConfig = await loadConfig(effectiveWorkspace);
 
   if (!activeConfig.enableCache) {
-    console.log('[Cache] Cache disabled (enableCache=false); nothing to clear.');
+    console.info('[Cache] Cache disabled (enableCache=false); nothing to clear.');
     return;
   }
 
   try {
     await fs.rm(activeConfig.cacheDirectory, { recursive: true, force: true });
-    console.log(`[Cache] Cleared cache directory: ${activeConfig.cacheDirectory}`);
+    console.info(`[Cache] Cleared cache directory: ${activeConfig.cacheDirectory}`);
     await clearStaleCaches();
   } catch (err) {
     console.error(`[Cache] Failed to clear cache: ${err.message}`);
@@ -305,19 +301,19 @@ async function initialize(workspaceDir) {
     setupFileLogging(config),
   ]);
   if (logPath) {
-    console.log(`[Logs] Writing server logs to ${logPath}`);
-    console.log(`[Logs] Log viewer: heuristic-mcp --logs --workspace "${config.searchDirectory}"`);
+    console.info(`[Logs] Writing server logs to ${logPath}`);
+    console.info(`[Logs] Log viewer: heuristic-mcp --logs --workspace "${config.searchDirectory}"`);
   }
   if (pidPath) {
-    console.log(`[Server] PID file: ${pidPath}`);
+    console.info(`[Server] PID file: ${pidPath}`);
   }
 
   // Log cache directory logic for debugging
   try {
     const globalCache = path.join(getGlobalCacheDir(), 'heuristic-mcp');
     const localCache = path.join(process.cwd(), '.heuristic-mcp');
-    console.log(`[Server] Cache debug: Global=${globalCache}, Local=${localCache}`);
-    console.log(`[Server] Process CWD: ${process.cwd()}`);
+    console.info(`[Server] Cache debug: Global=${globalCache}, Local=${localCache}`);
+    console.info(`[Server] Process CWD: ${process.cwd()}`);
   } catch (_e) { /* ignore */ }
 
   let startupMemoryTimer = null;
@@ -338,11 +334,11 @@ async function initialize(workspaceDir) {
   }
 
   // Create a transparent lazy-loading embedder closure
-  console.log('[Server] Initializing features...');
+  console.info('[Server] Initializing features...');
   let cachedEmbedderPromise = null;
   const lazyEmbedder = async (...args) => {
     if (!cachedEmbedderPromise) {
-      console.log(`[Server] Loading AI embedding model: ${config.embeddingModel}...`);
+      console.info(`[Server] Loading AI embedding model: ${config.embeddingModel}...`);
       const modelLoadStart = Date.now();
       cachedEmbedderPromise = pipeline('feature-extraction', config.embeddingModel, {
         session_options: {
@@ -352,8 +348,10 @@ async function initialize(workspaceDir) {
         },
       }).then((model) => {
         const loadSeconds = ((Date.now() - modelLoadStart) / 1000).toFixed(1);
-        console.log(`[Server] Embedding model loaded (${loadSeconds}s). Starting intensive indexing (expect high CPU)...`);
-        console.log(`[Server] Embedding model ready: ${config.embeddingModel}`);
+        console.info(
+          `[Server] Embedding model loaded (${loadSeconds}s). Starting intensive indexing (expect high CPU)...`,
+        );
+        console.info(`[Server] Embedding model ready: ${config.embeddingModel}`);
         if (config.verbose) {
           logMemory('[Server] Memory (after model load)');
         }
@@ -368,7 +366,7 @@ async function initialize(workspaceDir) {
 
   // Preload the embedding model to ensure deterministic startup logs
   try {
-    console.log('[Server] Preloading embedding model...');
+    console.info('[Server] Preloading embedding model...');
     await embedder(' ');
     embedderPreloaded = true;
   } catch (err) {
@@ -387,7 +385,7 @@ async function initialize(workspaceDir) {
 
   // Initialize cache (load deferred until after server is ready)
   cache = new EmbeddingsCache(config);
-  console.log(`[Server] Cache directory: ${config.cacheDirectory}`);
+  console.info(`[Server] Cache directory: ${config.cacheDirectory}`);
 
   // Initialize features
   indexer = new CodebaseIndexer(embedder, cache, config, server);
@@ -408,7 +406,7 @@ async function initialize(workspaceDir) {
 
   const startBackgroundTasks = async () => {
     try {
-      console.log('[Server] Loading cache (deferred)...');
+      console.info('[Server] Loading cache (deferred)...');
       await cache.load();
       if (config.verbose) {
         logMemory('[Server] Memory (after cache load)');
@@ -420,7 +418,7 @@ async function initialize(workspaceDir) {
     }
 
     // Start indexing in background (non-blocking)
-    console.log('[Server] Starting background indexing...');
+    console.info('[Server] Starting background indexing...');
     indexer
       .indexAll()
       .then(() => {
@@ -489,7 +487,7 @@ export async function main(argv = process.argv) {
   const rawArgs = [...args];
 
   if (args.includes('--version') || args.includes('-v')) {
-    console.log(packageJson.version);
+    console.info(packageJson.version);
     process.exit(0);
   }
 
@@ -500,14 +498,14 @@ export async function main(argv = process.argv) {
 
   const workspaceDir = parseWorkspaceDir(args);
   if (workspaceDir) {
-    console.error(`[Server] Workspace mode: ${workspaceDir}`);
+    console.info(`[Server] Workspace mode: ${workspaceDir}`);
   }
 
   const wantsLogs = args.includes('--logs');
   if (wantsLogs) {
     process.env.SMART_CODING_LOGS = 'true';
     process.env.SMART_CODING_VERBOSE = 'true';
-    console.log('[Server] Starting server with verbose logging (logs flag)');
+    console.info('[Server] Starting server with verbose logging (logs flag)');
   }
   const wantsNoFollow = args.includes('--no-follow');
   let tailLines = DEFAULT_LOG_TAIL_LINES;
@@ -615,7 +613,6 @@ export async function main(argv = process.argv) {
   }
 
   const { startBackgroundTasks } = await initialize(workspaceDir);
-  await setupPidFile();
 
   // Load cache before connecting to ensure tools are ready
   await startBackgroundTasks();
@@ -623,77 +620,53 @@ export async function main(argv = process.argv) {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  console.log('[Server] MCP transport connected.');
-  console.log('[Server] Heuristic MCP server started.');
-  console.log('[Server] MCP server is now fully ready to accept requests.');
+  console.info('[Server] MCP transport connected.');
+  console.info('[Server] Heuristic MCP server started.');
+  console.info('[Server] MCP server is now fully ready to accept requests.');
 }
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('[Server] Shutting down gracefully...');
-  console.error('[Server] Shutting down gracefully...');
+async function gracefulShutdown(signal) {
+  console.info(`[Server] Received ${signal}, shutting down gracefully...`);
 
   // Stop file watcher
   if (indexer && indexer.watcher) {
-    await indexer.watcher.close();
-    console.log('[Server] File watcher stopped');
+    try {
+      await indexer.watcher.close();
+      console.info('[Server] File watcher stopped');
+    } catch (_err) {
+      console.warn('[Server] Error closing watcher');
+    }
   }
 
-  // Give workers time to finish current batch (prevents core dump)
+  // Give workers time to finish current batch
   if (indexer && indexer.terminateWorkers) {
     try {
-      console.log('[Server] Waiting for workers to finish...');
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      console.info('[Server] Terminating workers...');
       await indexer.terminateWorkers();
-      console.log('[Server] Workers terminated');
+      console.info('[Server] Workers terminated');
     } catch (_err) {
       // Suppress native module errors during shutdown
-      console.log('[Server] Workers shutdown (with warnings)');
+      console.info('[Server] Workers shutdown (with warnings)');
     }
   }
 
   // Save cache
   if (cache) {
-    await cache.save();
-    console.log('[Server] Cache saved');
-  }
-
-  console.log('[Server] Goodbye!');
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  console.log('[Server] Received SIGTERM, shutting down...');
-  console.error('[Server] Received SIGTERM, shutting down...');
-
-  // Stop file watcher
-  if (indexer && indexer.watcher) {
-    await indexer.watcher.close();
-    console.log('[Server] File watcher stopped');
-  }
-
-  // Give workers time to finish current batch (prevents core dump)
-  if (indexer && indexer.terminateWorkers) {
     try {
-      console.error('[Server] Waiting for workers to finish...');
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      await indexer.terminateWorkers();
-      console.error('[Server] Workers terminated');
-    } catch (_err) {
-      // Suppress native module errors during shutdown
-      console.error('[Server] Workers shutdown (with warnings)');
+      await cache.save();
+      console.info('[Server] Cache saved');
+    } catch (err) {
+      console.error(`[Server] Failed to save cache: ${err.message}`);
     }
   }
 
-  // Save cache
-  if (cache) {
-    await cache.save();
-    console.log('[Server] Cache saved');
-  }
-
-  console.log('[Server] Goodbye!');
+  console.info('[Server] Goodbye!');
   process.exit(0);
-});
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 const isMain = process.argv[1] && (
   path.resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase() ||

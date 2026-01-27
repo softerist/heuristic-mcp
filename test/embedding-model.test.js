@@ -22,9 +22,9 @@ describe('Local Embedding Model', () => {
   beforeAll(async () => {
     config = await loadConfig();
     if (useRealEmbedder) {
-      console.log(`[Test] Loading embedding model: ${config.embeddingModel}`);
+      console.info(`[Test] Loading embedding model: ${config.embeddingModel}`);
       embedder = await pipeline('feature-extraction', config.embeddingModel);
-      console.log('[Test] Embedding model loaded successfully');
+      console.info('[Test] Embedding model loaded successfully');
     } else {
       // Smart semi-semantic mock for offline/CI-friendly tests
       // Simulates semantic similarity using keywords and bag-of-words
@@ -326,7 +326,7 @@ describe('Local Embedding Model', () => {
 
       // 5 embeddings should complete in reasonable time
       expect(duration).toBeLessThan(6000);
-      console.log(
+      console.info(
         `[Test] 5 embeddings generated in ${duration}ms (${(duration / 5).toFixed(0)}ms avg)`
       );
     });

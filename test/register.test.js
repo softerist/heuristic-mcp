@@ -173,7 +173,7 @@ describe('register', () => {
     expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('Failed to register'));
   });
 
-  it('uses tty logging on non-win32 platforms', async () => {
+  it('registers config on non-win32 platforms', async () => {
     process.env.ANTIGRAVITY_AGENT = '1';
     setPlatform('linux');
     fsPromisesMock.access.mockRejectedValue(new Error('missing'));
@@ -183,7 +183,7 @@ describe('register', () => {
 
     await register();
 
-    expect(fsPromisesMock.writeFileSync).toHaveBeenCalled();
+    expect(fsMock.writeFileSync).toHaveBeenCalled();
   });
 
   it('falls back to console.error when tty logging fails', async () => {

@@ -270,12 +270,13 @@ describe('CodebaseIndexer', () => {
     it('should skip file if hash matches cache', async () => {
       const file = '/test/skipped.js';
       const content =
-        'function test() {\n  console.log("hello");\n}\n\nfunction other() {\n  return true;\n}';
+        'function test() {\n  console.info("hello");\n}\n\nfunction other() {\n  return true;\n}';
       const { hashContent } = await import('../lib/utils.js');
       const hash = hashContent(content);
 
       const statSpy = vi.spyOn(fs, 'stat').mockResolvedValue({
         size: 100,
+        mtimeMs: Date.now(),
         mtime: new Date(),
         isDirectory: () => false,
       });
@@ -289,7 +290,7 @@ describe('CodebaseIndexer', () => {
         const added = await fixtures.indexer.indexFile(file);
         expect(added).toBe(0);
         expect(fixtures.cache.addToStore).not.toHaveBeenCalled();
-        expect(fixtures.cache.setFileHash).not.toHaveBeenCalled();
+        expect(fixtures.cache.setFileHash).toHaveBeenCalledWith(file, hash, expect.any(Object));
       } finally {
         statSpy.mockRestore();
         readFileSpy.mockRestore();

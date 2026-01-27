@@ -119,7 +119,7 @@ export class CodebaseIndexer {
       const memCappedWorkers = Math.max(1, Math.floor(freeMemGb / memPerWorker));
       if (memCappedWorkers < numWorkers) {
         if (this.config.verbose) {
-          console.log(
+          console.info(
             `[Indexer] Throttling workers from ${numWorkers} to ${memCappedWorkers} due to available RAM (${freeMemGb.toFixed(1)}GB)`
           );
         }
@@ -129,12 +129,12 @@ export class CodebaseIndexer {
 
     // Use workers even for single worker to benefit from --expose-gc and separate heap
     if (numWorkers < 1) {
-      console.log('[Indexer] No workers configured, using main thread (warning: higher RAM usage)');
+      console.info('[Indexer] No workers configured, using main thread (warning: higher RAM usage)');
       return;
     }
 
     if (this.config.verbose) {
-      console.log(
+      console.info(
         `[Indexer] Worker config: workerThreads=${this.config.workerThreads}, resolved to ${numWorkers}`
       );
     }
@@ -142,7 +142,7 @@ export class CodebaseIndexer {
     // Force 1 thread per worker to prevent CPU saturation (ONNX is very aggressive)
     const threadsPerWorker = 1;
 
-    console.log(`[Indexer] Initializing ${numWorkers} worker threads (${threadsPerWorker} threads per worker)...`);
+    console.info(`[Indexer] Initializing ${numWorkers} worker threads (${threadsPerWorker} threads per worker)...`);
 
     const workerPath = path.join(__dirname, '../lib/embedding-worker.js');
 
@@ -170,7 +170,9 @@ export class CodebaseIndexer {
               resolve(worker);
             } else if (msg.type === 'error') {
               console.warn(`[Indexer] Worker initialization failed: ${msg.error}`);
-              console.error(`[Indexer] Worker initialization failed: ${msg.error}`);
+              if (!isTestEnv()) {
+                console.error(`[Indexer] Worker initialization failed: ${msg.error}`);
+              }
               reject(new Error(msg.error));
             }
           });
@@ -178,7 +180,9 @@ export class CodebaseIndexer {
           worker.once('error', (err) => {
             clearTimeout(timeout);
             console.warn(`[Indexer] Worker initialization failed: ${err.message}`);
-            console.error(`[Indexer] Worker initialization failed: ${err.message}`);
+            if (!isTestEnv()) {
+              console.error(`[Indexer] Worker initialization failed: ${err.message}`);
+            }
             reject(err);
           });
         });
@@ -187,24 +191,28 @@ export class CodebaseIndexer {
         this.workerReady.push(readyPromise);
       } catch (err) {
         console.warn(`[Indexer] Failed to create worker ${i}: ${err.message}`);
-        console.error(`[Indexer] Failed to create worker ${i}: ${err.message}`);
+        if (!isTestEnv()) {
+          console.error(`[Indexer] Failed to create worker ${i}: ${err.message}`);
+        }
       }
     }
 
     // Wait for all workers to be ready
     try {
       await Promise.all(this.workerReady);
-      console.log(`[Indexer] ${this.workers.length} workers ready`);
+      console.info(`[Indexer] ${this.workers.length} workers ready`);
       if (this.config.verbose) {
-        console.log(`[Indexer] Each worker loaded model: ${this.config.embeddingModel}`);
+        console.info(`[Indexer] Each worker loaded model: ${this.config.embeddingModel}`);
       }
     } catch (err) {
       console.warn(
         `[Indexer] Worker initialization failed: ${err.message}, falling back to single-threaded`
       );
-      console.error(
-        `[Indexer] Worker initialization failed: ${err.message}, falling back to single-threaded`
-      );
+      if (!isTestEnv()) {
+        console.error(
+          `[Indexer] Worker initialization failed: ${err.message}, falling back to single-threaded`
+        );
+      }
       await this.terminateWorkers();
     }
   }
@@ -278,7 +286,7 @@ export class CodebaseIndexer {
     const WORKER_TIMEOUT = isTestEnv() ? 1000 : 300000; // 1s in tests, 5 minutes in prod
 
     if (this.config.verbose) {
-      console.log(
+      console.info(
         `[Indexer] Distributing ${allChunks.length} chunks across ${this.workers.length} workers (~${chunkSize} chunks each)`
       );
     }
@@ -288,7 +296,7 @@ export class CodebaseIndexer {
       if (workerChunks.length === 0) continue;
 
       if (this.config.verbose) {
-        console.log(`[Indexer] Worker ${i}: processing ${workerChunks.length} chunks`);
+        console.info(`[Indexer] Worker ${i}: processing ${workerChunks.length} chunks`);
       }
 
       const promise = new Promise((resolve, _reject) => {
@@ -339,7 +347,9 @@ export class CodebaseIndexer {
               finalize(batchResults);
             } else if (msg.type === 'error') {
               console.warn(`[Indexer] Worker ${i} error: ${msg.error}`);
-              console.error(`[Indexer] Worker ${i} error: ${msg.error}`);
+              if (!isTestEnv()) {
+                console.error(`[Indexer] Worker ${i} error: ${msg.error}`);
+              }
               finalize([]); // Return empty, don't reject - let fallback handle
             }
           }
@@ -442,12 +452,12 @@ export class CodebaseIndexer {
     const fileName = path.basename(file);
     if (this.isExcluded(file)) {
       if (this.config.verbose) {
-        console.log(`[Indexer] Skipped ${fileName} (excluded by pattern)`);
+        console.info(`[Indexer] Skipped ${fileName} (excluded by pattern)`);
       }
       return 0;
     }
     if (this.config.verbose) {
-      console.log(`[Indexer] Processing: ${fileName}...`);
+      console.info(`[Indexer] Processing: ${fileName}...`);
     }
 
     try {
@@ -464,9 +474,11 @@ export class CodebaseIndexer {
           console.warn(
             `[Indexer] Skipped ${fileName} (too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB)`
           );
-          console.error(
-            `[Indexer] Skipped ${fileName} (too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB)`
-          );
+          if (!isTestEnv()) {
+            console.error(
+              `[Indexer] Skipped ${fileName} (too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB)`
+            );
+          }
         }
         return 0;
       }
@@ -477,13 +489,15 @@ export class CodebaseIndexer {
       // Skip if file hasn't changed
       if (this.cache.getFileHash(file) === hash) {
         if (this.config.verbose) {
-          console.log(`[Indexer] Skipped ${fileName} (unchanged)`);
+          console.info(`[Indexer] Skipped ${fileName} (unchanged)`);
         }
+        // Still update metadata (size, mtime) even if hash is same
+        this.cache.setFileHash(file, hash, stats);
         return 0;
       }
 
       if (this.config.verbose) {
-        console.log(`[Indexer] Indexing ${fileName}...`);
+        console.info(`[Indexer] Indexing ${fileName}...`);
       }
 
       // Clear existing hash so failed reindex doesn't leave stale hash pointing to removed chunks
@@ -498,7 +512,7 @@ export class CodebaseIndexer {
           this.cache.setFileCallData(file, callData);
         } catch (err) {
           if (this.config.verbose) {
-            console.error(
+            console.warn(
               `[Indexer] Call graph extraction failed for ${fileName}: ${err.message}`
             );
           }
@@ -539,11 +553,16 @@ export class CodebaseIndexer {
         );
       }
       if (this.config.verbose) {
-        console.log(`[Indexer] Completed ${fileName} (${addedChunks} chunks)`);
+        console.info(`[Indexer] Completed ${fileName} (${addedChunks} chunks)`);
       }
       return addedChunks;
     } catch (error) {
-      console.error(`[Indexer] Error indexing ${fileName}:`, error.message);
+      if (this.config.verbose) {
+        console.warn(`[Indexer] Error indexing ${fileName}:`, error.message);
+      }
+      if (!isTestEnv()) {
+        console.error(`[Indexer] Error indexing ${fileName}:`, error.message);
+      }
       return 0;
     }
   }
@@ -579,7 +598,7 @@ export class CodebaseIndexer {
     excludeDirs.add('.smart-coding-cache');
 
     if (this.config.verbose) {
-      console.log(`[Indexer] Using ${excludeDirs.size} exclude directories from config`);
+      console.info(`[Indexer] Using ${excludeDirs.size} exclude directories from config`);
     }
 
     const api = new fdir()
@@ -595,7 +614,7 @@ export class CodebaseIndexer {
 
     const files = await api.withPromise();
 
-    console.log(`[Indexer] File discovery: ${files.length} files in ${Date.now() - startTime}ms`);
+    console.info(`[Indexer] File discovery: ${files.length} files in ${Date.now() - startTime}ms`);
     return files;
   }
 
@@ -699,7 +718,7 @@ export class CodebaseIndexer {
     }
 
     if (this.config.verbose) {
-       console.log(
+       console.info(
         `[Indexer] Pre-filter: ${filesToProcess.length} changed, ${skippedCount.unchanged} unchanged, ${skippedCount.tooLarge} too large, ${skippedCount.error} errors (${Date.now() - startTime}ms)`
       );
     }
@@ -724,7 +743,7 @@ export class CodebaseIndexer {
       if (!this.config.verbose) return;
       const { rss, heapUsed, heapTotal } = process.memoryUsage();
       const toMb = (value) => `${(value / 1024 / 1024).toFixed(1)}MB`;
-      console.log(
+      console.info(
         `[Indexer] Memory ${label}: rss=${toMb(rss)} heap=${toMb(heapUsed)}/${toMb(heapTotal)}`,
       );
     };
@@ -736,20 +755,20 @@ export class CodebaseIndexer {
       }
 
       if (force) {
-        console.log('[Indexer] Force reindex requested: clearing cache');
+        console.info('[Indexer] Force reindex requested: clearing cache');
         this.cache.setVectorStore([]);
         this.cache.fileHashes = new Map();
         await this.cache.clearCallGraphData({ removeFile: true });
       }
 
       const totalStartTime = Date.now();
-        console.log(`[Indexer] Starting optimized indexing in ${this.config.searchDirectory}...`);
+        console.info(`[Indexer] Starting optimized indexing in ${this.config.searchDirectory}...`);
 
       // Step 1: Fast file discovery with fdir
       const files = await this.discoverFiles();
 
       if (files.length === 0) {
-        console.log('[Indexer] No files found to index');
+        console.info('[Indexer] No files found to index');
         this.sendProgress(100, 100, 'No files found to index');
         return {
           skipped: false,
@@ -779,7 +798,7 @@ export class CodebaseIndexer {
 
         if (prunedCount > 0) {
           if (this.config.verbose) {
-            console.log(`[Indexer] Pruned ${prunedCount} deleted/excluded files from index`);
+            console.info(`[Indexer] Pruned ${prunedCount} deleted/excluded files from index`);
             console.error(`[Indexer] Pruned ${prunedCount} deleted/excluded files from index`);
           }
           // If we pruned files, we should save these changes even if no other files changed
@@ -787,7 +806,7 @@ export class CodebaseIndexer {
 
         const prunedCallGraph = this.cache.pruneCallGraphData(currentFilesSet);
         if (prunedCallGraph > 0 && this.config.verbose) {
-          console.log(`[Indexer] Pruned ${prunedCallGraph} call-graph entries`);
+          console.info(`[Indexer] Pruned ${prunedCallGraph} call-graph entries`);
           console.error(`[Indexer] Pruned ${prunedCallGraph} call-graph entries`);
         }
       }
@@ -797,7 +816,7 @@ export class CodebaseIndexer {
       const filesToProcessSet = new Set(filesToProcess.map((entry) => entry.file));
 
       if (filesToProcess.length === 0) {
-        console.log('[Indexer] All files unchanged, nothing to index');
+        console.info('[Indexer] All files unchanged, nothing to index');
 
         // If we have no call graph data but we have cached files, we should try to rebuild it
         if (this.config.callGraphEnabled && this.cache.getVectorStore().length > 0) {
@@ -813,7 +832,7 @@ export class CodebaseIndexer {
           }
 
           if (missingCallData.length > 0) {
-            console.log(
+            console.info(
               `[Indexer] Found ${missingCallData.length} files missing call graph data, re-indexing...`
             );
             console.error(
@@ -876,7 +895,7 @@ export class CodebaseIndexer {
       if (files.length > 5000) adaptiveBatchSize = 500;
 
       if (this.config.verbose) {
-        console.log(
+        console.info(
           `[Indexer] Processing ${filesToProcess.length} files (batch size: ${adaptiveBatchSize})`
         );
       }
@@ -887,17 +906,17 @@ export class CodebaseIndexer {
       if (useWorkers) {
         await this.initializeWorkers();
         if (this.config.verbose && this.workers.length > 0) {
-          console.log(`[Indexer] Multi-threaded mode: ${this.workers.length} workers active`);
+          console.info(`[Indexer] Multi-threaded mode: ${this.workers.length} workers active`);
         }
       } else if (this.config.verbose) {
-        console.log(`[Indexer] Single-threaded mode (single-core system)`);
+        console.info(`[Indexer] Single-threaded mode (single-core system)`);
       }
 
       let totalChunks = 0;
       let processedFiles = 0;
 
       if (this.config.verbose) {
-        console.log(
+        console.info(
           `[Indexer] Embedding pass started: ${filesToProcess.length} files using ${this.config.embeddingModel}`
         );
       }
@@ -914,10 +933,10 @@ export class CodebaseIndexer {
         const mem = process.memoryUsage();
         if (mem.rss > 2048 * 1024 * 1024) { // > 2GB
            if (global.gc) {
-               console.log('[Indexer] Memory high (>2GB), forcing GC...');
+               console.info('[Indexer] Memory high (>2GB), forcing GC...');
                global.gc();
            } else if (this.config.verbose) {
-               console.log(`[Indexer] Memory high (>2GB): ${Math.round(mem.rss/1024/1024)}MB`);
+               console.info(`[Indexer] Memory high (>2GB): ${Math.round(mem.rss/1024/1024)}MB`);
            }
            // Optimization: could reduce batch size dynamically here
         }
@@ -999,7 +1018,7 @@ export class CodebaseIndexer {
 
           if (!force && liveHash && this.cache.getFileHash(file) === liveHash) {
             if (this.config.verbose) {
-              console.log(`[Indexer] Skipped ${path.basename(file)} (unchanged)`);
+              console.info(`[Indexer] Skipped ${path.basename(file)} (unchanged)`);
             }
             continue;
           }
@@ -1016,7 +1035,7 @@ export class CodebaseIndexer {
               this.cache.setFileCallData(file, callData);
             } catch (err) {
               if (this.config.verbose) {
-                console.error(
+                console.warn(
                   `[Indexer] Call graph extraction failed for ${path.basename(file)}: ${err.message}`
                 );
               }
@@ -1091,7 +1110,7 @@ export class CodebaseIndexer {
         ) {
           const elapsed = ((Date.now() - totalStartTime) / 1000).toFixed(1);
           const rate = (processedFiles / parseFloat(elapsed)).toFixed(1);
-          console.log(
+          console.info(
             `[Indexer] Progress: ${processedFiles}/${filesToProcess.length} files (${rate} files/sec, ${elapsed}s elapsed)`
           );
 
@@ -1111,7 +1130,7 @@ export class CodebaseIndexer {
       }
 
       const totalTime = ((Date.now() - totalStartTime) / 1000).toFixed(1);
-      console.log(
+      console.info(
         `[Indexer] Embedding pass complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
       );
 
@@ -1161,13 +1180,14 @@ export class CodebaseIndexer {
 
   enqueueWatchEvent(type, filePath) {
     const existing = this.pendingWatchEvents.get(filePath);
+
+    // If it's a delete, it always wins
     if (type === 'unlink') {
       this.pendingWatchEvents.set(filePath, 'unlink');
       return;
     }
-    if (existing === 'unlink') {
-      return;
-    }
+
+    // If we're adding/changing, it overwrites a potential unlink (file came back)
     this.pendingWatchEvents.set(filePath, type);
   }
 
@@ -1226,11 +1246,11 @@ export class CodebaseIndexer {
     this.watcher
       .on('add', async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
-        console.log(`[Indexer] New file detected: ${filePath}`);
+        console.info(`[Indexer] New file detected: ${filePath}`);
 
         if (this.isIndexing || this.processingWatchEvents) {
           if (this.config.verbose) {
-            console.log(`[Indexer] Queued add event during indexing: ${filePath}`);
+            console.info(`[Indexer] Queued add event during indexing: ${filePath}`);
           }
           this.enqueueWatchEvent('add', fullPath);
           return;
@@ -1246,11 +1266,11 @@ export class CodebaseIndexer {
       })
       .on('change', async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
-        console.log(`[Indexer] File changed: ${filePath}`);
+        console.info(`[Indexer] File changed: ${filePath}`);
 
         if (this.isIndexing || this.processingWatchEvents) {
           if (this.config.verbose) {
-            console.log(`[Indexer] Queued change event during indexing: ${filePath}`);
+            console.info(`[Indexer] Queued change event during indexing: ${filePath}`);
           }
           this.enqueueWatchEvent('change', fullPath);
           return;
@@ -1266,11 +1286,11 @@ export class CodebaseIndexer {
       })
       .on('unlink', async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
-        console.log(`[Indexer] File deleted: ${filePath}`);
+        console.info(`[Indexer] File deleted: ${filePath}`);
 
         if (this.isIndexing || this.processingWatchEvents) {
           if (this.config.verbose) {
-            console.log(`[Indexer] Queued delete event during indexing: ${filePath}`);
+            console.info(`[Indexer] Queued delete event during indexing: ${filePath}`);
           }
           this.enqueueWatchEvent('unlink', fullPath);
           return;
@@ -1286,7 +1306,7 @@ export class CodebaseIndexer {
         await this.cache.save();
       });
 
-    console.log('[Indexer] File watcher enabled for incremental indexing');
+    console.info('[Indexer] File watcher enabled for incremental indexing');
   }
 }
 

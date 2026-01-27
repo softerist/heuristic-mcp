@@ -90,7 +90,7 @@ describe('CodebaseIndexer Gap Coverage', () => {
     
     // Silence console.warn/log but track calls
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
   });
 
   // Coverage for lines 825-837: Content provided but too large, or stat error
@@ -151,7 +151,8 @@ describe('CodebaseIndexer Gap Coverage', () => {
     
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => false,
-      size: 2048 // > 1024
+      size: 2048, // > 1024
+      mtimeMs: 123
     });
     
     await indexer.indexAll();
@@ -169,7 +170,8 @@ describe('CodebaseIndexer Gap Coverage', () => {
     
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => false,
-      size: 100
+      size: 100,
+      mtimeMs: 123
     });
     vi.spyOn(fs, 'readFile').mockRejectedValue(new Error('Read error'));
     
@@ -189,7 +191,8 @@ describe('CodebaseIndexer Gap Coverage', () => {
     
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => false,
-      size: 100
+      size: 100,
+      mtimeMs: 123
     });
     vi.spyOn(fs, 'readFile').mockResolvedValue('content');
     
@@ -198,7 +201,7 @@ describe('CodebaseIndexer Gap Coverage', () => {
     
     await indexer.indexAll();
     
-    expect(console.log).toHaveBeenCalledWith(
+    expect(console.info).toHaveBeenCalledWith(
       expect.stringContaining('Skipped same.js (unchanged)')
     );
   });
@@ -218,17 +221,17 @@ describe('CodebaseIndexer Gap Coverage', () => {
     
     // 3. Trigger events
     await addHandler('new.js');
-    expect(console.log).toHaveBeenCalledWith(
+    expect(console.info).toHaveBeenCalledWith(
       expect.stringContaining('Queued add event during indexing')
     );
     
     await changeHandler('changed.js');
-    expect(console.log).toHaveBeenCalledWith(
+    expect(console.info).toHaveBeenCalledWith(
       expect.stringContaining('Queued change event during indexing')
     );
     
     await unlinkHandler('deleted.js');
-    expect(console.log).toHaveBeenCalledWith(
+    expect(console.info).toHaveBeenCalledWith(
       expect.stringContaining('Queued delete event during indexing')
     );
   });

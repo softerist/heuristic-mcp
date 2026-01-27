@@ -54,7 +54,7 @@ The project follows a modular architecture:
     1.  **Class:** `export class FeatureName { ... }`
     2.  **Tool Def:** `export function getToolDefinition(config) { ... }`
     3.  **Handler:** `export async function handleToolCall(request, instance) { ... }`
-*   **Logging:** Use `console.error()` for server logs (MCP standard). Use `console.log()` only for CLI utility output.
+*   **Logging:** Use `console.error()` for server logs (MCP standard). Use `console.info()` only for CLI utility output.
 *   **Configuration:** All features should accept a `config` object. Environment variables (prefix `SMART_CODING_`) override `config.json` values.
 
 ## Key Files

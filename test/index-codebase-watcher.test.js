@@ -73,22 +73,24 @@ describe('CodebaseIndexer watcher', () => {
 
       const indexer = new CodebaseIndexer(async () => ({ data: [] }), cache, config, server);
       indexer.indexFile = vi.fn().mockResolvedValue();
+      indexer.isIndexing = false;
+      indexer.processingWatchEvents = false;
 
       await indexer.setupFileWatcher();
 
       const relPath = path.join('src', 'file.js');
-      globalThis.__heuristicWatcher.emit('add', relPath);
+      indexer.watcher.emit('add', relPath);
       await flushPromises();
 
       expect(indexer.indexFile).toHaveBeenCalledWith(path.join(dir, relPath));
       expect(cache.save).toHaveBeenCalled();
       expect(server.hybridSearch.clearFileModTime).toHaveBeenCalledWith(path.join(dir, relPath));
 
-      globalThis.__heuristicWatcher.emit('change', relPath);
+      indexer.watcher.emit('change', relPath);
       await flushPromises();
       expect(indexer.indexFile).toHaveBeenCalledTimes(2);
 
-      globalThis.__heuristicWatcher.emit('unlink', relPath);
+      indexer.watcher.emit('unlink', relPath);
       await flushPromises();
       expect(cache.removeFileFromStore).toHaveBeenCalledWith(path.join(dir, relPath));
       expect(cache.deleteFileHash).toHaveBeenCalledWith(path.join(dir, relPath));

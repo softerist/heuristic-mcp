@@ -11,7 +11,7 @@ import { getLogFilePath } from '../lib/logging.js';
 const execPromise = util.promisify(exec);
 
 export async function stop() {
-  console.log('[Lifecycle] Stopping Heuristic MCP servers...');
+  console.info('[Lifecycle] Stopping Heuristic MCP servers...');
   try {
     const platform = process.platform;
     const currentPid = process.pid;
@@ -79,7 +79,7 @@ export async function stop() {
     }
 
     if (pids.length === 0) {
-      console.log('[Lifecycle] No running instances found (already stopped).');
+      console.info('[Lifecycle] No running instances found (already stopped).');
       return;
     }
 
@@ -95,20 +95,20 @@ export async function stop() {
       }
     }
 
-    console.log(`[Lifecycle] ✅ Stopped ${killedCount} running instance(s).`);
+    console.info(`[Lifecycle] ✅ Stopped ${killedCount} running instance(s).`);
   } catch (error) {
     console.warn(`[Lifecycle] Warning: Stop command encountered an error: ${error.message}`);
   }
 }
 
 export async function start() {
-  console.log('[Lifecycle] Ensuring server is configured...');
+  console.info('[Lifecycle] Ensuring server is configured...');
   // Re-use the registration logic to ensure the config is present and correct
   try {
     const { register } = await import('./register.js');
     await register();
-    console.log('[Lifecycle] ✅ Configuration checked.');
-    console.log(
+    console.info('[Lifecycle] ✅ Configuration checked.');
+    console.info(
       '[Lifecycle] To start the server, please reload your IDE window or restart the IDE.'
     );
   } catch (err) {
@@ -166,13 +166,13 @@ export async function logs({ workspaceDir = null, tailLines = 200, follow = true
       return;
     }
 
-    console.log(`[Logs] Following ${logPath} (Ctrl+C to stop)...`);
+    console.info(`[Logs] Following ${logPath} (Ctrl+C to stop)...`);
     await followFile(logPath, stats.size);
   } catch (err) {
     if (err.code === 'ENOENT') {
-      console.log(`[Logs] No log file found for workspace.`);
-      console.log(`[Logs] Expected location: ${logPath}`);
-      console.log(`[Logs] Start the server from your IDE, then run: heuristic-mcp --logs`);
+      console.error(`[Logs] No log file found for workspace.`);
+      console.error(`[Logs] Expected location: ${logPath}`);
+      console.error(`[Logs] Start the server from your IDE, then run: heuristic-mcp --logs`);
       return;
     }
     console.error(`[Logs] Failed to read log file: ${err.message}`);
@@ -256,25 +256,25 @@ export async function status() {
     }
 
     // STATUS OUTPUT
-    console.log(''); // spacer
+    console.info(''); // spacer
     if (pids.length > 0) {
-      console.log(`[Lifecycle] 🟢 Server is RUNNING. PID(s): ${pids.join(', ')}`);
+      console.info(`[Lifecycle] 🟢 Server is RUNNING. PID(s): ${pids.join(', ')}`);
     } else {
-      console.log('[Lifecycle] ⚪ Server is STOPPED.');
+      console.info('[Lifecycle] ⚪ Server is STOPPED.');
     }
-    console.log(''); // spacer
+    console.info(''); // spacer
 
     // APPEND LOGS INFO (Cache Status)
     const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
-    console.log('[Status] Inspecting cache status...\n');
+    console.info('[Status] Inspecting cache status...\n');
 
     const cacheDirs = await fs.readdir(globalCacheRoot).catch(() => []);
 
     if (cacheDirs.length === 0) {
-      console.log('[Status] No cache directories found.');
-      console.log(`[Status] Expected location: ${globalCacheRoot}`);
+      console.info('[Status] No cache directories found.');
+      console.info(`[Status] Expected location: ${globalCacheRoot}`);
     } else {
-      console.log(
+      console.info(
         `[Status] Found ${cacheDirs.length} cache director${cacheDirs.length === 1 ? 'y' : 'ies'} in ${globalCacheRoot}`
       );
 
@@ -282,17 +282,17 @@ export async function status() {
         const cacheDir = path.join(globalCacheRoot, dir);
         const metaFile = path.join(cacheDir, 'meta.json');
 
-        console.log(`${'─'.repeat(60)}`);
-        console.log(`📁 Cache: ${dir}`);
-        console.log(`   Path: ${cacheDir}`);
+          console.info(`${'─'.repeat(60)}`);
+          console.info(`📁 Cache: ${dir}`);
+          console.info(`   Path: ${cacheDir}`);
 
         try {
           const metaData = JSON.parse(await fs.readFile(metaFile, 'utf-8'));
 
-          console.log(`   Status: ✅ Valid cache`);
-          console.log(`   Workspace: ${metaData.workspace || 'Unknown'}`);
-          console.log(`   Files indexed: ${metaData.filesIndexed ?? 'N/A'}`);
-          console.log(`   Chunks stored: ${metaData.chunksStored ?? 'N/A'}`);
+          console.info(`   Status: ✅ Valid cache`);
+          console.info(`   Workspace: ${metaData.workspace || 'Unknown'}`);
+          console.info(`   Files indexed: ${metaData.filesIndexed ?? 'N/A'}`);
+          console.info(`   Chunks stored: ${metaData.chunksStored ?? 'N/A'}`);
 
           if (metaData.lastSaveTime) {
             const saveDate = new Date(metaData.lastSaveTime);
@@ -300,18 +300,18 @@ export async function status() {
             const ageMs = now - saveDate;
             const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
             const ageMins = Math.floor((ageMs % (1000 * 60 * 60)) / (1000 * 60));
-            console.log(
+            console.info(
               `   Last saved: ${saveDate.toLocaleString()} (${ageHours}h ${ageMins}m ago)`
             );
           }
 
           // Verify indexing completion
           if (metaData.filesIndexed && metaData.filesIndexed > 0) {
-            console.log(`   Indexing: ✅ COMPLETE (${metaData.filesIndexed} files)`);
+            console.info(`   Indexing: ✅ COMPLETE (${metaData.filesIndexed} files)`);
           } else if (metaData.filesIndexed === 0) {
-            console.log(`   Indexing: ⚠️  NO FILES (check excludePatterns)`);
+            console.info(`   Indexing: ⚠️  NO FILES (check excludePatterns)`);
           } else {
-            console.log(`   Indexing: ⚠️  INCOMPLETE`);
+            console.info(`   Indexing: ⚠️  INCOMPLETE`);
           }
         } catch (err) {
           if (err.code === 'ENOENT') {
@@ -319,24 +319,24 @@ export async function status() {
               const stats = await fs.stat(cacheDir);
               const ageMs = new Date() - stats.mtime;
               if (ageMs < 10 * 60 * 1000) {
-                console.log(`   Status: ⏳ Initializing / Indexing in progress...`);
-                console.log(`   (Metadata file has not been written yet using ID ${dir})`);
+                console.info(`   Status: ⏳ Initializing / Indexing in progress...`);
+                console.info(`   (Metadata file has not been written yet using ID ${dir})`);
               } else {
-                console.log(`   Status: ⚠️  Incomplete cache (stale)`);
+                console.info(`   Status: ⚠️  Incomplete cache (stale)`);
               }
             } catch {
-              console.log(`   Status: ❌ Invalid cache directory`);
+              console.info(`   Status: ❌ Invalid cache directory`);
             }
           } else {
-            console.log(`   Status: ❌ Invalid or corrupted (${err.message})`);
+            console.info(`   Status: ❌ Invalid or corrupted (${err.message})`);
           }
         }
       }
-      console.log(`${'─'.repeat(60)}`);
+      console.info(`${'─'.repeat(60)}`);
     }
 
     // SHOW PATHS
-    console.log('\n[Paths] Important locations:');
+    console.info('\n[Paths] Important locations:');
 
     // Global npm bin
     let npmBin = 'unknown';
@@ -344,7 +344,7 @@ export async function status() {
       const { stdout } = await execPromise('npm config get prefix');
       npmBin = path.join(stdout.trim(), 'bin');
     } catch { /* ignore */ }
-    console.log(`   📦 Global npm bin: ${npmBin}`);
+    console.info(`   📦 Global npm bin: ${npmBin}`);
 
     // Configs
     const configLocations = [
@@ -377,19 +377,19 @@ export async function status() {
       );
     }
 
-    console.log('   ⚙️  MCP configs:');
+    console.info('   ⚙️  MCP configs:');
     for (const loc of configLocations) {
       let status = '(not found)';
       try {
         await fs.access(loc.path);
         status = '(exists)';
       } catch { /* ignore */ }
-      console.log(`      - ${loc.name}: ${loc.path} ${status}`);
+      console.info(`      - ${loc.name}: ${loc.path} ${status}`);
     }
 
-    console.log(`   💾 Cache root: ${globalCacheRoot}`);
-    console.log(`   📁 Current dir: ${process.cwd()}`);
-    console.log('');
+    console.info(`   💾 Cache root: ${globalCacheRoot}`);
+    console.info(`   📁 Current dir: ${process.cwd()}`);
+    console.info('');
   } catch (error) {
     console.error(`[Lifecycle] Failed to check status: ${error.message}`);
   }

@@ -15,7 +15,7 @@ const getChunkingParams = () => ({
 // Mocking dependencies manually since we are running with node directly
 // We need to overwrite the imports in utils.js or mock them.
 // Since utils.js imports from tokenizer.js, we can't easily mock that with just node unless we use a loader or modify utils.js.
-// So instead, let's create a temporary modified version of utils.js or just run the test file with console.log and capture output.
+// So instead, let's create a temporary modified version of utils.js or just run the test file with console.info and capture output.
 
 // Actually, I can use the existing test file but add logging there and run with `npm test ...` and look closer at output?
 // The previous run captured stderr, but maybe I missed it?
@@ -104,4 +104,4 @@ const getChunkingParams = () => ({
 
 // Fix: Make the comment content longer!
 
-console.log('Analysis complete: Middle line chunk is dropped because total size is < 20 chars.');
+console.info('Analysis complete: Middle line chunk is dropped because total size is < 20 chars.');

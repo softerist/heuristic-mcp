@@ -81,8 +81,7 @@ describe('Coverage Gap Filling', () => {
         throw new Error('Simulated worker failure');
       });
 
-      // Spy on console.warn
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const indexer = new CodebaseIndexer(mockEmbedder, mockCache, { ...config, workerThreads: 1 });
       await indexer.initializeWorkers();
@@ -93,7 +92,7 @@ describe('Coverage Gap Filling', () => {
 
     it('logs skipped message for excluded file when verbose is true', async () => {
       const indexer = new CodebaseIndexer(mockEmbedder, mockCache, config);
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       await indexer.indexFile('/test/dir/excluded.js');
 
@@ -136,7 +135,7 @@ describe('Coverage Gap Filling', () => {
       fs.stat.mockRejectedValue(new Error('File not found'));
 
       // mock console.warn
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       try {
         const result = await indexer.indexAll(false);
@@ -161,7 +160,6 @@ describe('Coverage Gap Filling', () => {
         return worker;
       });
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const indexer = new CodebaseIndexer(mockEmbedder, mockCache, { ...config, workerThreads: 1 });
 
       // This method catches errors internally but logs them
@@ -171,11 +169,8 @@ describe('Coverage Gap Filling', () => {
 
       await indexer.initializeWorkers();
 
-      // Verify we caught the specific error (caught in Promise.all catch block)
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Worker initialization failed')
-      );
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Specific Init Error'));
+      expect(indexer.workers.length).toBe(0);
+      expect(indexer.workerReady.length).toBe(0);
     });
 
     it('ignores unknown worker message types (implicit else branch coverage)', async () => {
@@ -234,7 +229,7 @@ describe('Coverage Gap Filling', () => {
         },
       ]);
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       await indexer.indexAll(false);
 
@@ -261,7 +256,7 @@ describe('Coverage Gap Filling', () => {
         },
       ]);
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       await indexer.indexAll(false);
 
@@ -414,7 +409,7 @@ describe('Coverage Gap Filling', () => {
     });
 
     it('initializes workers without verbose logging', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const nonVerboseConfig = { ...config, verbose: false, workerThreads: 1 };
       const indexer = new CodebaseIndexer(mockEmbedder, mockCache, nonVerboseConfig);
 

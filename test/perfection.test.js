@@ -34,16 +34,16 @@ async function withTempDir(testFn) {
 
 describe('EmbeddingsCache Perfection', () => {
   let warnSpy;
-  let logSpy;
+  let infoSpy;
 
   beforeEach(() => {
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
   });
 
   afterEach(() => {
     warnSpy.mockRestore();
-    logSpy.mockRestore();
+    infoSpy.mockRestore();
     vi.clearAllMocks();
   });
 
@@ -99,9 +99,9 @@ describe('EmbeddingsCache Perfection', () => {
 
       await cache.load();
 
-      expect(logSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Filtered 1 outdated cache entries')
-      );
+      expect(cache.getVectorStore()).toHaveLength(1);
+      expect(cache.getFileHash('a.js')).toBe('hash1');
+      expect(cache.getFileHash('a.txt')).toBeUndefined();
     });
   });
 
@@ -117,7 +117,7 @@ describe('EmbeddingsCache Perfection', () => {
       // No call-graph.json exists. This should hit the empty catch block at line 131.
       await cache.load();
       // No error should be logged for missing call-graph.json
-      expect(logSpy).not.toHaveBeenCalledWith(expect.stringContaining('call-graph'));
+      expect(infoSpy).not.toHaveBeenCalledWith(expect.stringContaining('call-graph'));
     });
   });
 
@@ -329,9 +329,9 @@ describe('EmbeddingsCache Perfection', () => {
       const cache = new EmbeddingsCache(config);
       await fs.writeFile(path.join(dir, 'embeddings.json'), '[]');
       await cache.clear();
-      expect(logSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Cache cleared successfully')
-      );
+      expect(cache.getVectorStore()).toHaveLength(0);
+      expect(cache.fileHashes.size).toBe(0);
+      await expect(fs.access(dir)).rejects.toThrow();
     });
   });
 

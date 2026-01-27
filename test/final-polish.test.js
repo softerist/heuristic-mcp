@@ -133,7 +133,7 @@ describe('Final Polish Coverage', () => {
 
     it('triggers call-graph data re-indexing (line 578)', async () => {
       // Target 662
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       // 1. All files unchanged initially
       cache.getVectorStore.mockReturnValue([{ file: '/test/file1.js' }]);
@@ -142,7 +142,7 @@ describe('Final Polish Coverage', () => {
       cache.getFileHash.mockReturnValue('fixed-hash');
 
       // Mock fs to pass pre-check and processing
-      vi.spyOn(fs, 'stat').mockResolvedValue({ isDirectory: () => false, size: 50 });
+      vi.spyOn(fs, 'stat').mockResolvedValue({ isDirectory: () => false, size: 50, mtimeMs: 123 });
       vi.spyOn(fs, 'readFile').mockResolvedValue('content');
 
       await indexer.indexAll(false);

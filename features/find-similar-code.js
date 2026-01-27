@@ -1,5 +1,5 @@
 import path from 'path';
-import { dotSimilarity } from '../lib/utils.js';
+import { dotSimilarity, smartChunk, estimateTokens, getModelTokenLimit } from '../lib/utils.js';
 
 /**
  * FindSimilarCode feature
@@ -31,13 +31,32 @@ export class FindSimilarCode {
       };
     }
 
+    let codeToEmbed = code;
+    let warningMessage = null;
+
+    // Check if input is too large and truncate intelligently
+    const estimatedTokens = estimateTokens(code);
+    const limit = getModelTokenLimit(this.config.embeddingModel);
+    
+    // If input is significantly larger than the model limit, we should chunk it
+    if (estimatedTokens > limit) {
+      // Use smartChunk to get a semantically valid first block
+      // We pass a dummy file name to trigger language detection if possible, or default to .txt
+      // Since we don't know the language, we'll try to guess or just use generic chunking
+      const chunks = smartChunk(code, 'input.txt', this.config);
+      if (chunks.length > 0) {
+        codeToEmbed = chunks[0].text;
+        warningMessage = `Note: Input code was too long (${estimatedTokens} tokens). Searching using the first chunk (${chunks[0].tokenCount} tokens).`;
+      }
+    }
+
     // Generate embedding for the input code
-    const codeEmbed = await this.embedder(code, {
+    const codeEmbed = await this.embedder(codeToEmbed, {
       pooling: 'mean',
       normalize: true,
     });
-    const codeVector = Array.from(codeEmbed.data);
-    const codeVectorTyped = codeEmbed.data;
+    const codeVector = codeEmbed.data; // Keep as Float32Array for performance
+    const codeVectorTyped = codeVector;
 
     let candidates = vectorStore;
     let usedAnn = false;
@@ -57,41 +76,52 @@ export class FindSimilarCode {
       }
     }
 
-    // Score all chunks by similarity
-    let scoredChunks = candidates.map((chunk) => {
-      const similarity = dotSimilarity(codeVector, chunk.vector);
-      return { ...chunk, similarity };
-    });
+    const normalizedInput = codeToEmbed.trim().replace(/\s+/g, ' ');
+    
+    /**
+     * Batch scoring function to prevent blocking the event loop
+     */
+    const scoreAndFilter = async (chunks) => {
+      const BATCH_SIZE = 500;
+      const scored = [];
+      
+      for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+        const batch = chunks.slice(i, i + BATCH_SIZE);
+        
+        // Yield to event loop between batches
+        if (i > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        
+        for (const chunk of batch) {
+          const similarity = dotSimilarity(codeVector, chunk.vector);
+          
+          if (similarity >= minSimilarity) {
+            // Deduplicate against input
+            if (normalizedInput) {
+              const normalizedChunk = (chunk.content || '').trim().replace(/\s+/g, ' ');
+              if (normalizedChunk === normalizedInput) continue;
+            }
+            
+            scored.push({ ...chunk, similarity });
+          }
+        }
+      }
+      
+      return scored.sort((a, b) => b.similarity - a.similarity);
+    };
 
-    // Filter by minimum similarity and sort
-    let filteredResults = scoredChunks
-      .filter((chunk) => chunk.similarity >= minSimilarity)
-      .sort((a, b) => b.similarity - a.similarity);
-
+    let filteredResults = await scoreAndFilter(candidates);
+    
+    // Fallback to full scan if ANN didn't provide enough results
     if (usedAnn && filteredResults.length < maxResults) {
-      scoredChunks = vectorStore.map((chunk) => {
-        const similarity = dotSimilarity(codeVector, chunk.vector);
-        return { ...chunk, similarity };
-      });
-      filteredResults = scoredChunks
-        .filter((chunk) => chunk.similarity >= minSimilarity)
-        .sort((a, b) => b.similarity - a.similarity);
+      filteredResults = await scoreAndFilter(vectorStore);
     }
-
-    // Deduplicate: if input code is from indexed file, skip exact matches
-    const normalizedInput = code.trim().replace(/\s+/g, ' ');
-    const results = filteredResults
-      .filter((chunk) => {
-        const normalizedChunk = chunk.content.trim().replace(/\s+/g, ' ');
-        // Skip if it's essentially the same code (>95% similar text)
-        return normalizedChunk !== normalizedInput;
-      })
-      .slice(0, maxResults);
+    const results = filteredResults.slice(0, maxResults);
 
     return {
       results,
-      message:
-        results.length === 0 ? 'No similar code found above the similarity threshold.' : null,
+      message: warningMessage || (results.length === 0 ? 'No similar code found above the similarity threshold.' : null),
     };
   }
 
