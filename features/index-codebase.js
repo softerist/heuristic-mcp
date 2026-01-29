@@ -728,7 +728,7 @@ export class CodebaseIndexer {
         for (const chunk of newChunks) {
           this.cache.addToStore(chunk);
         }
-        this.cache.setFileHash(file, hash);
+        this.cache.setFileHash(file, hash, stats);
         if (this.config.callGraphEnabled && callData) {
           this.cache.setFileCallData(file, callData);
         }
@@ -846,17 +846,18 @@ export class CodebaseIndexer {
 
       const processReadBatch = async (batch) => {
         const results = await Promise.all(
-          batch.map(async ({ file }) => {
+          batch.map(async ({ file, size, mtimeMs }) => {
             try {
               const content = await fs.readFile(file, 'utf-8');
               const hash = hashContent(content);
 
               if (this.cache.getFileHash(file) === hash) {
                 skippedCount.unchanged++;
+                this.cache.setFileHash(file, hash, { size, mtimeMs });
                 return null;
               }
 
-              return { file, hash, force: false };
+              return { file, hash, force: false, size, mtimeMs };
             } catch (_err) {
               skippedCount.error++;
               return null;
@@ -1045,7 +1046,7 @@ export class CodebaseIndexer {
                     if (stats.size > this.config.maxFileSize) return null;
                     const content = await fs.readFile(file, 'utf-8');
                     const hash = hashContent(content);
-                    return { file, hash, force: true };
+                    return { file, hash, force: true, size: stats.size, mtimeMs: stats.mtimeMs };
                   } catch {
                     return null;
                   }
@@ -1145,9 +1146,11 @@ export class CodebaseIndexer {
         const newChunksByFile = new Map();
         const callDataByFile = new Map();
 
-        for (const { file, force, content: presetContent, hash: presetHash } of batch) {
+        for (const { file, force, content: presetContent, hash: presetHash, size: presetSize, mtimeMs: presetMtimeMs } of batch) {
           let content = presetContent;
           let liveHash = presetHash;
+          let size = presetSize;
+          let mtimeMs = presetMtimeMs;
 
           if (content !== undefined && content !== null) {
             if (typeof content !== 'string') {
@@ -1156,11 +1159,13 @@ export class CodebaseIndexer {
             if (!liveHash) {
               liveHash = hashContent(content);
             }
-            const byteSize = Buffer.byteLength(content, 'utf8');
-            if (byteSize > this.config.maxFileSize) {
+            if (!Number.isFinite(size)) {
+              size = Buffer.byteLength(content, 'utf8');
+            }
+            if (size > this.config.maxFileSize) {
               if (this.config.verbose) {
                 console.warn(
-                  `[Indexer] Skipped ${path.basename(file)} (too large: ${(byteSize / 1024 / 1024).toFixed(2)}MB)`,
+                  `[Indexer] Skipped ${path.basename(file)} (too large: ${(size / 1024 / 1024).toFixed(2)}MB)`,
                 );
               }
               continue;
@@ -1212,6 +1217,8 @@ export class CodebaseIndexer {
             }
 
             liveHash = hashContent(content);
+            size = stats.size;
+            mtimeMs = stats.mtimeMs;
           }
 
           if (!force && liveHash && this.cache.getFileHash(file) === liveHash) {
@@ -1236,7 +1243,7 @@ export class CodebaseIndexer {
           }
 
           const chunks = smartChunk(content, file, this.config);
-          fileStats.set(file, { hash: liveHash, totalChunks: 0, successChunks: 0 });
+          fileStats.set(file, { hash: liveHash, totalChunks: 0, successChunks: 0, size, mtimeMs });
 
           for (const chunk of chunks) {
             allChunks.push({
@@ -1326,7 +1333,7 @@ export class CodebaseIndexer {
               this.cache.addToStore(chunk);
               totalChunks++;
             }
-            this.cache.setFileHash(file, stats.hash);
+            this.cache.setFileHash(file, stats.hash, { size: stats.size, mtimeMs: stats.mtimeMs });
             if (this.config.callGraphEnabled) {
               const callData = callDataByFile.get(file);
               if (callData) {

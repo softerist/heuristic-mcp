@@ -14,9 +14,8 @@ if (env?.backends?.onnx) {
   }
 }
 import fs from 'fs/promises';
-import fsSync, { createWriteStream } from 'fs';
+import fsSync from 'fs';
 import path from 'path';
-import util from 'util';
 import os from 'os';
 
 import { createRequire } from 'module';
@@ -29,8 +28,14 @@ const packageJson = require('./package.json');
 const BUILD_SIGNATURE = `[Server] Local build: ${fileURLToPath(import.meta.url)}`;
 
 import { loadConfig, getGlobalCacheDir } from './lib/config.js';
-import { ensureLogDirectory } from './lib/logging.js';
 import { clearStaleCaches } from './lib/cache-utils.js';
+import { createLogger } from './lib/logger.js';
+import {
+  DEFAULT_LOG_TAIL_LINES,
+  collectUnknownFlags,
+  parseWorkspaceDir,
+  printHelp,
+} from './lib/cli.js';
 
 import { EmbeddingsCache } from './lib/cache.js';
 import { CodebaseIndexer } from './features/index-codebase.js';
@@ -44,25 +49,9 @@ import * as AnnConfigFeature from './features/ann-config.js';
 import { register } from './features/register.js';
 
 const MEMORY_LOG_INTERVAL_MS = 15000;
-const DEFAULT_LOG_TAIL_LINES = 200;
 const PID_FILE_NAME = '.heuristic-mcp.pid';
 
-let logStream = null;
-let originalConsole = {
-  log: console.info,
-  warn: console.warn,
-  error: console.error,
-  info: console.info,
-};
-
-function enableStderrOnlyLogging() {
-  // Keep MCP stdout clean by routing all console output to stderr.
-  const redirect = (...args) => originalConsole.error(...args);
-  console.log = redirect; console.info = redirect;
-  console.warn = redirect;
-  console.error = redirect;
-  console.log = redirect; console.info = redirect;
-}
+const { enableStderrOnlyLogging, setupFileLogging } = createLogger();
 
 function formatMb(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
@@ -73,28 +62,6 @@ function logMemory(prefix) {
   console.info(
     `${prefix} rss=${formatMb(rss)} heap=${formatMb(heapUsed)}/${formatMb(heapTotal)}`
   );
-}
-
-function printHelp() {
-  console.info(`Heuristic MCP Server
-
-Usage:
-  heuristic-mcp [options]
-
-Options:
-  --status                 Show server and cache status
-  --fix                    With --status, remove stale cache directories
-  --clear-cache            Remove cache for current workspace (and stale global caches)
-  --logs                   Tail server logs (defaults to last 200 lines, follows)
-  --tail <lines>           Lines to show with --logs (default: ${DEFAULT_LOG_TAIL_LINES})
-  --no-follow              Do not follow log output with --logs
-  --start                  Ensure IDE config is registered (does not start server)
-  --stop                   Stop running server instances
-  --register [ide]         Register MCP server with IDE (antigravity|cursor|"Claude Desktop")
-  --workspace <path>       Workspace path (used by IDE launch / log viewer)
-  --version, -v            Show version
-  --help, -h               Show this help
-`);
 }
 
 async function setupPidFile() {
@@ -123,82 +90,6 @@ async function setupPidFile() {
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
   return pidPath;
-}
-
-async function setupFileLogging(activeConfig) {
-  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
-    return null;
-  }
-
-  try {
-    const logPath = await ensureLogDirectory(activeConfig);
-    logStream = createWriteStream(logPath, { flags: 'a' });
-
-    const writeLine = (level, args) => {
-      if (!logStream) return;
-      const message = util.format(...args);
-      // Skip empty lines (spacers) in log files
-      if (!message.trim()) return;
-
-      const timestamp = new Date().toISOString();
-      const lines = message
-        .split(/\r?\n/)
-        .map((line) => line.trimEnd())
-        .filter((line) => line.length > 0);
-      if (lines.length === 0) return;
-      const payload = lines.map((line) => `${timestamp} [${level}] ${line}`).join('\n') + '\n';
-      logStream.write(payload);
-    };
-
-    const wrap = (method, level) => {
-      const originalError = originalConsole.error;
-      console[method] = (...args) => {
-        // Always send to original stderr to avoid MCP protocol pollution on stdout
-        originalError(...args);
-        writeLine(level, args);
-      };
-    };
-
-    wrap('log', 'INFO');
-    wrap('warn', 'WARN');
-    wrap('error', 'ERROR');
-    wrap('info', 'INFO');
-
-    logStream.on('error', (err) => {
-      originalConsole.error(`[Logs] Failed to write log file: ${err.message}`);
-    });
-
-    process.on('exit', () => {
-      if (logStream) logStream.end();
-    });
-
-    return logPath;
-  } catch (err) {
-    originalConsole.error(`[Logs] Failed to initialize log file: ${err.message}`);
-    return null;
-  }
-}
-
-function parseWorkspaceDir(args) {
-  const workspaceIndex = args.findIndex((arg) => arg.startsWith('--workspace'));
-  if (workspaceIndex === -1) return null;
-
-  const arg = args[workspaceIndex];
-  let rawWorkspace = null;
-
-  if (arg.includes('=')) {
-    rawWorkspace = arg.split('=')[1];
-  } else if (workspaceIndex + 1 < args.length) {
-    rawWorkspace = args[workspaceIndex + 1];
-  }
-
-  // Check if IDE variable wasn't expanded (contains ${})
-  if (rawWorkspace && rawWorkspace.includes('${')) {
-    console.error(`[Server] IDE variable not expanded: ${rawWorkspace}, using current directory`);
-    return process.cwd();
-  }
-
-  return rawWorkspace || null;
 }
 
 async function clearCache(workspaceDir) {
@@ -343,12 +234,14 @@ async function initialize(workspaceDir) {
   let embedderPreloaded = false;
 
   // Preload the embedding model to ensure deterministic startup logs
-  try {
-    console.info('[Server] Preloading embedding model...');
-    await embedder(' ');
-    embedderPreloaded = true;
-  } catch (err) {
-    console.warn(`[Server] Embedding model preload failed: ${err.message}`);
+  if (config.preloadEmbeddingModel !== false) {
+    try {
+      console.info('[Server] Preloading embedding model...');
+      await embedder(' ');
+      embedderPreloaded = true;
+    } catch (err) {
+      console.warn(`[Server] Embedding model preload failed: ${err.message}`);
+    }
   }
 
   // In verbose mode, we trigger an early load to provide immediate resource feedback
@@ -563,21 +456,7 @@ export async function main(argv = process.argv) {
     '-h',
   ]);
   const flagsWithValue = new Set(['--tail', '--workspace', '--register']);
-  const unknownFlags = [];
-  for (let i = 0; i < rawArgs.length; i += 1) {
-    const arg = rawArgs[i];
-    if (flagsWithValue.has(arg)) {
-      if (arg.includes('=')) continue;
-      const next = rawArgs[i + 1];
-      if (next && !next.startsWith('-')) {
-        i += 1;
-      }
-      continue;
-    }
-    if (arg.startsWith('-') && !knownFlags.has(arg) && !arg.startsWith('--workspace=')) {
-      unknownFlags.push(arg);
-    }
-  }
+  const unknownFlags = collectUnknownFlags(rawArgs, knownFlags, flagsWithValue);
   if (unknownFlags.length > 0) {
     console.error(`[Error] Unknown option(s): ${unknownFlags.join(', ')}`);
     printHelp();
