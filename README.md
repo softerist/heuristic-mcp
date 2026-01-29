@@ -180,6 +180,8 @@ SMART_CODING_VECTOR_STORE_LOAD_MODE=disk node tools/scripts/benchmark-search.js 
 SMART_CODING_VECTOR_STORE_FORMAT=binary SMART_CODING_VECTOR_STORE_LOAD_MODE=disk node tools/scripts/benchmark-search.js --runs 10
 ```
 
+Note: On small repos, disk mode may be slightly slower and show noisy RSS deltas; benefits are clearer on large indexes with a small `vectorCacheEntries`.
+
 ---
 
 ## Troubleshooting
