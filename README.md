@@ -172,6 +172,14 @@ Use the built-in script to compare memory vs latency tradeoffs:
 node tools/scripts/benchmark-search.js --query "database connection" --runs 10
 ```
 
+Compare modes quickly:
+
+```bash
+SMART_CODING_VECTOR_STORE_LOAD_MODE=memory node tools/scripts/benchmark-search.js --runs 10
+SMART_CODING_VECTOR_STORE_LOAD_MODE=disk node tools/scripts/benchmark-search.js --runs 10
+SMART_CODING_VECTOR_STORE_FORMAT=binary SMART_CODING_VECTOR_STORE_LOAD_MODE=disk node tools/scripts/benchmark-search.js --runs 10
+```
+
 ---
 
 ## Troubleshooting
