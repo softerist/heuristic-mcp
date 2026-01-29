@@ -1697,6 +1697,9 @@ export class CodebaseIndexer {
       await this.cache.save();
 
       if (this.config.clearCacheAfterIndex) {
+        console.info(
+          '[Indexer] clearCacheAfterIndex enabled; in-memory vectors will be reloaded on next query'
+        );
         await this.cache.dropInMemoryVectors();
         if (this.config.verbose) {
           console.info('[Cache] Cleared in-memory vectors after indexing');

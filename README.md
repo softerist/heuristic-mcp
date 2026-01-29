@@ -162,6 +162,7 @@ and reads on demand. Recommended for large repos.
 - `vectorStoreLoadMode=disk` streams vectors from disk to reduce memory usage.
 - `vectorCacheEntries` controls the small in-memory LRU for vectors when using disk mode.
 - `clearCacheAfterIndex=true` drops in-memory vectors after indexing and reloads lazily on next query.
+- Note: `annEnabled=true` with `vectorStoreLoadMode=disk` can increase disk reads during ANN rebuilds on large indexes.
 
 ### Benchmarking Search
 
