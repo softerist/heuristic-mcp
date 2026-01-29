@@ -115,6 +115,101 @@ describe('EmbeddingsCache', () => {
     });
   });
 
+  it('persists file hash metadata and reloads', async () => {
+    await withTempDir(async (dir) => {
+      const config = await createConfig(dir);
+      const cache = new EmbeddingsCache(config);
+      const filePath = path.join(dir, 'a.js');
+
+      cache.setFileHash(filePath, 'hash-meta', { mtimeMs: 1234, size: 4567 });
+      await cache.save();
+
+      const hashFile = path.join(dir, 'file-hashes.json');
+      const raw = JSON.parse(await fs.readFile(hashFile, 'utf-8'));
+      expect(raw[filePath]).toEqual({ hash: 'hash-meta', mtimeMs: 1234, size: 4567 });
+
+      const reloaded = new EmbeddingsCache(config);
+      await reloaded.load();
+      expect(reloaded.getFileHash(filePath)).toBe('hash-meta');
+      expect(reloaded.getFileMeta(filePath)).toEqual(
+        expect.objectContaining({ hash: 'hash-meta', mtimeMs: 1234, size: 4567 })
+      );
+    });
+  });
+
+  it('writes and loads binary vector store with content lookup', async () => {
+    await withTempDir(async (dir) => {
+      const config = await createConfig(dir);
+      config.vectorStoreFormat = 'binary';
+      config.vectorStoreContentMode = 'external';
+      config.contentCacheEntries = 2;
+      const cache = new EmbeddingsCache(config);
+      const filePath = path.join(dir, 'b.js');
+
+      cache.vectorStore = [
+        {
+          file: filePath,
+          startLine: 1,
+          endLine: 2,
+          content: 'console.log(\"hi\")',
+          vector: new Float32Array([0.1, 0.2]),
+        },
+      ];
+      cache.setFileHash(filePath, 'hash-binary', { mtimeMs: 10, size: 20 });
+
+      await cache.save();
+
+      const reloaded = new EmbeddingsCache(config);
+      await reloaded.load();
+
+      const store = reloaded.getVectorStore();
+      expect(store.length).toBe(1);
+      expect(reloaded.getChunkContent(store[0])).toBe('console.log(\"hi\")');
+      expect(reloaded.getChunkVector(store[0])).toBeInstanceOf(Float32Array);
+    });
+  });
+
+  it('migrates from JSON cache to binary store on save', async () => {
+    await withTempDir(async (dir) => {
+      const config = await createConfig(dir);
+      config.vectorStoreFormat = 'binary';
+      config.vectorStoreContentMode = 'external';
+
+      const filePath = path.join(dir, 'migrate.js');
+      const meta = { version: 1, embeddingModel: config.embeddingModel };
+      const cacheData = [
+        {
+          file: filePath,
+          startLine: 1,
+          endLine: 2,
+          content: 'export const x = 1;',
+          vector: [0.3, 0.4],
+        },
+      ];
+      const hashData = { [filePath]: 'hash-migrate' };
+
+      await fs.writeFile(path.join(dir, 'meta.json'), JSON.stringify(meta));
+      await fs.writeFile(path.join(dir, 'embeddings.json'), JSON.stringify(cacheData));
+      await fs.writeFile(path.join(dir, 'file-hashes.json'), JSON.stringify(hashData));
+
+      const cache = new EmbeddingsCache(config);
+      await cache.load();
+      expect(cache.getVectorStore()).toHaveLength(1);
+
+      await cache.save();
+
+      const vectorsPath = path.join(dir, 'vectors.bin');
+      const recordsPath = path.join(dir, 'records.bin');
+      const contentPath = path.join(dir, 'content.bin');
+      const filesPath = path.join(dir, 'files.json');
+
+      await expect(fs.readFile(vectorsPath)).resolves.toBeDefined();
+      await expect(fs.readFile(recordsPath)).resolves.toBeDefined();
+      await expect(fs.readFile(contentPath)).resolves.toBeDefined();
+      await expect(fs.readFile(filesPath)).resolves.toBeDefined();
+    });
+  });
+
   it('reuses cached ANN vectors', async () => {
     await withTempDir(async (dir) => {
       const config = await createConfig(dir);

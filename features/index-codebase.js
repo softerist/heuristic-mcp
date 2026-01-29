@@ -123,7 +123,7 @@ export class CodebaseIndexer {
     if (this.workersDisabledUntil && Date.now() < this.workersDisabledUntil) {
       return false;
     }
-    return os.cpus().length > 1 && this.config.workerThreads !== 0;
+    return os.cpus().length > 1 && this.config.workerThreads !== 0 && !this.config.embeddingProcessPerBatch;
   }
 
   scheduleRetry() {
@@ -1096,6 +1096,9 @@ export class CodebaseIndexer {
       }
 
       // Step 4: Initialize worker threads (skip if explicitly disabled)
+      const workersSupported = os.cpus().length > 1 && this.config.workerThreads !== 0;
+      const allowSingleThreadFallback =
+        this.config.allowSingleThreadFallback || !workersSupported;
       const useWorkers = this.shouldUseWorkers();
 
       if (useWorkers) {
@@ -1107,7 +1110,7 @@ export class CodebaseIndexer {
         const until = this.workersDisabledUntil - Date.now();
         if (this.workersDisabledUntil && until > 0) {
           console.info(
-            `[Indexer] Workers disabled for ${Math.round(until / 1000)}s; single-threaded fallback ${this.config.allowSingleThreadFallback ? 'enabled' : 'disabled'}`
+            `[Indexer] Workers disabled for ${Math.round(until / 1000)}s; single-threaded fallback ${allowSingleThreadFallback ? 'enabled' : 'disabled'}`
           );
         } else {
           console.info(`[Indexer] Single-threaded mode (single-core system)`);
@@ -1283,7 +1286,7 @@ export class CodebaseIndexer {
             results.push(...sliceResults);
             if (this.workerCircuitOpen) {
               console.warn('[Indexer] Worker circuit open; pausing indexing');
-              if (!this.config.allowSingleThreadFallback) {
+              if (!allowSingleThreadFallback) {
                 return {
                   skipped: true,
                   reason: 'worker_circuit_open',
@@ -1292,7 +1295,7 @@ export class CodebaseIndexer {
               }
             }
           } else {
-            if (!this.config.allowSingleThreadFallback) {
+            if (!allowSingleThreadFallback) {
               console.warn('[Indexer] Single-threaded fallback disabled; pausing indexing');
               return {
                 skipped: true,
@@ -1393,8 +1396,8 @@ export class CodebaseIndexer {
         `Complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
       );
 
-      this.cache.setLastIndexDuration(totalDurationMs);
-      this.cache.setLastIndexStats({
+      this.cache.setLastIndexDuration?.(totalDurationMs);
+      this.cache.setLastIndexStats?.({
         lastIndexStartedAt: indexStartedAt,
         lastIndexEndedAt: new Date().toISOString(),
         lastDiscoveredFiles: files.length,

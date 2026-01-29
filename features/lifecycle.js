@@ -72,28 +72,66 @@ export async function stop() {
           .split(/\s+/)
           .filter((p) => p && !isNaN(p) && parseInt(p) !== currentPid);
         
-        for (const p of listPids) {
-          if (!pids.includes(p)) pids.push(p);
+        // Retrieve command lines to filter out workers
+        if (listPids.length > 0) {
+           const { stdout: cmdOut } = await execPromise(
+            `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in @(${listPids.join(',')}) } | Select-Object ProcessId, CommandLine"`
+          );
+          const lines = cmdOut.trim().split(/\r?\n/);
+          for (const line of lines) {
+             const trimmed = line.trim();
+             if (!trimmed || trimmed.startsWith('ProcessId')) continue;
+             const match = trimmed.match(/^(\d+)\s+(.*)$/);
+             if (match) {
+               const pid = parseInt(match[1], 10);
+               const cmd = match[2];
+               if (cmd.includes('embedding-worker') || cmd.includes('embedding-process') || cmd.includes('json-worker')) {
+                 continue;
+               }
+               if (pid && !pids.includes(String(pid))) {
+                 pids.push(String(pid));
+               }
+             }
+          }
         }
       } catch (_e) { /* ignore */ }
     } else {
       // Unix: Use pgrep to get all matching PIDs
       try {
-        const { stdout } = await execPromise(`pgrep -f "heuristic-mcp"`);
-        const allPids = stdout
-          .trim()
-          .split(/\s+/)
-          .filter((p) => p && !isNaN(p));
+        const { stdout } = await execPromise(`pgrep -fl "heuristic-mcp"`);
+        const lines = stdout.trim().split(/\r?\n/);
 
-        // Filter out current PID and dead processes
+        // Filter out current PID, dead processes, and workers
         pids = [];
-        for (const p of allPids) {
-          const pid = parseInt(p);
-          if (pid === currentPid) continue;
-          try {
-            process.kill(pid, 0);
-            pids.push(p);
-          } catch (_e) { /* ignore */ }
+        for (const line of lines) {
+          const tokens = line.trim().split(/\s+/).filter(Boolean);
+          if (tokens.length === 0) continue;
+
+          const allNumeric = tokens.every((token) => /^\d+$/.test(token));
+          const candidatePids = allNumeric ? tokens : [tokens[0]];
+
+          for (const candidate of candidatePids) {
+            const pid = parseInt(candidate, 10);
+            if (!Number.isFinite(pid) || pid === currentPid) continue;
+
+            // Exclude workers when command line is present
+            if (
+              !allNumeric &&
+              (line.includes('embedding-worker') ||
+                line.includes('embedding-process') ||
+                line.includes('json-worker'))
+            ) {
+              continue;
+            }
+
+            try {
+              process.kill(pid, 0);
+              const pidValue = String(pid);
+              if (!pids.includes(pidValue)) {
+                pids.push(pidValue);
+              }
+            } catch (_e) { /* ignore */ }
+          }
         }
       } catch (e) {
         // pgrep returns code 1 if no processes found, which is fine
@@ -504,10 +542,26 @@ export async function status({ fix = false } = {}) {
             .split(/\s+/)
             .filter((p) => p && !isNaN(p));
 
-          for (const p of winPids) {
-            const pid = parseInt(p, 10);
-            if (pid && pid !== myPid) {
-              if (!pids.includes(pid)) pids.push(pid);
+          // Retrieve command lines to filter out workers
+          if (winPids.length > 0) {
+             const { stdout: cmdOut } = await execPromise(
+              `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in @(${winPids.join(',')}) } | Select-Object ProcessId, CommandLine"`
+            );
+            const lines = cmdOut.trim().split(/\r?\n/);
+            for (const line of lines) {
+               const trimmed = line.trim();
+               if (!trimmed || trimmed.startsWith('ProcessId')) continue;
+               const match = trimmed.match(/^(\d+)\s+(.*)$/);
+               if (match) {
+                 const pid = parseInt(match[1], 10);
+                 const cmd = match[2];
+                 if (cmd.includes('embedding-worker') || cmd.includes('embedding-process') || cmd.includes('json-worker')) {
+                   continue;
+                 }
+                 if (pid && pid !== myPid) {
+                   if (!pids.includes(pid)) pids.push(pid);
+                 }
+               }
             }
           }
         } else {
@@ -517,6 +571,10 @@ export async function status({ fix = false } = {}) {
 
           for (const line of lines) {
             if (line.includes('heuristic-mcp/index.js') || line.includes('heuristic-mcp')) {
+              // Exclude workers
+              if (line.includes('embedding-worker') || line.includes('embedding-process') || line.includes('json-worker')) {
+                continue;
+              }
               const parts = line.trim().split(/\s+/);
               const pid = parseInt(parts[1], 10);
               if (pid && !isNaN(pid) && pid !== myPid && !line.includes(' grep ')) {

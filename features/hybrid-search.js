@@ -11,6 +11,20 @@ export class HybridSearch {
     this.fileModTimes = new Map(); // Cache for file modification times
   }
 
+  getChunkContent(chunk) {
+    if (this.cache?.getChunkContent) {
+      return this.cache.getChunkContent(chunk);
+    }
+    return chunk?.content ?? '';
+  }
+
+  getChunkVector(chunk) {
+    if (this.cache?.getChunkVector) {
+      return this.cache.getChunkVector(chunk);
+    }
+    return chunk?.vector ?? null;
+  }
+
   getAnnCandidateCount(maxResults, totalChunks) {
     const minCandidates = this.config.annMinCandidates ?? 0;
     const maxCandidates = this.config.annMaxCandidates ?? totalChunks;
@@ -72,7 +86,7 @@ export class HybridSearch {
     }
 
     // Generate query embedding
-    console.error(`[Search] Query: "${query}"`);
+    console.info(`[Search] Query: "${query}"`);
     const queryEmbed = await this.embedder(query, {
       pooling: 'mean',
       normalize: true,
@@ -87,7 +101,7 @@ export class HybridSearch {
       const annLabels = await this.cache.queryAnn(queryVectorTyped, candidateCount);
       if (annLabels && annLabels.length >= maxResults) {
         usedAnn = true;
-        console.error(`[Search] Using ANN index (${annLabels.length} candidates)`);
+        console.info(`[Search] Using ANN index (${annLabels.length} candidates)`);
         const seen = new Set();
         candidates = annLabels
           .map((index) => {
@@ -100,7 +114,7 @@ export class HybridSearch {
     }
 
     if (!usedAnn) {
-      console.error(`[Search] Using full scan (${vectorStore.length} chunks)`);
+      console.info(`[Search] Using full scan (${vectorStore.length} chunks)`);
     }
 
     if (usedAnn && candidates.length < maxResults) {
@@ -116,7 +130,8 @@ export class HybridSearch {
     if (usedAnn && lowerQuery.length > 1) {
       let exactMatchCount = 0;
       for (const chunk of candidates) {
-        if (chunk.content?.toLowerCase().includes(lowerQuery)) {
+        const content = this.getChunkContent(chunk);
+        if (content && content.toLowerCase().includes(lowerQuery)) {
           exactMatchCount++;
         }
       }
@@ -126,7 +141,7 @@ export class HybridSearch {
           candidates.map((chunk) => `${chunk.file}:${chunk.startLine}:${chunk.endLine}`)
         );
         for (const chunk of vectorStore) {
-          const content = chunk.content?.toLowerCase() || '';
+          const content = this.getChunkContent(chunk).toLowerCase();
           if (!content.includes(lowerQuery)) continue;
 
           const key = `${chunk.file}:${chunk.startLine}:${chunk.endLine}`;
@@ -182,10 +197,12 @@ export class HybridSearch {
 
       for (const chunk of batch) {
         // Semantic similarity (vectors are normalized)
-        let score = dotSimilarity(queryVector, chunk.vector) * semanticWeight;
+        const vector = this.getChunkVector(chunk);
+        if (!vector) continue;
+        let score = dotSimilarity(queryVector, vector) * semanticWeight;
 
         // Exact match boost
-        const lowerContent = chunk.content?.toLowerCase() || '';
+        const lowerContent = this.getChunkContent(chunk).toLowerCase();
 
         if (lowerContent && lowerContent.includes(lowerQuery)) {
           score += exactMatchBoost;
@@ -222,7 +239,8 @@ export class HybridSearch {
       const topN = Math.min(5, scoredChunks.length);
       const symbolsFromTop = new Set();
       for (let i = 0; i < topN; i++) {
-        const symbols = extractSymbolsFromContent(scoredChunks[i].content);
+        const content = this.getChunkContent(scoredChunks[i]);
+        const symbols = extractSymbolsFromContent(content || '');
         for (const sym of symbols) {
           symbolsFromTop.add(sym);
         }
@@ -245,12 +263,17 @@ export class HybridSearch {
     }
 
     // Get top results
-    const results = scoredChunks.slice(0, maxResults);
+    const results = scoredChunks.slice(0, maxResults).map((chunk) => {
+      if (chunk.content === undefined || chunk.content === null) {
+        return { ...chunk, content: this.getChunkContent(chunk) };
+      }
+      return chunk;
+    });
 
     if (results.length > 0) {
-      console.error(`[Search] Found ${results.length} results. Top score: ${results[0].score.toFixed(4)}`);
+      console.info(`[Search] Found ${results.length} results. Top score: ${results[0].score.toFixed(4)}`);
     } else {
-      console.error('[Search] No results found.');
+      console.info('[Search] No results found.');
     }
 
     return { results, message: null };
@@ -264,6 +287,7 @@ export class HybridSearch {
     return results
       .map((r, idx) => {
         const relPath = path.relative(this.config.searchDirectory, r.file);
+        const content = r.content ?? this.getChunkContent(r);
         return (
           `## Result ${idx + 1} (Relevance: ${(r.score * 100).toFixed(1)}%)\n` +
           `**File:** \`${relPath}\`\n` +
@@ -271,7 +295,7 @@ export class HybridSearch {
           '```' +
           path.extname(r.file).slice(1) +
           '\n' +
-          r.content +
+          content +
           '\n' +
           '```\n'
         );

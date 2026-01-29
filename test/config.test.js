@@ -135,6 +135,10 @@ describe('Configuration Loading', () => {
       process.env.SMART_CODING_SEMANTIC_WEIGHT = '0.3';
       process.env.SMART_CODING_EXACT_MATCH_BOOST = '2';
       process.env.SMART_CODING_EMBEDDING_MODEL = 'custom-embedder';
+      process.env.SMART_CODING_PRELOAD_EMBEDDING_MODEL = 'false';
+      process.env.SMART_CODING_VECTOR_STORE_FORMAT = 'binary';
+      process.env.SMART_CODING_VECTOR_STORE_CONTENT_MODE = 'external';
+      process.env.SMART_CODING_CONTENT_CACHE_ENTRIES = '512';
       process.env.SMART_CODING_WORKER_THREADS = '3';
       process.env.SMART_CODING_ANN_ENABLED = 'false';
       process.env.SMART_CODING_ANN_MIN_CHUNKS = '123';
@@ -161,6 +165,10 @@ describe('Configuration Loading', () => {
       expect(config.semanticWeight).toBe(0.3);
       expect(config.exactMatchBoost).toBe(2);
       expect(config.embeddingModel).toBe('custom-embedder');
+      expect(config.preloadEmbeddingModel).toBe(false);
+      expect(config.vectorStoreFormat).toBe('binary');
+      expect(config.vectorStoreContentMode).toBe('external');
+      expect(config.contentCacheEntries).toBe(512);
       expect(config.workerThreads).toBe(3);
       expect(config.annEnabled).toBe(false);
       expect(config.annMinChunks).toBe(123);

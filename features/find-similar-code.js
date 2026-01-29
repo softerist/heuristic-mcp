@@ -12,6 +12,20 @@ export class FindSimilarCode {
     this.config = config;
   }
 
+  getChunkContent(chunk) {
+    if (this.cache?.getChunkContent) {
+      return this.cache.getChunkContent(chunk);
+    }
+    return chunk?.content ?? '';
+  }
+
+  getChunkVector(chunk) {
+    if (this.cache?.getChunkVector) {
+      return this.cache.getChunkVector(chunk);
+    }
+    return chunk?.vector ?? null;
+  }
+
   getAnnCandidateCount(maxResults, totalChunks) {
     const minCandidates = this.config.annMinCandidates ?? 0;
     const maxCandidates = this.config.annMaxCandidates ?? totalChunks;
@@ -94,12 +108,16 @@ export class FindSimilarCode {
         }
         
         for (const chunk of batch) {
-          const similarity = dotSimilarity(codeVector, chunk.vector);
+          const vector = this.getChunkVector(chunk);
+          if (!vector) continue;
+          const similarity = dotSimilarity(codeVector, vector);
           
           if (similarity >= minSimilarity) {
             // Deduplicate against input
             if (normalizedInput) {
-              const normalizedChunk = (chunk.content || '').trim().replace(/\s+/g, ' ');
+              const normalizedChunk = this.getChunkContent(chunk)
+                .trim()
+                .replace(/\s+/g, ' ');
               if (normalizedChunk === normalizedInput) continue;
             }
             
@@ -117,7 +135,12 @@ export class FindSimilarCode {
     if (usedAnn && filteredResults.length < maxResults) {
       filteredResults = await scoreAndFilter(vectorStore);
     }
-    const results = filteredResults.slice(0, maxResults);
+    const results = filteredResults.slice(0, maxResults).map((chunk) => {
+      if (chunk.content === undefined || chunk.content === null) {
+        return { ...chunk, content: this.getChunkContent(chunk) };
+      }
+      return chunk;
+    });
 
     return {
       results,
@@ -133,6 +156,7 @@ export class FindSimilarCode {
     return results
       .map((r, idx) => {
         const relPath = path.relative(this.config.searchDirectory, r.file);
+        const content = r.content ?? this.getChunkContent(r);
         return (
           `## Similar Code ${idx + 1} (Similarity: ${(r.similarity * 100).toFixed(1)}%)\n` +
           `**File:** \`${relPath}\`\n` +
@@ -140,7 +164,7 @@ export class FindSimilarCode {
           '```' +
           path.extname(r.file).slice(1) +
           '\n' +
-          r.content +
+          content +
           '\n' +
           '```\n'
         );

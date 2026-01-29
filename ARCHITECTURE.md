@@ -19,16 +19,18 @@ heuristic-mcp/
 │   ├── cache-utils.js         # Stale cache detection/cleanup
 │   ├── cache.js               # Embeddings cache management + ANN index
 │   ├── call-graph.js          # Symbol extraction and call graph helpers
+│   ├── cli.js                 # CLI argument parsing helpers
 │   ├── config.js              # Configuration loader and env overrides
 │   ├── embedding-process.js   # Child-process embedder runner (isolation)
 │   ├── embedding-worker.js    # Worker-thread embedder runner
 │   ├── ignore-patterns.js     # Smart ignore patterns by project type
 │   ├── json-worker.js         # Off-thread JSON parsing
 │   ├── json-writer.js         # Streaming JSON writer
-│   ├── logging.js             # Log file helpers
+│   ├── logging.js             # Log file + stderr redirection helpers
 │   ├── project-detector.js    # Language/project detection
 │   ├── tokenizer.js           # Token estimation and limits
-│   └── utils.js               # Shared utilities (chunking, similarity)
+│   ├── utils.js               # Shared utilities (chunking, similarity)
+│   └── vector-store-binary.js # Binary on-disk vector store (mmap-friendly)
 │
 ├── features/                   # Pluggable features
 │   ├── hybrid-search.js       # Semantic + exact match search
@@ -46,6 +48,7 @@ heuristic-mcp/
 │
 └── tools/                      # Developer-only helpers
     └── scripts/
+        ├── cache-stats.js     # Cache inspection utility
         └── manual-search.js   # Manual semantic search helper
 ```
 
@@ -72,6 +75,7 @@ heuristic-mcp/
 - File hash tracking for change detection
 - Load/save operations for disk cache
 - Optional ANN (HNSW) index build/load/save for fast search
+- Supports JSON or binary vector store formats
 
 ### lib/cache-utils.js
 
@@ -99,6 +103,16 @@ heuristic-mcp/
 ### lib/logging.js
 
 - Log file path and directory helpers
+- Console redirection for MCP stdout safety
+
+### lib/cli.js
+
+- Parses CLI flags for server and lifecycle commands
+
+### lib/vector-store-binary.js
+
+- Binary vector store with header + record table + content blocks
+- Mmap-friendly layout, content loaded on demand
 
 ### lib/utils.js
 
@@ -195,6 +209,7 @@ format output - markdown with code blocks
 - **First Run**: Download model (if not cached), index all files, save cache
 - **Subsequent Runs**: Load cache from disk, only index changed files
 - **File Changes**: Incremental updates via file watcher (if enabled)
+- **Binary Store**: Optional on-disk vector/content storage to reduce JS heap usage
 
 ### Memory Usage
 

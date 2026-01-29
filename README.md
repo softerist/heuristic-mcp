@@ -12,6 +12,7 @@ An enhanced MCP server for your codebase. It provides intelligent semantic searc
 - Find similar code: locate near-duplicate or related patterns from a snippet.
 - Recency ranking and call-graph boosting: surfaces fresh and related code.
 - Optional ANN index: faster candidate retrieval for large codebases.
+- Optional binary vector store: mmap-friendly cache format for large repos.
 
 ---
 
@@ -114,7 +115,10 @@ Example `config.json`:
   "recencyDecayDays": 30,
   "callGraphEnabled": true,
   "callGraphBoost": 0.15,
-  "annEnabled": true
+  "annEnabled": true,
+  "vectorStoreFormat": "binary",
+  "vectorStoreContentMode": "external",
+  "contentCacheEntries": 256
 }
 ```
 
@@ -136,8 +140,19 @@ Selected overrides (prefix `SMART_CODING_`):
 - `SMART_CODING_RECENCY_DECAY_DAYS=30`
 - `SMART_CODING_ANN_ENABLED=true|false`
 - `SMART_CODING_ANN_EF_SEARCH=64`
+- `SMART_CODING_VECTOR_STORE_FORMAT=json|binary`
+- `SMART_CODING_VECTOR_STORE_CONTENT_MODE=external|inline`
+- `SMART_CODING_CONTENT_CACHE_ENTRIES=256`
 
 See `lib/config.js` for the full list.
+
+### Binary Vector Store
+
+Set `vectorStoreFormat` to `binary` to use the on-disk binary cache. This keeps vectors and content out of JS heap
+and reads on demand. Recommended for large repos.
+
+- `vectorStoreContentMode=external` keeps content in the binary file and only loads for top-N results.
+- `contentCacheEntries` controls the small in-memory LRU for decoded content strings.
 
 ---
 
@@ -161,6 +176,12 @@ See `lib/config.js` for the full list.
 **Clear cache**
 
 - Use the MCP tool `c_clear_cache`, run `heuristic-mcp --clear-cache`, or delete the cache directory. For local dev, run `npm run clean`.
+
+**Inspect cache**
+
+```bash
+node tools/scripts/cache-stats.js --workspace <path>
+```
 
 **Stop doesn't stick**
 

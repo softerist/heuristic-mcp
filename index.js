@@ -14,9 +14,7 @@ if (env?.backends?.onnx) {
   }
 }
 import fs from 'fs/promises';
-import fsSync from 'fs';
 import path from 'path';
-import os from 'os';
 
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
@@ -29,13 +27,11 @@ const BUILD_SIGNATURE = `[Server] Local build: ${fileURLToPath(import.meta.url)}
 
 import { loadConfig, getGlobalCacheDir } from './lib/config.js';
 import { clearStaleCaches } from './lib/cache-utils.js';
-import { createLogger } from './lib/logger.js';
-import {
-  DEFAULT_LOG_TAIL_LINES,
-  collectUnknownFlags,
-  parseWorkspaceDir,
-  printHelp,
-} from './lib/cli.js';
+import { enableStderrOnlyLogging, setupFileLogging } from './lib/logging.js';
+import { parseArgs, printHelp } from './lib/cli.js';
+import { clearCache } from './lib/cache-ops.js';
+import { logMemory, startMemoryLogger } from './lib/memory-logger.js';
+import { registerSignalHandlers, setupPidFile } from './lib/server-lifecycle.js';
 
 import { EmbeddingsCache } from './lib/cache.js';
 import { CodebaseIndexer } from './features/index-codebase.js';
@@ -50,66 +46,6 @@ import { register } from './features/register.js';
 
 const MEMORY_LOG_INTERVAL_MS = 15000;
 const PID_FILE_NAME = '.heuristic-mcp.pid';
-
-const { enableStderrOnlyLogging, setupFileLogging } = createLogger();
-
-function formatMb(bytes) {
-  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
-}
-
-function logMemory(prefix) {
-  const { rss, heapUsed, heapTotal } = process.memoryUsage();
-  console.info(
-    `${prefix} rss=${formatMb(rss)} heap=${formatMb(heapUsed)}/${formatMb(heapTotal)}`
-  );
-}
-
-async function setupPidFile() {
-  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
-    return null;
-  }
-
-  const pidPath = path.join(os.homedir(), PID_FILE_NAME);
-  try {
-    await fs.writeFile(pidPath, `${process.pid}`, 'utf-8');
-  } catch (err) {
-    console.error(`[Server] Warning: Failed to write PID file: ${err.message}`);
-    return null;
-  }
-
-  const cleanup = () => {
-    try {
-      fsSync.unlinkSync(pidPath);
-    } catch {
-      // ignore
-    }
-  };
-
-  process.on('exit', cleanup);
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-
-  return pidPath;
-}
-
-async function clearCache(workspaceDir) {
-  const effectiveWorkspace = workspaceDir || process.cwd();
-  const activeConfig = await loadConfig(effectiveWorkspace);
-
-  if (!activeConfig.enableCache) {
-    console.info('[Cache] Cache disabled (enableCache=false); nothing to clear.');
-    return;
-  }
-
-  try {
-    await fs.rm(activeConfig.cacheDirectory, { recursive: true, force: true });
-    console.info(`[Cache] Cleared cache directory: ${activeConfig.cacheDirectory}`);
-    await clearStaleCaches();
-  } catch (err) {
-    console.error(`[Cache] Failed to clear cache: ${err.message}`);
-    process.exit(1);
-  }
-}
 
 // Arguments parsed in main()
 
@@ -159,7 +95,7 @@ async function initialize(workspaceDir) {
     await clearStaleCaches();
   }
   const [pidPath, logPath] = await Promise.all([
-    setupPidFile(),
+    setupPidFile({ pidFileName: PID_FILE_NAME }),
     setupFileLogging(config),
   ]);
   if (logPath) {
@@ -184,13 +120,10 @@ async function initialize(workspaceDir) {
     console.info(`[Server] Process CWD: ${process.cwd()}`);
   } catch (_e) { /* ignore */ }
 
-  let startupMemoryTimer = null;
+  let stopStartupMemory = null;
   if (config.verbose) {
     logMemory('[Server] Memory (startup)');
-    startupMemoryTimer = setInterval(
-      () => logMemory('[Server] Memory (startup)'),
-      MEMORY_LOG_INTERVAL_MS
-    );
+    stopStartupMemory = startMemoryLogger('[Server] Memory (startup)', MEMORY_LOG_INTERVAL_MS);
   }
 
   // Ensure search directory exists
@@ -283,8 +216,8 @@ async function initialize(workspaceDir) {
         logMemory('[Server] Memory (after cache load)');
       }
     } finally {
-      if (startupMemoryTimer) {
-        clearInterval(startupMemoryTimer);
+      if (stopStartupMemory) {
+        stopStartupMemory();
       }
     }
 
@@ -357,76 +290,70 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Main entry point
 export async function main(argv = process.argv) {
-  let args = argv.slice(2);
-  const isServerMode = !(args.includes('--status') || args.includes('--clear-cache') || args.includes('--logs') || args.includes('--start') || args.includes('--stop') || args.includes('--register') || args.includes('--help') || args.includes('-h') || args.includes('--version') || args.includes('-v'));
+  const parsed = parseArgs(argv);
+  const {
+    isServerMode,
+    workspaceDir,
+    wantsVersion,
+    wantsHelp,
+    wantsLogs,
+    wantsNoFollow,
+    tailLines,
+    wantsStop,
+    wantsStart,
+    wantsStatus,
+    wantsClearCache,
+    wantsRegister,
+    registerFilter,
+    wantsFix,
+    unknownFlags,
+  } = parsed;
+
   if (isServerMode && !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test')) {
     enableStderrOnlyLogging();
   }
-  console.info(BUILD_SIGNATURE);
-  console.info(`[Server] argv: ${argv.join(' ')}`);
-  // Parse workspace from command line arguments
-  const rawArgs = [...args];
-
-  if (args.includes('--version') || args.includes('-v')) {
+  if (wantsVersion) {
     console.info(packageJson.version);
     process.exit(0);
   }
 
-  if (args.includes('--help') || args.includes('-h')) {
+  if (wantsHelp) {
     printHelp();
     process.exit(0);
   }
 
-  const workspaceDir = parseWorkspaceDir(args);
   if (workspaceDir) {
     console.info(`[Server] Workspace mode: ${workspaceDir}`);
   }
 
-  const wantsLogs = args.includes('--logs');
-  const wantsNoFollow = args.includes('--no-follow');
-  let tailLines = DEFAULT_LOG_TAIL_LINES;
   if (wantsLogs) {
     process.env.SMART_CODING_LOGS = 'true';
     process.env.SMART_CODING_VERBOSE = 'true';
     console.info('[Server] Starting server with verbose logging enabled');
-
-    const tailIndex = args.indexOf('--tail');
-    if (tailIndex !== -1 && args[tailIndex + 1]) {
-      const parsed = parseInt(args[tailIndex + 1], 10);
-      if (!isNaN(parsed) && parsed > 0) {
-        tailLines = parsed;
-      }
-    }
   }
 
-  if (args.includes('--stop')) {
+  if (wantsStop) {
     await stop();
     process.exit(0);
   }
 
-  if (args.includes('--start')) {
+  if (wantsStart) {
     await start();
     process.exit(0);
   }
 
-  if (args.includes('--status')) {
-    await status({ fix: args.includes('--fix') });
+  if (wantsStatus) {
+    await status({ fix: wantsFix });
     process.exit(0);
   }
 
-  if (args.includes('--clear-cache')) {
+  if (wantsClearCache) {
     await clearCache(workspaceDir);
     process.exit(0);
   }
 
-  // Check if --register flag is present
-  if (args.includes('--register')) {
-    // Extract optional filter (e.g. --register antigravity)
-    const filterIndex = args.indexOf('--register');
-    const filter =
-      args[filterIndex + 1] && !args[filterIndex + 1].startsWith('-') ? args[filterIndex + 1] : null;
-
-    await register(filter);
+  if (wantsRegister) {
+    await register(registerFilter);
     process.exit(0);
   }
 
@@ -439,37 +366,19 @@ export async function main(argv = process.argv) {
     process.exit(0);
   }
 
-  const knownFlags = new Set([
-    '--status',
-    '--fix',
-    '--clear-cache',
-    '--logs',
-    '--tail',
-    '--no-follow',
-    '--start',
-    '--stop',
-    '--register',
-    '--workspace',
-    '--version',
-    '-v',
-    '--help',
-    '-h',
-  ]);
-  const flagsWithValue = new Set(['--tail', '--workspace', '--register']);
-  const unknownFlags = collectUnknownFlags(rawArgs, knownFlags, flagsWithValue);
   if (unknownFlags.length > 0) {
     console.error(`[Error] Unknown option(s): ${unknownFlags.join(', ')}`);
     printHelp();
     process.exit(1);
   }
 
-  if (args.includes('--fix') && !args.includes('--status')) {
+  if (wantsFix && !wantsStatus) {
     console.error('[Error] --fix can only be used with --status');
     printHelp();
     process.exit(1);
   }
 
-
+  registerSignalHandlers(gracefulShutdown);
   const { startBackgroundTasks } = await initialize(workspaceDir);
 
   // Load cache before connecting to ensure tools are ready
@@ -522,9 +431,6 @@ async function gracefulShutdown(signal) {
   console.info('[Server] Goodbye!');
   process.exit(0);
 }
-
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 const isMain = process.argv[1] && (
   path.resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase() ||
