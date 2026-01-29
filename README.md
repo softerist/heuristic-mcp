@@ -1,6 +1,6 @@
 # Heuristic MCP Server
 
-An enhanced MCP server for your codebase. It provides intelligent semantic search, find-similar-code, recency-aware ranking, call-graph proximity boosts, and smart chunking. Optimized for Antigravity, Cursor, and Claude Desktop.
+An enhanced MCP server for your codebase. It provides intelligent semantic search, find-similar-code, recency-aware ranking, call-graph proximity boosts, and smart chunking. Optimized for Antigravity, Cursor, Claude Desktop, and VS Code.
 
 ---
 
@@ -85,6 +85,8 @@ heuristic-mcp --start
 heuristic-mcp --stop
 ```
 
+`--stop` also disables the MCP server entry in supported IDE configs so the IDE won't immediately respawn it. `--start` re-enables it (restart/reload the IDE to launch).
+
 ### Clear Cache
 
 ```bash
@@ -159,6 +161,10 @@ See `lib/config.js` for the full list.
 **Clear cache**
 
 - Use the MCP tool `c_clear_cache`, run `heuristic-mcp --clear-cache`, or delete the cache directory. For local dev, run `npm run clean`.
+
+**Stop doesn't stick**
+
+- The IDE will auto-restart the server if it's still enabled in its config. `--stop` now disables the server entry for Antigravity, Cursor, Claude Desktop, and VS Code (when using common MCP settings keys). Restart the IDE after `--start` to re-enable.
 
 ---
 

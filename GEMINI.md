@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**@softerist/heuristic-mcp** is an enhanced Model Context Protocol (MCP) server designed to provide intelligent semantic code search capabilities. It integrates features like find-similar-code, recency-aware ranking, call-graph proximity boosts, and smart chunking to improve code retrieval accuracy for AI assistants (Antigravity, Cursor, Claude Desktop).
+**@softerist/heuristic-mcp** is an enhanced Model Context Protocol (MCP) server designed to provide intelligent semantic code search capabilities. It integrates features like find-similar-code, recency-aware ranking, call-graph proximity boosts, and smart chunking to improve code retrieval accuracy for AI assistants (Antigravity, Cursor, Claude Desktop, VS Code).
 
 **Key Features:**
 *   **Semantic Search:** Finds code by meaning using embeddings.
@@ -19,15 +19,22 @@ The project follows a modular architecture:
 *   **`lib/`**: Core libraries.
     *   `config.js`: Configuration loader and environment variable handling.
     *   `cache.js`: Manages embedding vectors persistence and ANN index.
+    *   `cache-utils.js`: Stale cache detection/cleanup.
     *   `utils.js`: Shared utilities (hashing, similarity, smart chunking).
     *   `call-graph.js`: Extracts symbols and builds a lightweight call graph.
     *   `tokenizer.js`: Token estimation.
+    *   `embedding-worker.js`: Worker-thread embedder runner.
+    *   `embedding-process.js`: Child-process embedder runner (isolation).
+    *   `ignore-patterns.js`: Smart ignore patterns by detected project type.
+    *   `json-worker.js` / `json-writer.js`: Streaming JSON helpers.
+    *   `logging.js`: Log file helpers.
 *   **`features/`**: Pluggable feature modules. Each module exports a class, tool definition, and handler.
     *   `hybrid-search.js`: Semantic search logic.
     *   `index-codebase.js`: File discovery and indexing.
     *   `find-similar-code.js`: Logic for finding similar snippets.
     *   `lifecycle.js` & `register.js`: CLI and IDE registration helpers.
 *   **`scripts/`**: Utility scripts (postinstall, model download, cache clearing).
+*   **`tools/`**: Developer-only helpers (manual search script).
 
 ## Building and Running
 
@@ -54,7 +61,7 @@ The project follows a modular architecture:
     1.  **Class:** `export class FeatureName { ... }`
     2.  **Tool Def:** `export function getToolDefinition(config) { ... }`
     3.  **Handler:** `export async function handleToolCall(request, instance) { ... }`
-*   **Logging:** Use `console.error()` for server logs (MCP standard). Use `console.info()` only for CLI utility output.
+*   **Logging:** Use `console.info()` for normal server lifecycle output (redirected to logs when running in MCP mode). Use `console.warn()` for non-fatal issues and `console.error()` for errors. CLI utilities may also use `console.info()` for user-facing output.
 *   **Configuration:** All features should accept a `config` object. Environment variables (prefix `SMART_CODING_`) override `config.json` values.
 
 ## Key Files

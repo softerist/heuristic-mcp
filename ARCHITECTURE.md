@@ -16,11 +16,19 @@ heuristic-mcp/
 ├── .gitignore                  # Git ignore rules
 │
 ├── lib/                        # Core libraries
-│   ├── config.js              # Configuration loader and env overrides
+│   ├── cache-utils.js         # Stale cache detection/cleanup
 │   ├── cache.js               # Embeddings cache management + ANN index
-│   ├── utils.js               # Shared utilities (chunking, similarity)
+│   ├── call-graph.js          # Symbol extraction and call graph helpers
+│   ├── config.js              # Configuration loader and env overrides
+│   ├── embedding-process.js   # Child-process embedder runner (isolation)
+│   ├── embedding-worker.js    # Worker-thread embedder runner
+│   ├── ignore-patterns.js     # Smart ignore patterns by project type
+│   ├── json-worker.js         # Off-thread JSON parsing
+│   ├── json-writer.js         # Streaming JSON writer
+│   ├── logging.js             # Log file helpers
+│   ├── project-detector.js    # Language/project detection
 │   ├── tokenizer.js           # Token estimation and limits
-│   └── call-graph.js          # Symbol extraction and call graph helpers
+│   └── utils.js               # Shared utilities (chunking, similarity)
 │
 ├── features/                   # Pluggable features
 │   ├── hybrid-search.js       # Semantic + exact match search
@@ -31,10 +39,14 @@ heuristic-mcp/
 │   ├── lifecycle.js           # CLI lifecycle helpers
 │   └── register.js            # IDE registration logic
 │
-└── scripts/                    # Utility scripts
-    ├── clear-cache.js         # Cache management utility
-    ├── download-model.js      # Optional model pre-download
-    └── postinstall.js         # Auto-register on install
+├── scripts/                    # Utility scripts
+│   ├── clear-cache.js         # Cache management utility
+│   ├── download-model.js      # Optional model pre-download
+│   └── postinstall.js         # Auto-register on install
+│
+└── tools/                      # Developer-only helpers
+    └── scripts/
+        └── manual-search.js   # Manual semantic search helper
 ```
 
 ## Module Responsibilities
@@ -61,6 +73,33 @@ heuristic-mcp/
 - Load/save operations for disk cache
 - Optional ANN (HNSW) index build/load/save for fast search
 
+### lib/cache-utils.js
+
+- Stale cache detection/cleanup for caches without metadata
+- Uses `progress.json` recency to avoid deleting active indexes
+
+### lib/embedding-process.js
+
+- Child-process embedding path for isolation
+- Used to recover from hung or crashing workers
+
+### lib/embedding-worker.js
+
+- Worker-thread embedding path for concurrency
+- Cooperates with worker circuit breaker logic in indexing
+
+### lib/ignore-patterns.js
+
+- Smart ignore patterns derived from detected project type
+
+### lib/json-worker.js / lib/json-writer.js
+
+- Streaming JSON writer and off-thread parsing helpers
+
+### lib/logging.js
+
+- Log file path and directory helpers
+
 ### lib/utils.js
 
 - **dotSimilarity()** - Vector similarity calculation
@@ -85,6 +124,7 @@ heuristic-mcp/
 - File discovery via glob patterns
 - Incremental indexing
 - Optional file watcher for real-time updates
+- Progress tracking via `progress.json`
 - MCP tool: `b_index_codebase`
 
 ### features/clear-cache.js

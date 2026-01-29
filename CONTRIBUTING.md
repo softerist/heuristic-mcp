@@ -33,6 +33,7 @@ Key directories:
 - `lib/` - Core libraries and utilities
 - `features/` - Pluggable feature modules
 - `scripts/` - Utility scripts
+- `tools/` - Developer-only helpers
 
 ## Development Guidelines
 
@@ -90,7 +91,8 @@ try {
 
 ### Logging
 
-- Use `console.error()` for server logs (MCP protocol standard)
+- Use `console.info()` for normal server lifecycle output (redirected to logs in MCP mode)
+- Use `console.warn()` for non-fatal issues and `console.error()` for errors
 - CLI utilities and install scripts may use `console.info()` for user-friendly output
 
 ## Adding New Features
