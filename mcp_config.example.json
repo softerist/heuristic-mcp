@@ -8,12 +8,6 @@
         "<rest_of_the_path>\\heuristic-mcp"
       ],
       "disabled": false
-    },
-    "everything": {
-      "command": "node",
-      "args": [
-        "<rest_of_the_path>\\mcp-servers-official\\src\\everything\\dist\\index.js"
-      ]
     }
   }
 }
