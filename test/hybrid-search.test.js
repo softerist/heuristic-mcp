@@ -107,6 +107,11 @@ describe('HybridSearch', () => {
         getStoreSize: () => 0,
         getVector: () => null,
         getChunk: () => null,
+        getChunkContent: async () => null,
+        getChunkVector: () => null,
+        getFileMeta: () => null,
+        getRelatedFiles: async () => new Map(),
+        queryAnn: async () => null,
       };
 
       const emptySearch = new HybridSearch(fixtures.embedder, emptyCache, fixtures.config);
@@ -578,6 +583,7 @@ describe('HybridSearch', () => {
         getVectorStore: () => vectorStore,
         queryAnn: async () => null,
         getRelatedFiles: async () => new Map(),
+        getFileMeta: () => null,
         getStoreSize: () => vectorStore.length,
         getVector: (idx) => vectorStore[idx]?.vector,
         getChunk: (idx) => vectorStore[idx],
@@ -619,6 +625,7 @@ describe('HybridSearch', () => {
         getVectorStore: () => vectorStore,
         queryAnn: async () => null,
         getRelatedFiles: async () => new Map(),
+        getFileMeta: () => null,
         getStoreSize: () => vectorStore.length,
         getVector: (idx) => vectorStore[idx]?.vector,
         getChunk: (idx) => vectorStore[idx],

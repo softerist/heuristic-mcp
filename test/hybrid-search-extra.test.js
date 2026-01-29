@@ -28,6 +28,9 @@ describe('HybridSearch extra coverage', () => {
       getVector: (idx) => vectorStore[idx]?.vector,
       getChunk: (idx) => vectorStore[idx],
       getChunkContent: (idx) => vectorStore[idx]?.content,
+      startRead: () => {},
+      endRead: () => {},
+      waitForReaders: async () => {},
     };
 
     const config = {
@@ -65,6 +68,9 @@ describe('HybridSearch extra coverage', () => {
       getVector: (idx) => vectorStore[idx]?.vector,
       getChunk: (idx) => vectorStore[idx],
       getChunkContent: (idx) => vectorStore[idx]?.content,
+      startRead: () => {},
+      endRead: () => {},
+      waitForReaders: async () => {},
     };
 
     const config = {

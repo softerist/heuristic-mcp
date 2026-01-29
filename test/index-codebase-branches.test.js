@@ -100,6 +100,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
       setFileHashes: vi.fn((map) => { mockCache.fileHashes = map; }),
       getFileCallDataKeys: vi.fn().mockImplementation(() => [...mockCache.fileCallData.keys()]),
       setFileCallDataEntries: vi.fn((map) => { mockCache.fileCallData = map; }),
+      clearFileCallData: vi.fn(() => { mockCache.fileCallData = new Map(); }),
     };
     mockConfig = {
       searchDirectory: '/test',
@@ -301,7 +302,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['/test/a.js']);
     indexer.preFilterFiles = vi.fn().mockResolvedValue([]);
     mockCache.getVectorStore.mockReturnValue([{ file: '/test/a.js' }]);
-    mockCache.fileCallData = new Map();
+    mockCache.clearFileCallData();
     vi.spyOn(fs, 'stat').mockResolvedValue({});
 
     const result = await indexer.indexAll();

@@ -48,11 +48,21 @@ describe('Coverage Gap Filling', () => {
       fileCallData: new Map(),
       getRelatedFiles: vi.fn(),
       setFileCallData: vi.fn(),
+      setFileCallDataEntries: vi.fn((entries) => {
+        if (entries instanceof Map) {
+          mockCache.fileCallData = entries;
+        } else {
+          mockCache.fileCallData = new Map(Object.entries(entries || {}));
+        }
+      }),
+      clearFileCallData: vi.fn(() => {
+        mockCache.fileCallData = new Map();
+      }),
       save: vi.fn().mockResolvedValue(),
       ensureAnnIndex: vi.fn().mockResolvedValue(null),
       rebuildCallGraph: vi.fn(),
       getFileHashKeys: vi.fn().mockReturnValue([]),
-      getFileCallDataKeys: vi.fn().mockReturnValue([]),
+      getFileCallDataKeys: vi.fn().mockImplementation(() => [...mockCache.fileCallData.keys()]),
     };
     config = {
       embeddingModel: 'test-model',
@@ -350,7 +360,7 @@ describe('Coverage Gap Filling', () => {
       });
 
       // ensure fileCallData is empty
-      cache.fileCallData = new Map();
+      cache.clearFileCallData();
 
       const result = await cache.getRelatedFiles(['someSymbol']);
       expect(result).toBeInstanceOf(Map);

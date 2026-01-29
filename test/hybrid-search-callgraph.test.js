@@ -23,6 +23,9 @@ describe('HybridSearch Final Coverage', () => {
         getVector: (idx) => vectorStore[idx]?.vector,
         getChunk: (idx) => vectorStore[idx],
         getChunkContent: (idx) => vectorStore[idx]?.content,
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
       };
       const config = {
         annEnabled: false,
@@ -62,6 +65,9 @@ describe('HybridSearch Final Coverage', () => {
         getVector: (idx) => vectorStore[idx]?.vector,
         getChunk: (idx) => vectorStore[idx],
         getChunkContent: (idx) => vectorStore[idx]?.content,
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
       };
       const config = {
         annEnabled: false,
@@ -124,6 +130,9 @@ describe('HybridSearch Final Coverage', () => {
         getVector: (idx) => vectorStore[idx]?.vector,
         getChunk: (idx) => vectorStore[idx],
         getChunkContent: (idx) => vectorStore[idx]?.content,
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
       };
       
       const config = {
@@ -178,6 +187,9 @@ describe('HybridSearch Final Coverage', () => {
         getVector: (idx) => vectorStore[idx]?.vector,
         getChunk: (idx) => vectorStore[idx],
         getChunkContent: (idx) => vectorStore[idx]?.content,
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
       };
       
       const config = {
@@ -211,6 +223,9 @@ describe('HybridSearch Final Coverage', () => {
         getVector: (idx) => vectorStore[idx]?.vector,
         getChunk: (idx) => vectorStore[idx],
         getChunkContent: (idx) => vectorStore[idx]?.content,
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
       };
       const config = {
         annEnabled: true,
@@ -238,6 +253,9 @@ describe('HybridSearch Final Coverage', () => {
         getVector: (idx) => vectorStore[idx]?.vector,
         getChunk: (idx) => vectorStore[idx],
         getChunkContent: (idx) => vectorStore[idx]?.content,
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
       };
       const config = {
         annEnabled: true,

@@ -85,6 +85,8 @@ describe('Features Coverage Maximizer', () => {
           },
         ],
         queryAnn: vi.fn().mockResolvedValue([0]),
+        getChunkVector: (c) => c.vector,
+        getChunkContent: (c) => c.content,
       };
 
       const mockEmbedder = vi.fn().mockResolvedValue({ data: new Float32Array([1, 0]) });
@@ -113,6 +115,8 @@ describe('Features Coverage Maximizer', () => {
       const mockCache = {
         getVectorStore: () => [],
         queryAnn: vi.fn().mockResolvedValue([]),
+        getChunkVector: (c) => c.vector,
+        getChunkContent: (c) => c.content,
       };
       const mockEmbedder = vi.fn().mockResolvedValue({ data: [0.1] });
       const tool = new findSimilar.FindSimilarCode(mockEmbedder, mockCache, {

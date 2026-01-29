@@ -77,7 +77,16 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
       removeFileFromStore: vi.fn(),
       addToStore: vi.fn(),
       setFileCallData: vi.fn(),
-      setFileCallDataEntries: vi.fn(),
+      setFileCallDataEntries: vi.fn((entries) => {
+        if (entries instanceof Map) {
+          cacheMock.fileCallData = entries;
+        } else {
+          cacheMock.fileCallData = new Map(Object.entries(entries || {}));
+        }
+      }),
+      clearFileCallData: vi.fn(() => {
+        cacheMock.fileCallData = new Map();
+      }),
       clearCallGraphData: vi.fn(),
       pruneCallGraphData: vi.fn().mockReturnValue(5), // Cover line 612 (if > 0)
       rebuildCallGraph: vi.fn(),
@@ -87,7 +96,7 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
       setLastIndexStats: vi.fn(),
       setFileHashes: vi.fn((map) => { cacheMock.fileHashes = map; }),
       getFileHashKeys: vi.fn().mockImplementation(() => [...cacheMock.fileHashes.keys()]),
-      getFileCallDataKeys: vi.fn().mockReturnValue([]),
+      getFileCallDataKeys: vi.fn().mockImplementation(() => [...cacheMock.fileCallData.keys()]),
     };
     cache = cacheMock;
 
@@ -151,7 +160,7 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
 
     // Mock cached files that are NOT in discovered files
     cache.setFileHashes(new Map([['/test/deleted.js', 'hash']]));
-    cache.fileCallData = new Map([['/test/deleted.js', {}]]);
+    cache.setFileCallDataEntries(new Map([['/test/deleted.js', {}]]));
 
     // discoverFiles returns ["/test/file1.js"] (mocked in beforeEach)
 
@@ -169,7 +178,7 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
 
     // Setup state
     cache.getVectorStore.mockReturnValue([{ file: '/test/file1.js' }]);
-    cache.fileCallData = new Map(); // Empty, so file1.js is missing data
+    cache.clearFileCallData(); // Empty, so file1.js is missing data
     // Use fixed-hash to match mock
     cache.setFileHashes(new Map([['/test/file1.js', 'fixed-hash']]));
     cache.getFileHash.mockReturnValue('fixed-hash');

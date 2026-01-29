@@ -82,6 +82,7 @@ describe('Final Polish Coverage', () => {
       getFileHashKeys: vi.fn().mockImplementation(() => [...cache.fileHashes.keys()]),
       getFileCallDataKeys: vi.fn().mockImplementation(() => [...cache.fileCallData.keys()]),
       setFileCallDataEntries: vi.fn((map) => { cache.fileCallData = map; }),
+      clearFileCallData: vi.fn(() => { cache.fileCallData = new Map(); }),
     };
 
     embedder = vi.fn().mockResolvedValue({ data: [] });
@@ -142,7 +143,7 @@ describe('Final Polish Coverage', () => {
 
       // 1. All files unchanged initially
       cache.getVectorStore.mockReturnValue([{ file: '/test/file1.js' }]);
-      cache.fileCallData = new Map(); // Empty!
+      cache.clearFileCallData(); // Empty!
       cache.setFileHashes(new Map([['/test/file1.js', 'fixed-hash']]));
       cache.getFileHash.mockReturnValue('fixed-hash');
 

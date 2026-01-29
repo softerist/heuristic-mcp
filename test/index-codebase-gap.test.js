@@ -64,7 +64,7 @@ describe('CodebaseIndexer Gap Coverage', () => {
       rebuildCallGraph: vi.fn(),
       setFileCallData: vi.fn(),
       getFileHashKeys: vi.fn().mockReturnValue([]),
-      getFileCallDataKeys: vi.fn().mockReturnValue([]),
+      getFileCallDataKeys: vi.fn().mockImplementation(() => [...mockCache.fileCallData.keys()]),
     };
 
     mockConfig = {

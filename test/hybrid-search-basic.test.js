@@ -28,7 +28,10 @@ describe('HybridSearch coverage', () => {
       getStoreSize: () => vectorStore.length,
       getVector: (idx) => vectorStore[idx]?.vector,
       getChunk: (idx) => vectorStore[idx],
-      getChunkContent: (idx) => vectorStore[idx]?.content
+      getChunkContent: (idx) => vectorStore[idx]?.content,
+      startRead: () => {},
+      endRead: () => {},
+      waitForReaders: async () => {},
     };
 
     const config = {

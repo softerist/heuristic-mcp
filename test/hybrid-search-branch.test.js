@@ -19,6 +19,7 @@ describe('HybridSearch Branch Coverage', () => {
     const cache = {
       getVectorStore: () => [],
       getStoreSize: () => 0,
+      getFileMeta: () => null,
     };
     const hybrid = new HybridSearch(embedder, cache, config);
 
@@ -67,6 +68,9 @@ describe('HybridSearch Branch Coverage', () => {
       getVector: (idx) => vectorStore[idx]?.vector,
       getChunk: (idx) => vectorStore[idx],
       getChunkContent: (idx) => vectorStore[idx]?.content,
+      startRead: () => {},
+      endRead: () => {},
+      waitForReaders: async () => {},
     };
     const config = {
       annEnabled: false,
@@ -106,6 +110,9 @@ describe('HybridSearch Branch Coverage', () => {
       getVector: (idx) => vectorStore[idx]?.vector,
       getChunk: (idx) => vectorStore[idx],
       getChunkContent: (idx) => vectorStore[idx]?.content,
+      startRead: () => {},
+      endRead: () => {},
+      waitForReaders: async () => {},
     };
     const config = {
       annEnabled: false,
@@ -141,6 +148,9 @@ describe('HybridSearch Branch Coverage', () => {
       getVector: (idx) => vectorStore[idx]?.vector,
       getChunk: (idx) => vectorStore[idx],
       getChunkContent: (idx) => vectorStore[idx]?.content,
+      startRead: () => {},
+      endRead: () => {},
+      waitForReaders: async () => {},
     };
     const config = {
       annEnabled: true,
@@ -186,6 +196,9 @@ describe('HybridSearch Branch Coverage', () => {
       getVector: (idx) => vectorStore[idx]?.vector,
       getChunk: (idx) => vectorStore[idx],
       getChunkContent: (idx) => vectorStore[idx]?.content,
+      startRead: () => {},
+      endRead: () => {},
+      waitForReaders: async () => {},
     };
     const config = {
       annEnabled: true,

@@ -42,6 +42,8 @@ describe('FindSimilarCode', () => {
     const cache = {
       getVectorStore: () => vectorStore,
       queryAnn: vi.fn().mockResolvedValue([0, 0]),
+      getChunkVector: (chunk) => chunk.vector,
+      getChunkContent: (chunk) => chunk.content,
     };
     const config = {
       annEnabled: true,
@@ -83,6 +85,8 @@ describe('FindSimilarCode', () => {
     const cache = {
       getVectorStore: () => vectorStore,
       queryAnn: vi.fn().mockResolvedValue([0, 1]),
+      getChunkVector: (chunk) => chunk.vector,
+      getChunkContent: (chunk) => chunk.content,
     };
     const config = { annEnabled: true, searchDirectory: 'C:/repo' };
     const tool = new FindSimilarCode(embedder, cache, config);
@@ -118,6 +122,8 @@ describe('FindSimilarCode', () => {
     const cache = {
       getVectorStore: () => vectorStore,
       queryAnn: vi.fn().mockResolvedValue([0]),
+      getChunkVector: (chunk) => chunk.vector,
+      getChunkContent: (chunk) => chunk.content,
     };
     const config = { annEnabled: true, searchDirectory: 'C:/repo' };
     const tool = new FindSimilarCode(embedder, cache, config);
