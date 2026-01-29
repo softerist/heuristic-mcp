@@ -83,6 +83,7 @@ describe('Final Polish Coverage', () => {
       getFileCallDataKeys: vi.fn().mockImplementation(() => [...cache.fileCallData.keys()]),
       setFileCallDataEntries: vi.fn((map) => { cache.fileCallData = map; }),
       clearFileCallData: vi.fn(() => { cache.fileCallData = new Map(); }),
+      getFileMeta: vi.fn(),
     };
 
     embedder = vi.fn().mockResolvedValue({ data: [] });
@@ -146,6 +147,7 @@ describe('Final Polish Coverage', () => {
       cache.clearFileCallData(); // Empty!
       cache.setFileHashes(new Map([['/test/file1.js', 'fixed-hash']]));
       cache.getFileHash.mockReturnValue('fixed-hash');
+      cache.getFileMeta.mockReturnValue({ mtimeMs: 123, size: 50 });
 
       // Mock fs to pass pre-check and processing
       vi.spyOn(fs, 'stat').mockResolvedValue({ isDirectory: () => false, size: 50, mtimeMs: 123 });

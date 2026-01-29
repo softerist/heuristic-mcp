@@ -42,12 +42,12 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
     await fs.writeFile(fileGood, 'good content');
     await fs.writeFile(fileBad, 'bad content');
     
-    const realReadFile = fs.readFile;
-    const readFileSpy = vi.spyOn(fs, 'readFile').mockImplementation(async (filePath, options) => {
+    const realStat = fs.stat;
+    const statSpy = vi.spyOn(fs, 'stat').mockImplementation(async (filePath) => {
         if (filePath.toString().includes('bad.js')) {
-            throw new Error('Simulated read error');
+            throw new Error('Simulated stat error');
         }
-        return realReadFile.call(fs, filePath, options);
+        return realStat.call(fs, filePath);
     });
     
     try {
@@ -65,7 +65,7 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
         expect(hasBad).toBe(false);
         
     } finally {
-        readFileSpy.mockRestore();
+        statSpy.mockRestore();
         await fs.rm(subDir, { recursive: true, force: true });
     }
   });

@@ -11,7 +11,7 @@ const makeEmbedder = (vector) => vi.fn().mockResolvedValue({ data: Float32Array.
 describe('FindSimilarCode', () => {
   it('returns a helpful message when the index is empty', async () => {
     const embedder = makeEmbedder([1, 0]);
-    const cache = { getVectorStore: () => [] };
+    const cache = { getVectorStore: () => [], ensureLoaded: vi.fn() };
     const config = { searchDirectory: process.cwd() };
     const tool = new FindSimilarCode(embedder, cache, config);
 
@@ -44,6 +44,7 @@ describe('FindSimilarCode', () => {
       queryAnn: vi.fn().mockResolvedValue([0, 0]),
       getChunkVector: (chunk) => chunk.vector,
       getChunkContent: (chunk) => chunk.content,
+      ensureLoaded: vi.fn(),
     };
     const config = {
       annEnabled: true,
@@ -87,6 +88,7 @@ describe('FindSimilarCode', () => {
       queryAnn: vi.fn().mockResolvedValue([0, 1]),
       getChunkVector: (chunk) => chunk.vector,
       getChunkContent: (chunk) => chunk.content,
+      ensureLoaded: vi.fn(),
     };
     const config = { annEnabled: true, searchDirectory: 'C:/repo' };
     const tool = new FindSimilarCode(embedder, cache, config);
@@ -124,6 +126,7 @@ describe('FindSimilarCode', () => {
       queryAnn: vi.fn().mockResolvedValue([0]),
       getChunkVector: (chunk) => chunk.vector,
       getChunkContent: (chunk) => chunk.content,
+      ensureLoaded: vi.fn(),
     };
     const config = { annEnabled: true, searchDirectory: 'C:/repo' };
     const tool = new FindSimilarCode(embedder, cache, config);
@@ -139,7 +142,7 @@ describe('FindSimilarCode', () => {
 
   it('formats results with relative paths and code fences', async () => {
     const embedder = makeEmbedder([1, 0]);
-    const cache = { getVectorStore: () => [] };
+    const cache = { getVectorStore: () => [], ensureLoaded: vi.fn() };
     const config = { searchDirectory: 'C:/repo' };
     const tool = new FindSimilarCode(embedder, cache, config);
     const results = [
@@ -160,7 +163,7 @@ describe('FindSimilarCode', () => {
 
   it('returns a message when formatting empty results', async () => {
     const embedder = makeEmbedder([1, 0]);
-    const cache = { getVectorStore: () => [] };
+    const cache = { getVectorStore: () => [], ensureLoaded: vi.fn() };
     const config = { searchDirectory: 'C:/repo' };
     const tool = new FindSimilarCode(embedder, cache, config);
 
@@ -169,7 +172,7 @@ describe('FindSimilarCode', () => {
 
   it('handles tool calls with messages', async () => {
     const embedder = makeEmbedder([1, 0]);
-    const cache = { getVectorStore: () => [] };
+    const cache = { getVectorStore: () => [], ensureLoaded: vi.fn() };
     const config = { searchDirectory: 'C:/repo' };
     const tool = new FindSimilarCode(embedder, cache, config);
     const request = { params: { arguments: { code: 'x' } } };

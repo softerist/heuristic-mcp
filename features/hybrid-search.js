@@ -83,7 +83,9 @@ export class HybridSearch {
 
   async search(query, maxResults) {
     try {
-      await this.cache.ensureLoaded();
+      if (typeof this.cache.ensureLoaded === 'function') {
+        await this.cache.ensureLoaded();
+      }
       this.cache.startRead();
       
       const storeSize = this.cache.getStoreSize();

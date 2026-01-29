@@ -138,7 +138,10 @@ describe('Configuration Loading', () => {
       process.env.SMART_CODING_PRELOAD_EMBEDDING_MODEL = 'false';
       process.env.SMART_CODING_VECTOR_STORE_FORMAT = 'binary';
       process.env.SMART_CODING_VECTOR_STORE_CONTENT_MODE = 'external';
+      process.env.SMART_CODING_VECTOR_STORE_LOAD_MODE = 'disk';
       process.env.SMART_CODING_CONTENT_CACHE_ENTRIES = '512';
+      process.env.SMART_CODING_VECTOR_CACHE_ENTRIES = '64';
+      process.env.SMART_CODING_CLEAR_CACHE_AFTER_INDEX = 'true';
       process.env.SMART_CODING_WORKER_THREADS = '3';
       process.env.SMART_CODING_ANN_ENABLED = 'false';
       process.env.SMART_CODING_ANN_MIN_CHUNKS = '123';
@@ -168,7 +171,10 @@ describe('Configuration Loading', () => {
       expect(config.preloadEmbeddingModel).toBe(false);
       expect(config.vectorStoreFormat).toBe('binary');
       expect(config.vectorStoreContentMode).toBe('external');
+      expect(config.vectorStoreLoadMode).toBe('disk');
       expect(config.contentCacheEntries).toBe(512);
+      expect(config.vectorCacheEntries).toBe(64);
+      expect(config.clearCacheAfterIndex).toBe(true);
       expect(config.workerThreads).toBe(3);
       expect(config.annEnabled).toBe(false);
       expect(config.annMinChunks).toBe(123);

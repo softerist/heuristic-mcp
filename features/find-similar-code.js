@@ -30,7 +30,9 @@ export class FindSimilarCode {
   }
 
   async execute({ code, maxResults = 5, minSimilarity = 0.3 }) {
-    await this.cache.ensureLoaded();
+    if (typeof this.cache.ensureLoaded === 'function') {
+      await this.cache.ensureLoaded();
+    }
     const vectorStore = this.cache.getVectorStore();
 
     if (vectorStore.length === 0) {

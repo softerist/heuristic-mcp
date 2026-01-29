@@ -118,7 +118,10 @@ Example `config.json`:
   "annEnabled": true,
   "vectorStoreFormat": "binary",
   "vectorStoreContentMode": "external",
-  "contentCacheEntries": 256
+  "vectorStoreLoadMode": "disk",
+  "contentCacheEntries": 256,
+  "vectorCacheEntries": 64,
+  "clearCacheAfterIndex": true
 }
 ```
 
@@ -142,7 +145,10 @@ Selected overrides (prefix `SMART_CODING_`):
 - `SMART_CODING_ANN_EF_SEARCH=64`
 - `SMART_CODING_VECTOR_STORE_FORMAT=json|binary`
 - `SMART_CODING_VECTOR_STORE_CONTENT_MODE=external|inline`
+- `SMART_CODING_VECTOR_STORE_LOAD_MODE=memory|disk`
 - `SMART_CODING_CONTENT_CACHE_ENTRIES=256`
+- `SMART_CODING_VECTOR_CACHE_ENTRIES=64`
+- `SMART_CODING_CLEAR_CACHE_AFTER_INDEX=true|false`
 
 See `lib/config.js` for the full list.
 
@@ -153,6 +159,17 @@ and reads on demand. Recommended for large repos.
 
 - `vectorStoreContentMode=external` keeps content in the binary file and only loads for top-N results.
 - `contentCacheEntries` controls the small in-memory LRU for decoded content strings.
+- `vectorStoreLoadMode=disk` streams vectors from disk to reduce memory usage.
+- `vectorCacheEntries` controls the small in-memory LRU for vectors when using disk mode.
+- `clearCacheAfterIndex=true` drops in-memory vectors after indexing and reloads lazily on next query.
+
+### Benchmarking Search
+
+Use the built-in script to compare memory vs latency tradeoffs:
+
+```bash
+node tools/scripts/benchmark-search.js --query "database connection" --runs 10
+```
 
 ---
 

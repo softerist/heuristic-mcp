@@ -97,6 +97,7 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
       setFileHashes: vi.fn((map) => { cacheMock.fileHashes = map; }),
       getFileHashKeys: vi.fn().mockImplementation(() => [...cacheMock.fileHashes.keys()]),
       getFileCallDataKeys: vi.fn().mockImplementation(() => [...cacheMock.fileCallData.keys()]),
+      getFileMeta: vi.fn(),
     };
     cache = cacheMock;
 
@@ -182,6 +183,7 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
     // Use fixed-hash to match mock
     cache.setFileHashes(new Map([['/test/file1.js', 'fixed-hash']]));
     cache.getFileHash.mockReturnValue('fixed-hash');
+    cache.getFileMeta.mockReturnValue({ mtimeMs: 123, size: 50 });
 
     // Mock fs for re-indexing check
     vi.spyOn(fs, 'stat').mockResolvedValue({

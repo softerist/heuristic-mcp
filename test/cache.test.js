@@ -172,6 +172,42 @@ describe('EmbeddingsCache', () => {
     });
   });
 
+  it('loads binary vector store in disk mode without inline vectors', async () => {
+    await withTempDir(async (dir) => {
+      const config = await createConfig(dir);
+      config.vectorStoreFormat = 'binary';
+      config.vectorStoreContentMode = 'external';
+      config.vectorStoreLoadMode = 'disk';
+      config.vectorCacheEntries = 1;
+      const cache = new EmbeddingsCache(config);
+      const filePath = path.join(dir, 'disk.js');
+
+      cache.vectorStore = [
+        {
+          file: filePath,
+          startLine: 1,
+          endLine: 2,
+          content: 'console.log("disk")',
+          vector: new Float32Array([0.3, 0.6]),
+        },
+      ];
+      cache.setFileHash(filePath, 'hash-disk', { mtimeMs: 10, size: 20 });
+
+      await cache.save();
+
+      const reloaded = new EmbeddingsCache(config);
+      await reloaded.load();
+
+      const store = reloaded.getVectorStore();
+      expect(store.length).toBe(1);
+      expect(store[0].vector).toBeUndefined();
+      expect(reloaded.getChunkVector(store[0])).toBeInstanceOf(Float32Array);
+
+      await reloaded.close();
+      await cache.close();
+    });
+  });
+
   it('migrates from JSON cache to binary store on save', async () => {
     await withTempDir(async (dir) => {
       const config = await createConfig(dir);

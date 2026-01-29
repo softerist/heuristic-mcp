@@ -37,4 +37,33 @@ describe('BinaryVectorStore smoke', () => {
       await loaded.close();
     });
   });
+
+  it('supports disk-backed vector reads', async () => {
+    await withTempDir(async (dir) => {
+      const chunks = [
+        {
+          file: path.join(dir, 'file-a.js'),
+          startLine: 1,
+          endLine: 2,
+          content: 'const x = 1;',
+          vector: new Float32Array([0.1, 0.2, 0.3]),
+        },
+      ];
+
+      const store = await BinaryVectorStore.write(dir, chunks, { contentCacheEntries: 2 });
+      await store.close();
+
+      const loaded = await BinaryVectorStore.load(dir, {
+        contentCacheEntries: 2,
+        vectorCacheEntries: 1,
+        vectorLoadMode: 'disk',
+      });
+
+      const vector = loaded.getVector(0);
+      expect(vector).toBeInstanceOf(Float32Array);
+      expect(vector.length).toBe(3);
+
+      await loaded.close();
+    });
+  });
 });
