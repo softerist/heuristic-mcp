@@ -400,40 +400,42 @@ export async function main(argv = process.argv) {
 async function gracefulShutdown(signal) {
   console.info(`[Server] Received ${signal}, shutting down gracefully...`);
 
+  const cleanupTasks = [];
+
   // Stop file watcher
   if (indexer && indexer.watcher) {
-    try {
-      await indexer.watcher.close();
-      console.info('[Server] File watcher stopped');
-    } catch (_err) {
-      console.warn('[Server] Error closing watcher');
-    }
+    cleanupTasks.push(
+      indexer.watcher.close()
+        .then(() => console.info('[Server] File watcher stopped'))
+        .catch(() => console.warn('[Server] Error closing watcher'))
+    );
   }
 
   // Give workers time to finish current batch
   if (indexer && indexer.terminateWorkers) {
-    try {
-      console.info('[Server] Terminating workers...');
-      await indexer.terminateWorkers();
-      console.info('[Server] Workers terminated');
-    } catch (_err) {
-      // Suppress native module errors during shutdown
-      console.info('[Server] Workers shutdown (with warnings)');
-    }
+    cleanupTasks.push(
+      (async () => {
+        console.info('[Server] Terminating workers...');
+        await indexer.terminateWorkers();
+        console.info('[Server] Workers terminated');
+      })().catch(() => console.info('[Server] Workers shutdown (with warnings)'))
+    );
   }
 
   // Save cache
   if (cache) {
-    try {
-      await cache.save();
-      console.info('[Server] Cache saved');
-    } catch (err) {
-      console.error(`[Server] Failed to save cache: ${err.message}`);
-    }
+    cleanupTasks.push(
+      cache.save()
+        .then(() => console.info('[Server] Cache saved'))
+        .catch((err) => console.error(`[Server] Failed to save cache: ${err.message}`))
+    );
   }
 
+  await Promise.allSettled(cleanupTasks);
   console.info('[Server] Goodbye!');
-  process.exit(0);
+  
+  // Allow stdio buffers to flush
+  setTimeout(() => process.exit(0), 100);
 }
 
 const isMain = process.argv[1] && (

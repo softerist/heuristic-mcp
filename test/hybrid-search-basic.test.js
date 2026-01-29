@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { HybridSearch } from '../features/hybrid-search.js';
+import { createHybridSearchCacheStub } from './helpers.js';
 
 describe('HybridSearch coverage', () => {
   it('skips duplicate chunks during exact match fallback (line 113 coverage)', async () => {
@@ -20,19 +21,11 @@ describe('HybridSearch coverage', () => {
       }
     ];
 
-    const cache = {
-      getVectorStore: () => vectorStore,
+    const cache = createHybridSearchCacheStub({
+      vectorStore,
       // ANN returns only the first chunk
       queryAnn: async () => [0],
-      getRelatedFiles: async () => new Map(),
-      getStoreSize: () => vectorStore.length,
-      getVector: (idx) => vectorStore[idx]?.vector,
-      getChunk: (idx) => vectorStore[idx],
-      getChunkContent: (idx) => vectorStore[idx]?.content,
-      startRead: () => {},
-      endRead: () => {},
-      waitForReaders: async () => {},
-    };
+    });
 
     const config = {
       annEnabled: true,

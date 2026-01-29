@@ -172,7 +172,16 @@ export class CodebaseIndexer {
    * Initialize worker thread pool for parallel embedding
    */
   async initializeWorkers() {
-    if (this.workers.length > 0) return;
+    // Check if we have any active workers
+    const activeWorkers = this.workers.filter(w => w !== null);
+    if (activeWorkers.length > 0) return;
+    
+    // If we have workers array but they are all null, reset it
+    if (this.workers.length > 0) {
+        this.workers = [];
+        this.workerReady = [];
+    }
+
     if (this.initWorkerPromise) return this.initWorkerPromise;
 
     this.initWorkerPromise = (async () => {
@@ -629,13 +638,14 @@ export class CodebaseIndexer {
         };
 
         const handleTimeout = (label) => {
+          // Terminate first to ensure no more messages arrive
+          void killWorker();
           worker.off('message', handler);
           worker.off('error', errorHandler);
           console.warn(
             `[Indexer] Worker ${workerIndex} timed out, ${label}`
           );
           this.recordWorkerFailure(`timeout (batch ${batchId})`);
-          void killWorker();
           // Return empty and let fallback handle it
           resolve([]);
         };
@@ -837,8 +847,8 @@ export class CodebaseIndexer {
 
           // Periodic GC to prevent memory creep (only if flag is present)
           processedSinceGc++;
-          if (processedSinceGc >= 50 && typeof global.gc === 'function') { 
-            global.gc();
+          // Removed manual GC call to prevent performance degradation
+          if (processedSinceGc >= 50) { 
             processedSinceGc = 0;
           }
 

@@ -132,7 +132,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     vi.useRealTimers();
   });
 
-  it('covers initializeWorkers config branches (L93, L95)', async () => {
+  it('re-initializes workers when thread configuration changes', async () => {
     indexer.config.workerThreads = 'auto';
     vi.spyOn(os, 'cpus').mockReturnValue([{}]);
     await indexer.initializeWorkers();
@@ -154,7 +154,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     await promise;
   });
 
-  it('covers initializeWorkers error message branch (L132)', async () => {
+  it('logs warning when worker initialization fails', async () => {
     indexer.config.workerThreads = 2;
     workerMode = 'error';
     await indexer.initializeWorkers();
@@ -163,7 +163,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     );
   });
 
-  it('covers processChunksWithWorkers message branches (L249, L254, L287)', async () => {
+  it('handles various worker message types correctly', async () => {
     const mockWorker = {
       on: vi.fn(),
       off: vi.fn(),
@@ -187,7 +187,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     expect(results).toHaveLength(1); // Fallback ran
   });
 
-  it('covers processChunksWithWorkers failedChunks branch (L287 true)', async () => {
+  it('falls back to single-threaded execution on worker error', async () => {
     const mockWorker = {
       on: vi.fn(),
       off: vi.fn(),
@@ -260,7 +260,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     expect(fallbackSpy).toHaveBeenCalled();
   });
 
-  it('covers processChunksWithWorkers L287 false branch', async () => {
+  it('returns empty array when input chunks are empty', async () => {
     const mockWorker = {
       on: vi.fn(),
       off: vi.fn(),
@@ -311,7 +311,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     expect(fs.stat).toHaveBeenCalledWith('/test/a.js');
   });
 
-  it('covers indexFile verbose=true failure (L417 block)', async () => {
+  it('logs warning when file indexing fails (verbose mode)', async () => {
     indexer.config.verbose = true;
     vi.spyOn(fs, 'stat').mockResolvedValue({ isDirectory: () => false, size: 100, mtimeMs: 123 });
     vi.spyOn(fs, 'readFile').mockResolvedValue('content');
@@ -325,7 +325,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Skipped hash update'));
   });
 
-  it('covers indexAll stats increment and hash update (L764)', async () => {
+  it('updates file hash registry after successful indexing', async () => {
     indexer.config.verbose = false;
     indexer.config.batchSize = 1;
     indexer.config.workerThreads = 0;
@@ -346,7 +346,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     expect(mockCache.setFileHash).toHaveBeenCalled();
   });
 
-  it('covers batch hash skip log (L803) and ANN error log (L860)', async () => {
+  it('logs warnings for hash skip and ANN failures', async () => {
     indexer.config.verbose = true;
     indexer.config.batchSize = 1;
     indexer.config.workerThreads = 0;
@@ -364,7 +364,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     mockCache.ensureAnnIndex.mockRejectedValue(new Error('ANN Boom'));
 
     await indexer.indexAll();
-    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Skipped hash update'));
     expect(console.warn).toHaveBeenCalledWith(
@@ -372,7 +372,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     );
   });
 
-  it('covers indexAll verbose=true edge cases (L804, L861)', async () => {
+  it('logs skip warnings in verbose mode', async () => {
     indexer.config.verbose = true;
     indexer.config.batchSize = 1;
     indexer.config.workerThreads = 0;
@@ -401,7 +401,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     );
   });
 
-  it('covers indexAll progress branches (L813)', async () => {
+  it('processes batches and tracks progress', async () => {
     indexer.config.verbose = false;
     indexer.config.batchSize = 1;
 

@@ -216,7 +216,7 @@ describe('EmbeddingsCache additional coverage', () => {
 
       cache.annIndex = { searchKnn: vi.fn().mockReturnValue(null) };
       const emptyResult = await cache.queryAnn([1, 2, 3], 1);
-      expect(emptyResult).toBeNull();
+      expect(emptyResult).toEqual([]);
 
       cache.annIndex = { searchKnn: vi.fn().mockReturnValue([0]) };
       const arrayResult = await cache.queryAnn([1, 2, 3], 1);

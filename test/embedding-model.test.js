@@ -10,7 +10,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { pipeline } from '@xenova/transformers';
-import { cosineSimilarity } from '../lib/utils.js';
+import { dotSimilarity } from '../lib/utils.js';
 import { loadConfig } from '../lib/config.js';
 
 describe('Local Embedding Model', () => {
@@ -187,7 +187,7 @@ describe('Local Embedding Model', () => {
       const vector1 = Array.from(output1.data);
       const vector2 = Array.from(output2.data);
 
-      const similarity = cosineSimilarity(vector1, vector2);
+      const similarity = dotSimilarity(vector1, vector2);
 
       // Same words, different order - should be very similar
       expect(similarity).toBeGreaterThan(0.9);
@@ -206,7 +206,7 @@ describe('Local Embedding Model', () => {
       const vector1 = Array.from(output1.data);
       const vector2 = Array.from(output2.data);
 
-      const similarity = cosineSimilarity(vector1, vector2);
+      const similarity = dotSimilarity(vector1, vector2);
 
       // Different topics - should have low similarity
       expect(similarity).toBeLessThan(0.7); // Relaxed for Jina which might have different distribution
@@ -230,8 +230,8 @@ describe('Local Embedding Model', () => {
       const v2 = Array.from(output2.data);
       const v3 = Array.from(output3.data);
 
-      const sim12 = cosineSimilarity(v1, v2); // login-related
-      const sim13 = cosineSimilarity(v1, v3); // login vs sorting
+      const sim12 = dotSimilarity(v1, v2); // login-related
+      const sim13 = dotSimilarity(v1, v3); // login vs sorting
 
       // Login concepts should be more similar to each other than to sorting
       expect(sim12).toBeGreaterThan(sim13);
@@ -255,45 +255,11 @@ describe('Local Embedding Model', () => {
       const v2 = Array.from(output2.data);
       const v3 = Array.from(output3.data);
 
-      const sim12 = cosineSimilarity(v1, v2); // Both imports
-      const sim13 = cosineSimilarity(v1, v3); // Import vs weather
+      const sim12 = dotSimilarity(v1, v2); // Both imports
+      const sim13 = dotSimilarity(v1, v3); // Import vs weather
 
       // Import statements should be more similar to each other
       expect(sim12).toBeGreaterThan(sim13);
-    });
-  });
-
-  describe('Cosine Similarity Function', () => {
-    it('should return 1 for identical vectors', () => {
-      const vector = [0.1, 0.2, 0.3, 0.4, 0.5];
-      expect(cosineSimilarity(vector, vector)).toBeCloseTo(1, 5);
-    });
-
-    it('should return -1 for opposite vectors', () => {
-      const vector1 = [1, 0, 0];
-      const vector2 = [-1, 0, 0];
-      expect(cosineSimilarity(vector1, vector2)).toBeCloseTo(-1, 5);
-    });
-
-    it('should return 0 for orthogonal vectors', () => {
-      const vector1 = [1, 0, 0];
-      const vector2 = [0, 1, 0];
-      expect(cosineSimilarity(vector1, vector2)).toBeCloseTo(0, 5);
-    });
-
-    it('should handle high-dimensional vectors', () => {
-      const dim = 768;
-      const vector1 = Array(dim)
-        .fill(0)
-        .map(() => Math.random());
-      const vector2 = Array(dim)
-        .fill(0)
-        .map(() => Math.random());
-
-      const similarity = cosineSimilarity(vector1, vector2);
-
-      expect(similarity).toBeGreaterThanOrEqual(-1);
-      expect(similarity).toBeLessThanOrEqual(1);
     });
   });
 

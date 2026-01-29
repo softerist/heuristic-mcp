@@ -15,6 +15,7 @@ import {
   cleanupFixtures,
   clearTestCache,
   createMockRequest,
+  createHybridSearchCacheStub,
 } from './helpers.js';
 import * as HybridSearchFeature from '../features/hybrid-search.js';
 import { HybridSearch } from '../features/hybrid-search.js';
@@ -96,23 +97,11 @@ describe('HybridSearch', () => {
   describe('Empty Index Handling', () => {
     it('should return helpful message when index is empty', async () => {
       // Create a search instance with empty cache
-      const emptyCache = {
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-        getVectorStore: () => [],
-        setVectorStore: () => {},
-        getFileHash: () => null,
-        setFileHash: () => {},
-        getStoreSize: () => 0,
+      const emptyCache = createHybridSearchCacheStub({
+        vectorStore: [],
         getVector: () => null,
         getChunk: () => null,
-        getChunkContent: async () => null,
-        getChunkVector: () => null,
-        getFileMeta: () => null,
-        getRelatedFiles: async () => new Map(),
-        queryAnn: async () => null,
-      };
+      });
 
       const emptySearch = new HybridSearch(fixtures.embedder, emptyCache, fixtures.config);
       const { results, message } = await emptySearch.search('test', 5);
@@ -173,17 +162,7 @@ describe('HybridSearch', () => {
 
   describe('ANN Candidate Handling', () => {
     it('should honor ANN min/max candidate settings', () => {
-      const cache = {
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-        getVectorStore: () => [],
-        queryAnn: async () => null,
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => 0,
-        getVector: () => null,
-        getChunk: () => null,
-      };
+      const cache = createHybridSearchCacheStub();
       const config = {
         annEnabled: true,
         annMinCandidates: 4,
@@ -203,17 +182,7 @@ describe('HybridSearch', () => {
     });
 
     it('should use default ANN candidate settings when unset', () => {
-      const cache = {
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-        getVectorStore: () => [],
-        queryAnn: async () => null,
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => 0,
-        getVector: () => null,
-        getChunk: () => null,
-      };
+      const cache = createHybridSearchCacheStub();
       const config = {
         annEnabled: true,
         semanticWeight: 1,
@@ -246,18 +215,10 @@ describe('HybridSearch', () => {
           endLine: 1,
         },
       ];
-      const cache = {
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-        getVectorStore: () => vectorStore,
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
         queryAnn: async () => [0, 0, 1],
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-      };
+      });
       const config = {
         annEnabled: true,
         annMinCandidates: 0,
@@ -297,18 +258,10 @@ describe('HybridSearch', () => {
           endLine: 1,
         },
       ];
-      const cache = {
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-        getVectorStore: () => vectorStore,
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
         queryAnn: async () => [0],
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-      };
+      });
       const config = {
         annEnabled: true,
         annMinCandidates: 0,
@@ -354,18 +307,10 @@ describe('HybridSearch', () => {
           endLine: 1,
         },
       ];
-      const cache = {
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-        getVectorStore: () => vectorStore,
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
         queryAnn: async () => [0, 0],
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-      };
+      });
       const config = {
         annEnabled: true,
         annMinCandidates: 0,
@@ -416,18 +361,10 @@ describe('HybridSearch', () => {
           endLine: 1,
         },
       ];
-      const cache = {
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-        getVectorStore: () => vectorStore,
-        queryAnn: async () => [0], // ANN only finds the first one
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-      };
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
+        queryAnn: async () => [0],
+      });
       const config = {
         annEnabled: true,
         annMinCandidates: 0,
@@ -467,18 +404,10 @@ describe('HybridSearch', () => {
           endLine: 1,
         },
       ];
-      const cache = {
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-        getVectorStore: () => vectorStore,
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
         queryAnn: async () => [0],
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-      };
+      });
       const config = {
         annEnabled: true,
         annMinCandidates: 0,
@@ -523,18 +452,10 @@ describe('HybridSearch', () => {
           endLine: 1,
         },
       ];
-      const cache = {
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-        getVectorStore: () => vectorStore,
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
         queryAnn: async () => [0],
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-      };
+      });
       const config = {
         annEnabled: true,
         annMinCandidates: 0,
@@ -576,19 +497,11 @@ describe('HybridSearch', () => {
           endLine: 1,
         },
       ];
-      const cache = {
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-        getVectorStore: () => vectorStore,
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
         queryAnn: async () => null,
-        getRelatedFiles: async () => new Map(),
         getFileMeta: () => null,
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-      };
+      });
       const config = {
         annEnabled: false,
         semanticWeight: 1,
@@ -618,19 +531,11 @@ describe('HybridSearch', () => {
           endLine: 1,
         },
       ];
-      const cache = {
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-        getVectorStore: () => vectorStore,
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
         queryAnn: async () => null,
-        getRelatedFiles: async () => new Map(),
         getFileMeta: () => null,
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-      };
+      });
       const config = {
         annEnabled: false,
         semanticWeight: 1,
@@ -733,17 +638,11 @@ describe('Hybrid Search Tool Handler', () => {
     });
 
     it('should return message when no indexed data exists', async () => {
-      const emptyCache = {
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-        getVectorStore: () => [],
-        queryAnn: async () => null,
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => 0,
+      const emptyCache = createHybridSearchCacheStub({
+        vectorStore: [],
         getVector: () => null,
         getChunk: () => null,
-      };
+      });
       const emptySearch = new HybridSearch(fixtures.embedder, emptyCache, fixtures.config);
       const request = createMockRequest('a_semantic_search', {
         query: 'anything',

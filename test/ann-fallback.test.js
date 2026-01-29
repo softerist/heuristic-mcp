@@ -55,7 +55,7 @@ describe('ANN Fallback (Missing hnswlib-node)', () => {
     expect(embedder).toHaveBeenCalledWith(query, expect.any(Object));
     // Verify it didn't throw and ANN attempt doesn't prevent results
     const annAttempt = await cache.queryAnn([0.1, 0.2, 0.3], 5);
-    expect(annAttempt).toBeNull();
+    expect(annAttempt).toEqual([]);
   });
 
   it('should handle ANN loading failure gracefully', async () => {
@@ -63,6 +63,6 @@ describe('ANN Fallback (Missing hnswlib-node)', () => {
     expect(index).toBeNull();
 
     const annResults = await cache.queryAnn([0.1, 0.2, 0.3], 5);
-    expect(annResults).toBeNull();
+    expect(annResults).toEqual([]);
   });
 });

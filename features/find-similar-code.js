@@ -125,8 +125,14 @@ export class FindSimilarCode {
     let filteredResults = await scoreAndFilter(candidates);
     
     // Fallback to full scan if ANN didn't provide enough results
+    // Optimization: Skip full scan on large codebases to avoid long pauses
+    const MAX_FULL_SCAN_SIZE = 5000;
     if (usedAnn && filteredResults.length < maxResults) {
-      filteredResults = await scoreAndFilter(vectorStore);
+      if (vectorStore.length <= MAX_FULL_SCAN_SIZE) {
+        filteredResults = await scoreAndFilter(vectorStore);
+      } else {
+        // Just return what we found via ANN
+      }
     }
     const results = await Promise.all(
       filteredResults.slice(0, maxResults).map(async (chunk) => {

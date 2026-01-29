@@ -302,7 +302,7 @@ describe('EmbeddingsCache', () => {
       vi.spyOn(cache, 'ensureAnnIndex').mockResolvedValue(mockIndex);
 
       const result = await cache.queryAnn([1, 2], 2);
-      expect(result).toBeNull();
+      expect(result).toEqual([]);
     });
   });
 

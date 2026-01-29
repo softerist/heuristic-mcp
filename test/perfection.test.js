@@ -310,7 +310,7 @@ describe('EmbeddingsCache Perfection', () => {
 
     expect(await cache.queryAnn([1], 1)).toEqual([0]); // neighbors
     expect(await cache.queryAnn([1], 1)).toEqual([0]); // indices
-    expect(await cache.queryAnn([1], 1)).toBeNull(); // unknown/empty
+    expect(await cache.queryAnn([1], 1)).toEqual([]); // unknown/empty
   });
 
   it('covers setVectorStore and addToStore', () => {

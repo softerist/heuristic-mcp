@@ -1,6 +1,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { HybridSearch } from '../features/hybrid-search.js';
+import { createHybridSearchCacheStub } from './helpers.js';
 import fs from 'fs/promises';
 
 describe('HybridSearch Branch Coverage', () => {
@@ -16,11 +17,10 @@ describe('HybridSearch Branch Coverage', () => {
       searchDirectory: '/mock',
     };
     const embedder = vi.fn();
-    const cache = {
-      getVectorStore: () => [],
-      getStoreSize: () => 0,
+    const cache = createHybridSearchCacheStub({
+      vectorStore: [],
       getFileMeta: () => null,
-    };
+    });
     const hybrid = new HybridSearch(embedder, cache, config);
 
     // Mock fs.stat to fail for one file and succeed for another
@@ -40,7 +40,7 @@ describe('HybridSearch Branch Coverage', () => {
   });
 
   it('should return early from populateFileModTimes if no missing files', async () => {
-      const hybrid = new HybridSearch({}, {}, {});
+      const hybrid = new HybridSearch({}, createHybridSearchCacheStub(), {});
       hybrid.fileModTimes.set('a.js', 100);
       
       const statSpy = vi.spyOn(fs, 'stat');
@@ -60,18 +60,10 @@ describe('HybridSearch Branch Coverage', () => {
         endLine: 1,
       },
     ];
-    const cache = {
-      getVectorStore: () => vectorStore,
+    const cache = createHybridSearchCacheStub({
+      vectorStore,
       queryAnn: async () => null,
-      getRelatedFiles: async () => new Map(),
-      getStoreSize: () => vectorStore.length,
-      getVector: (idx) => vectorStore[idx]?.vector,
-      getChunk: (idx) => vectorStore[idx],
-      getChunkContent: (idx) => vectorStore[idx]?.content,
-      startRead: () => {},
-      endRead: () => {},
-      waitForReaders: async () => {},
-    };
+    });
     const config = {
       annEnabled: false,
       semanticWeight: 1,
@@ -102,18 +94,11 @@ describe('HybridSearch Branch Coverage', () => {
         endLine: 1,
       },
     ];
-    const cache = {
-      getVectorStore: () => vectorStore,
+    const cache = createHybridSearchCacheStub({
+      vectorStore,
       queryAnn: async () => null,
       getRelatedFiles: vi.fn(),
-      getStoreSize: () => vectorStore.length,
-      getVector: (idx) => vectorStore[idx]?.vector,
-      getChunk: (idx) => vectorStore[idx],
-      getChunkContent: (idx) => vectorStore[idx]?.content,
-      startRead: () => {},
-      endRead: () => {},
-      waitForReaders: async () => {},
-    };
+    });
     const config = {
       annEnabled: false,
       semanticWeight: 1,
@@ -140,18 +125,10 @@ describe('HybridSearch Branch Coverage', () => {
         endLine: 1,
       },
     ];
-    const cache = {
-      getVectorStore: () => vectorStore,
-      queryAnn: async () => [0], // ANN finds it
-      getRelatedFiles: async () => new Map(),
-      getStoreSize: () => vectorStore.length,
-      getVector: (idx) => vectorStore[idx]?.vector,
-      getChunk: (idx) => vectorStore[idx],
-      getChunkContent: (idx) => vectorStore[idx]?.content,
-      startRead: () => {},
-      endRead: () => {},
-      waitForReaders: async () => {},
-    };
+    const cache = createHybridSearchCacheStub({
+      vectorStore,
+      queryAnn: async () => [0],
+    });
     const config = {
       annEnabled: true,
       annMinCandidates: 0,
@@ -188,18 +165,10 @@ describe('HybridSearch Branch Coverage', () => {
         endLine: 1,
       }
     ];
-    const cache = {
-      getVectorStore: () => vectorStore,
-      queryAnn: async () => [0], // ANN finds it!
-      getRelatedFiles: async () => new Map(),
-      getStoreSize: () => vectorStore.length,
-      getVector: (idx) => vectorStore[idx]?.vector,
-      getChunk: (idx) => vectorStore[idx],
-      getChunkContent: (idx) => vectorStore[idx]?.content,
-      startRead: () => {},
-      endRead: () => {},
-      waitForReaders: async () => {},
-    };
+    const cache = createHybridSearchCacheStub({
+      vectorStore,
+      queryAnn: async () => [0],
+    });
     const config = {
       annEnabled: true,
       annMinCandidates: 0,

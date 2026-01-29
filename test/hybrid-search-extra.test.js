@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { HybridSearch } from '../features/hybrid-search.js';
+import { createHybridSearchCacheStub } from './helpers.js';
 
 describe('HybridSearch extra coverage', () => {
   it('handles missing chunk content in ANN fallback loop', async () => {
@@ -20,18 +21,10 @@ describe('HybridSearch extra coverage', () => {
       },
     ];
 
-    const cache = {
-      getVectorStore: () => vectorStore,
+    const cache = createHybridSearchCacheStub({
+      vectorStore,
       queryAnn: async () => [0, 1],
-      getRelatedFiles: async () => new Map(),
-      getStoreSize: () => vectorStore.length,
-      getVector: (idx) => vectorStore[idx]?.vector,
-      getChunk: (idx) => vectorStore[idx],
-      getChunkContent: (idx) => vectorStore[idx]?.content,
-      startRead: () => {},
-      endRead: () => {},
-      waitForReaders: async () => {},
-    };
+    });
 
     const config = {
       annEnabled: true,
@@ -60,18 +53,10 @@ describe('HybridSearch extra coverage', () => {
       { file: 'y.js', content: 'ab', startLine: 2, endLine: 2, vector: [0, 1] },
     ];
 
-    const cache = {
-      getVectorStore: () => vectorStore,
+    const cache = createHybridSearchCacheStub({
+      vectorStore,
       queryAnn: async () => [0, 1],
-      getRelatedFiles: async () => new Map(),
-      getStoreSize: () => vectorStore.length,
-      getVector: (idx) => vectorStore[idx]?.vector,
-      getChunk: (idx) => vectorStore[idx],
-      getChunkContent: (idx) => vectorStore[idx]?.content,
-      startRead: () => {},
-      endRead: () => {},
-      waitForReaders: async () => {},
-    };
+    });
 
     const config = {
       annEnabled: true,

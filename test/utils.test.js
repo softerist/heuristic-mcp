@@ -108,20 +108,9 @@ describe('smartChunk', () => {
   });
 });
 
-import { cosineSimilarity, dotSimilarity, hashContent } from '../lib/utils.js';
+import { dotSimilarity, hashContent } from '../lib/utils.js';
 
 describe('Similarity Metrics', () => {
-  it('cosineSimilarity calculates correct value', () => {
-    const a = [1, 0, 0];
-    const b = [0, 1, 0];
-    const c = [1, 1, 0];
-
-    expect(cosineSimilarity(a, b)).toBe(0); // orthogonal
-    expect(cosineSimilarity(a, a)).toBeCloseTo(1); // identical
-    // a . c = 1, |a|=1, |c|=sqrt(2). sim = 1/sqrt(2) ≈ 0.7071
-    expect(cosineSimilarity(a, c)).toBeCloseTo(0.7071);
-  });
-
   it('dotSimilarity calculates correct dot product', () => {
     const a = [1, 2, 3];
     const b = [4, 5, 6];

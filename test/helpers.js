@@ -201,6 +201,43 @@ export function createMockRequest(toolName, args = {}) {
 }
 
 /**
+ * Create a standard cache stub for HybridSearch tests.
+ * Provides the full required interface with sensible defaults.
+ */
+export function createHybridSearchCacheStub({ vectorStore = [], ...overrides } = {}) {
+  let store = vectorStore;
+  const base = {
+    getVectorStore: () => store,
+    setVectorStore: (next) => {
+      store = Array.isArray(next) ? next : [];
+    },
+    getStoreSize: () => store.length,
+    getVector: (idx) => store[idx]?.vector ?? null,
+    getChunk: (idx) => store[idx] ?? null,
+    getChunkContent: async (chunkOrIndex) => {
+      if (typeof chunkOrIndex === 'number') {
+        return store[chunkOrIndex]?.content ?? null;
+      }
+      return chunkOrIndex?.content ?? null;
+    },
+    getChunkVector: (chunkOrIndex) => {
+      if (typeof chunkOrIndex === 'number') {
+        return store[chunkOrIndex]?.vector ?? null;
+      }
+      return chunkOrIndex?.vector ?? null;
+    },
+    queryAnn: async () => null,
+    getRelatedFiles: async () => new Map(),
+    getFileMeta: () => null,
+    startRead: () => {},
+    endRead: () => {},
+    waitForReaders: async () => {},
+  };
+
+  return { ...base, ...overrides };
+}
+
+/**
  * Wait for a condition with timeout
  * @param {Function} condition - Async function returning boolean
  * @param {number} timeout - Max wait time in ms

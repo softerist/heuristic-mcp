@@ -48,20 +48,24 @@ export class HybridSearch {
       return;
     }
 
-    const BATCH_SIZE = 200;
-    for (let i = 0; i < missing.length; i += BATCH_SIZE) {
-      const batch = missing.slice(i, i + BATCH_SIZE);
-      await Promise.all(
-        batch.map(async (file) => {
-          try {
-            const stats = await fs.stat(file);
-            this.fileModTimes.set(file, stats.mtimeMs);
-          } catch {
-            this.fileModTimes.set(file, null);
-          }
-        })
-      );
-    }
+    // Concurrency-limited execution to avoid EMFILE
+    const CONCURRENCY = 50;
+    let index = 0;
+    
+    const worker = async () => {
+      while (index < missing.length) {
+        const file = missing[index++];
+        if (!file) break; // Safety check
+        try {
+          const stats = await fs.stat(file);
+          this.fileModTimes.set(file, stats.mtimeMs);
+        } catch {
+          this.fileModTimes.set(file, null);
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, missing.length) }, worker));
 
     // Prevent unbounded growth (simple eviction)
     if (this.fileModTimes.size > 5000) {
@@ -117,7 +121,8 @@ export class HybridSearch {
     }
 
     if (usedAnn && candidateIndices && candidateIndices.length < maxResults) {
-      candidateIndices = null; // Fallback to full scan
+      console.info(`[Search] ANN returned fewer results (${candidateIndices.length}) than requested (${maxResults}), augmenting with full scan...`);
+      candidateIndices = null; // Fallback to full scan to ensure we don't miss anything relevant
       usedAnn = false;
     }
 
@@ -138,23 +143,33 @@ export class HybridSearch {
       if (exactMatchCount < maxResults) {
         // Fallback to full scan if keyword constraint isn't met in candidates
         // Note: This is expensive as it iterates everything.
-        // We can check if we should just abandon ANN or augment it.
-        // Current logic: scan everything for keyword matches and ADD them.
+        // Optimization: Only do this for small-ish codebases to avoid UI freeze
+        const MAX_FULL_SCAN_SIZE = 2000;
         
-        const seen = new Set(candidateIndices);
-        
-        // Full scan logic for keyword augmentation
-        // Iterate by index
-        for (let i = 0; i < storeSize; i++) {
-           if (seen.has(i)) continue;
-           
-           // Lazy load content only if needed (this might be slow for huge repo)
-           // But `getChunkContent` should use cache.
-           const content = await this.getChunkContent(i);
-           if (content && content.toLowerCase().includes(lowerQuery)) {
-               seen.add(i);
-               candidateIndices.push(i);
-           }
+        if (storeSize <= MAX_FULL_SCAN_SIZE) {
+          const seen = new Set(candidateIndices);
+          
+          // Full scan logic for keyword augmentation
+          // Iterate by index with yielding
+          const FALLBACK_BATCH = 100;
+          for (let i = 0; i < storeSize; i += FALLBACK_BATCH) {
+             if (i > 0) await new Promise(r => setTimeout(r, 0)); // Yield
+
+             const limit = Math.min(storeSize, i + FALLBACK_BATCH);
+             for (let j = i; j < limit; j++) {
+                if (seen.has(j)) continue;
+                
+                // Lazy load content only if needed (this might be slow for huge repo)
+                // But `getChunkContent` should use cache.
+                const content = await this.getChunkContent(j);
+                if (content && content.toLowerCase().includes(lowerQuery)) {
+                    seen.add(j);
+                    candidateIndices.push(j);
+                }
+             }
+          }
+        } else {
+          console.info(`[Search] Skipping full scan fallback (store size ${storeSize} > ${MAX_FULL_SCAN_SIZE})`);
         }
       }
     }
@@ -212,6 +227,7 @@ export class HybridSearch {
         const vector = this.cache.getVector(idx);
         if (!vector) continue;
         
+        // Ensure vector compatibility (dotSimilarity now checks length too)
         let score = dotSimilarity(queryVector, vector) * semanticWeight;
 
         // Exact match boost

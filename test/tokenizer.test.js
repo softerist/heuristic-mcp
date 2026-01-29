@@ -13,7 +13,6 @@ import {
   estimateTokens,
   getModelTokenLimit,
   getChunkingParams,
-  exceedsTokenLimit,
   MODEL_TOKEN_LIMITS,
 } from '../lib/tokenizer.js';
 
@@ -154,26 +153,6 @@ describe('Chunking Parameters', () => {
   });
 });
 
-describe('Token Limit Checking', () => {
-  describe('exceedsTokenLimit', () => {
-    it('should return false for short text', () => {
-      const shortText = 'hello world';
-      expect(exceedsTokenLimit(shortText, 'jinaai/jina-embeddings-v2-base-code')).toBe(false);
-    });
-
-    it('should return true for very long text', () => {
-      // Create text that definitely exceeds 8192 tokens
-      // "word " is 1 token + space, roughly. 10000 words should do it.
-      const longText = 'word '.repeat(10000);
-      expect(exceedsTokenLimit(longText, 'jinaai/jina-embeddings-v2-base-code')).toBe(true);
-    });
-
-    it('should handle empty text', () => {
-      expect(exceedsTokenLimit('', 'jinaai/jina-embeddings-v2-base-code')).toBe(false);
-    });
-  });
-});
-
 describe('Integration: Token Estimation Accuracy', () => {
   it('should estimate reasonable tokens for typical code chunks', () => {
     const typicalCodeChunk = `
@@ -202,7 +181,7 @@ describe('Integration: Token Estimation Accuracy', () => {
   it('should keep small code chunks under model limits', () => {
     // A small chunk should definitely be under the limit
     const safeChunk = 'const x = 1;\n'.repeat(10);
-
-    expect(exceedsTokenLimit(safeChunk, 'jinaai/jina-embeddings-v2-base-code')).toBe(false);
+    const limit = getModelTokenLimit('jinaai/jina-embeddings-v2-base-code');
+    expect(estimateTokens(safeChunk)).toBeLessThanOrEqual(limit);
   });
 });

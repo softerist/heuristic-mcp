@@ -70,7 +70,7 @@ describe('EmbeddingsCache branch coverage', () => {
       const query = Float32Array.from([0.1, 0.2]);
       const result = await cache.queryAnn(query, 2);
 
-      expect(result).toBeNull();
+      expect(result).toEqual([]);
       expect(searchKnn).toHaveBeenCalledWith(query, 2);
     });
   });

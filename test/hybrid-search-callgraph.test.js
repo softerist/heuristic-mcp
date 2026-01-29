@@ -1,6 +1,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { HybridSearch } from '../features/hybrid-search.js';
+import { createHybridSearchCacheStub } from './helpers.js';
 import * as CallGraph from '../lib/call-graph.js';
 
 describe('HybridSearch Final Coverage', () => {
@@ -15,18 +16,10 @@ describe('HybridSearch Final Coverage', () => {
           endLine: 1,
         }
       ];
-      const cache = {
-        getVectorStore: () => vectorStore,
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
         queryAnn: async () => null,
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-      };
+      });
       const config = {
         annEnabled: false,
         semanticWeight: 0, // Disable semantic score to isolate exact/partial match
@@ -57,18 +50,10 @@ describe('HybridSearch Final Coverage', () => {
           endLine: 1,
         }
       ];
-      const cache = {
-        getVectorStore: () => vectorStore,
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
         queryAnn: async () => null,
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-      };
+      });
       const config = {
         annEnabled: false,
         semanticWeight: 0,
@@ -122,18 +107,11 @@ describe('HybridSearch Final Coverage', () => {
       relatedMap.set('related.js', 1); // Boost of 1
       // unrelated.js is not in the map
       
-      const cache = {
-        getVectorStore: () => vectorStore,
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
         queryAnn: async () => null,
         getRelatedFiles: async () => relatedMap,
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-      };
+      });
       
       const config = {
         annEnabled: false,
@@ -179,18 +157,10 @@ describe('HybridSearch Final Coverage', () => {
       };
       const vectorStore = [chunk];
       
-      const cache = {
-        getVectorStore: () => vectorStore,
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
         queryAnn: async () => [0],
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-      };
+      });
       
       const config = {
         annEnabled: true,
@@ -215,18 +185,10 @@ describe('HybridSearch Final Coverage', () => {
   describe('Edge Case Search Parameters', () => {
     it('should skip exact match fallback if query is too short', async () => {
       const vectorStore = [{ file: 'a.js', content: 'a', vector: [1], startLine: 1, endLine: 1 }];
-      const cache = {
-        getVectorStore: () => vectorStore,
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
         queryAnn: async () => [0],
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-      };
+      });
       const config = {
         annEnabled: true,
         maxResults: 2,
@@ -245,18 +207,10 @@ describe('HybridSearch Final Coverage', () => {
 
     it('should skip exact match fallback if exactMatchCount >= maxResults', async () => {
       const vectorStore = [{ file: 'match.js', content: 'target', vector: [1], startLine: 1, endLine: 1 }];
-      const cache = {
-        getVectorStore: () => vectorStore,
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
         queryAnn: async () => [0],
-        getRelatedFiles: async () => new Map(),
-        getStoreSize: () => vectorStore.length,
-        getVector: (idx) => vectorStore[idx]?.vector,
-        getChunk: (idx) => vectorStore[idx],
-        getChunkContent: (idx) => vectorStore[idx]?.content,
-        startRead: () => {},
-        endRead: () => {},
-        waitForReaders: async () => {},
-      };
+      });
       const config = {
         annEnabled: true,
         maxResults: 1, // maxResults is 1, exactMatchCount will be 1
