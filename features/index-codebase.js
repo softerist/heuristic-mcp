@@ -153,6 +153,7 @@ export class CodebaseIndexer {
    * Initialize worker thread pool for parallel embedding
    */
   async initializeWorkers() {
+    if (this.workers.length > 0) return;
 
     let numWorkers =
       this.config.workerThreads === 'auto'
@@ -748,31 +749,44 @@ export class CodebaseIndexer {
 
       const chunks = smartChunk(content, file, this.config);
       let addedChunks = 0;
-      let failedChunks = 0;
-      const totalChunks = chunks.length;
       const newChunks = [];
 
-      for (const chunk of chunks) {
-        try {
-          const output = await this.embedder(chunk.text, {
-            pooling: 'mean',
-            normalize: true,
-          });
+      // Use workers for watcher-triggered embedding to keep main thread responsive
+      const useWorkers = this.shouldUseWorkers();
+      if (useWorkers && this.workers.length === 0) {
+        await this.initializeWorkers();
+      }
+
+      const chunksToProcess = chunks.map(c => ({
+        file,
+        text: c.text,
+        startLine: c.startLine,
+        endLine: c.endLine
+      }));
+
+      let results = [];
+      if (useWorkers && this.workers.length > 0) {
+        results = await this.processChunksWithWorkers(chunksToProcess);
+      } else {
+        results = await this.processChunksSingleThreaded(chunksToProcess);
+      }
+
+      for (const result of results) {
+        if (result.success) {
           newChunks.push({
             file,
-            startLine: chunk.startLine,
-            endLine: chunk.endLine,
-            content: chunk.text,
-            vector: toFloat32Array(output.data),
+            startLine: result.startLine,
+            endLine: result.endLine,
+            content: result.content,
+            vector: toFloat32Array(result.vector),
           });
           addedChunks++;
-        } catch (embeddingError) {
-          failedChunks++;
-          console.warn(`[Indexer] Failed to embed chunk in ${fileName}:`, embeddingError.message);
+        } else {
+          console.warn(`[Indexer] Failed to embed chunk in ${fileName}:`, result.error);
         }
       }
 
-      if (totalChunks === 0 || failedChunks === 0) {
+      if (newChunks.length > 0) {
         this.cache.removeFileFromStore(file);
         for (const chunk of newChunks) {
           this.cache.addToStore(chunk);
@@ -781,11 +795,8 @@ export class CodebaseIndexer {
         if (this.config.callGraphEnabled && callData) {
           this.cache.setFileCallData(file, callData);
         }
-      } else if (this.config.verbose) {
-        console.warn(
-          `[Indexer] Skipped hash update for ${fileName} (${addedChunks}/${totalChunks} chunks embedded)`
-        );
-      }
+      } 
+      
       if (this.config.verbose) {
         console.info(`[Indexer] Completed ${fileName} (${addedChunks} chunks)`);
       }
@@ -820,6 +831,22 @@ export class CodebaseIndexer {
 
     const api = new fdir()
       .withFullPaths()
+      .exclude((dirName, dirPath) => {
+        // Always exclude specific heavy folders immediately
+        if (dirName === 'node_modules' || dirName === '.git' || dirName === '.smart-coding-cache') return true;
+        
+        // Check exclusion rules for directories
+        const fullPath = path.join(dirPath, dirName);
+        const relative = path.relative(this.config.searchDirectory, fullPath);
+        
+        // Skip if root (empty relative)
+        if (!relative) return false;
+
+        if (configIgnore.ignores(relative)) return true;
+        if (this.gitignore.ignores(relative)) return true;
+        
+        return false;
+      })
       .filter((filePath) => {
           const relative = path.relative(this.config.searchDirectory, filePath);
           

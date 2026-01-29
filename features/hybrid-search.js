@@ -76,7 +76,9 @@ export class HybridSearch {
   }
 
   async search(query, maxResults) {
-    const vectorStore = this.cache.getVectorStore();
+    // Create a shallow copy to prevent race conditions during iteration
+    // (Background indexing might mutate the array in-place)
+    const vectorStore = [...this.cache.getVectorStore()];
 
     if (vectorStore.length === 0) {
       return {

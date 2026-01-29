@@ -240,7 +240,7 @@ async function initialize(workspaceDir) {
     }, 3000);
   };
 
-  return { startBackgroundTasks };
+  return { startBackgroundTasks, config };
 }
 
 // Setup MCP server
@@ -381,13 +381,19 @@ export async function main(argv = process.argv) {
   registerSignalHandlers(gracefulShutdown);
   const { startBackgroundTasks } = await initialize(workspaceDir);
 
-  // Load cache before connecting to ensure tools are ready
-  await startBackgroundTasks();
+  // (Blocking init moved below)
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
   console.info('[Server] MCP transport connected.');
+  console.info('[Server] Heuristic MCP server started.');
+
+  // Load cache and start indexing in background AFTER server is ready
+  startBackgroundTasks().catch(err => {
+    console.error(`[Server] Background task error: ${err.message}`);
+  });
+        
   console.info('[Server] Heuristic MCP server started.');
   console.info('[Server] MCP server is now fully ready to accept requests.');
 }

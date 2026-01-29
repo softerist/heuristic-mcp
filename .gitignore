@@ -8,3 +8,4 @@ coverage/
 .vitest-coverage/
 install-mpcs.ps1
 mcp_config.json
+node_modules
