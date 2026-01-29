@@ -137,10 +137,13 @@ vi.mock('process', async () => {
 
 
 describe('Index.js Memory Logging', () => {
+  const oldVitest = process.env.VITEST;
   beforeEach(() => {
     vi.useFakeTimers();
+    process.env.VITEST = 'true';
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'info').mockImplementation(() => {});
     
     // We can't mock process.exit globally easily if not using vitest environment options, 
     // but we can spy on it.
@@ -150,6 +153,11 @@ describe('Index.js Memory Logging', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    if (oldVitest === undefined) {
+      delete process.env.VITEST;
+    } else {
+      process.env.VITEST = oldVitest;
+    }
   });
 
   it('should log memory usage periodically during startup', async () => {
@@ -178,7 +186,7 @@ describe('Index.js Memory Logging', () => {
     
     // Wait for the first memory log to ensure initialize has reached the interval setup
     await vi.waitFor(() => {
-        const calls = console.error.mock.calls.map(c => c[0]).filter(msg => msg && msg.includes('[Server] Memory (startup)'));
+        const calls = console.info.mock.calls.map(c => c[0]).filter(msg => msg && msg.includes('[Server] Memory (startup)'));
         if (calls.length === 0) throw new Error('Not reached yet');
     }, { timeout: 1000, interval: 10 });
     
@@ -190,7 +198,7 @@ describe('Index.js Memory Logging', () => {
     // Check calls
     // It should be called immediately on startup
     // And then periodically
-    const calls = console.error.mock.calls.map(c => c[0]).filter(msg => msg && msg.includes('[Server] Memory'));
+    const calls = console.info.mock.calls.map(c => c[0]).filter(msg => msg && msg.includes('[Server] Memory'));
     const startupCalls = calls.filter((msg) => msg.includes('Memory (startup)'));
     
     // Expect at least 2 calls (startup + interval)

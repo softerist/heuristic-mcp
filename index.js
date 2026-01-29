@@ -26,8 +26,11 @@ import { fileURLToPath } from 'url';
 const require = createRequire(import.meta.url);
 const packageJson = require('./package.json');
 
+const BUILD_SIGNATURE = `[Server] Local build: ${fileURLToPath(import.meta.url)}`;
+
 import { loadConfig, getGlobalCacheDir } from './lib/config.js';
 import { ensureLogDirectory } from './lib/logging.js';
+import { clearStaleCaches } from './lib/cache-utils.js';
 
 import { EmbeddingsCache } from './lib/cache.js';
 import { CodebaseIndexer } from './features/index-codebase.js';
@@ -55,10 +58,10 @@ let originalConsole = {
 function enableStderrOnlyLogging() {
   // Keep MCP stdout clean by routing all console output to stderr.
   const redirect = (...args) => originalConsole.error(...args);
-  console.info = redirect;
+  console.log = redirect; console.info = redirect;
   console.warn = redirect;
   console.error = redirect;
-  console.info = redirect;
+  console.log = redirect; console.info = redirect;
 }
 
 function formatMb(bytes) {
@@ -67,7 +70,7 @@ function formatMb(bytes) {
 
 function logMemory(prefix) {
   const { rss, heapUsed, heapTotal } = process.memoryUsage();
-  console.error(
+  console.info(
     `${prefix} rss=${formatMb(rss)} heap=${formatMb(heapUsed)}/${formatMb(heapTotal)}`
   );
 }
@@ -80,6 +83,7 @@ Usage:
 
 Options:
   --status                 Show server and cache status
+  --fix                    With --status, remove stale cache directories
   --clear-cache            Remove cache for current workspace (and stale global caches)
   --logs                   Tail server logs (defaults to last 200 lines, follows)
   --tail <lines>           Lines to show with --logs (default: ${DEFAULT_LOG_TAIL_LINES})
@@ -197,42 +201,6 @@ function parseWorkspaceDir(args) {
   return rawWorkspace || null;
 }
 
-async function clearStaleCaches() {
-  const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
-  const cacheDirs = await fs.readdir(globalCacheRoot).catch(() => []);
-  if (cacheDirs.length === 0) return;
-
-  const tenMinutesMs = 10 * 60 * 1000;
-  const now = Date.now();
-  let removed = 0;
-
-  for (const dir of cacheDirs) {
-    const cacheDir = path.join(globalCacheRoot, dir);
-    const metaFile = path.join(cacheDir, 'meta.json');
-    try {
-      await fs.access(metaFile);
-      continue; // valid cache with metadata
-    } catch (err) {
-      if (err.code !== 'ENOENT') continue;
-      try {
-        const stats = await fs.stat(cacheDir);
-        const ageMs = now - stats.mtimeMs;
-        if (ageMs < tenMinutesMs) {
-          continue; // likely indexing in progress
-        }
-        await fs.rm(cacheDir, { recursive: true, force: true });
-        removed++;
-      } catch {
-        // ignore failures per dir
-      }
-    }
-  }
-
-  if (removed > 0) {
-    console.info(`[Cache] Removed ${removed} stale cache director${removed === 1 ? 'y' : 'ies'}.`);
-  }
-}
-
 async function clearCache(workspaceDir) {
   const effectiveWorkspace = workspaceDir || process.cwd();
   const activeConfig = await loadConfig(effectiveWorkspace);
@@ -296,6 +264,9 @@ const features = [
 async function initialize(workspaceDir) {
   // Load configuration with workspace support
   config = await loadConfig(workspaceDir);
+  if (config.enableCache && config.autoCleanStaleCaches !== false) {
+    await clearStaleCaches();
+  }
   const [pidPath, logPath] = await Promise.all([
     setupPidFile(),
     setupFileLogging(config),
@@ -304,6 +275,12 @@ async function initialize(workspaceDir) {
     console.info(`[Logs] Writing server logs to ${logPath}`);
     console.info(`[Logs] Log viewer: heuristic-mcp --logs --workspace "${config.searchDirectory}"`);
   }
+  
+  // Log effective configuration for debugging
+  console.info(
+    `[Server] Config: workerThreads=${config.workerThreads}, embeddingProcessPerBatch=${config.embeddingProcessPerBatch}`
+  );
+
   if (pidPath) {
     console.info(`[Server] PID file: ${pidPath}`);
   }
@@ -341,6 +318,7 @@ async function initialize(workspaceDir) {
       console.info(`[Server] Loading AI embedding model: ${config.embeddingModel}...`);
       const modelLoadStart = Date.now();
       cachedEmbedderPromise = pipeline('feature-extraction', config.embeddingModel, {
+        quantized: true,
         session_options: {
           numThreads: 2,
           intraOpNumThreads: 2,
@@ -418,18 +396,22 @@ async function initialize(workspaceDir) {
     }
 
     // Start indexing in background (non-blocking)
-    console.info('[Server] Starting background indexing...');
-    indexer
-      .indexAll()
-      .then(() => {
-        // Only start file watcher if explicitly enabled in config
-        if (config.watchFiles) {
-          indexer.setupFileWatcher();
-        }
-      })
-      .catch((err) => {
-        console.error('[Server] Background indexing error:', err.message);
-      });
+    console.info('[Server] Starting background indexing (delayed)...');
+    
+    // Slight delay to allow server to bind and accept first request if immediate
+    setTimeout(() => {
+      indexer
+        .indexAll()
+        .then(() => {
+          // Only start file watcher if explicitly enabled in config
+          if (config.watchFiles) {
+            indexer.setupFileWatcher();
+          }
+        })
+        .catch((err) => {
+          console.error('[Server] Background indexing error:', err.message);
+        });
+    }, 3000);
   };
 
   return { startBackgroundTasks };
@@ -482,8 +464,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Main entry point
 export async function main(argv = process.argv) {
-  // Parse workspace from command line arguments
   let args = argv.slice(2);
+  const isServerMode = !(args.includes('--status') || args.includes('--clear-cache') || args.includes('--logs') || args.includes('--start') || args.includes('--stop') || args.includes('--register') || args.includes('--help') || args.includes('-h') || args.includes('--version') || args.includes('-v'));
+  if (isServerMode && !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test')) {
+    enableStderrOnlyLogging();
+  }
+  console.info(BUILD_SIGNATURE);
+  console.info(`[Server] argv: ${argv.join(' ')}`);
+  // Parse workspace from command line arguments
   const rawArgs = [...args];
 
   if (args.includes('--version') || args.includes('-v')) {
@@ -502,14 +490,13 @@ export async function main(argv = process.argv) {
   }
 
   const wantsLogs = args.includes('--logs');
-  if (wantsLogs) {
-    process.env.SMART_CODING_LOGS = 'true';
-    process.env.SMART_CODING_VERBOSE = 'true';
-    console.info('[Server] Starting server with verbose logging (logs flag)');
-  }
   const wantsNoFollow = args.includes('--no-follow');
   let tailLines = DEFAULT_LOG_TAIL_LINES;
   if (wantsLogs) {
+    process.env.SMART_CODING_LOGS = 'true';
+    process.env.SMART_CODING_VERBOSE = 'true';
+    console.info('[Server] Starting server with verbose logging enabled');
+
     const tailIndex = args.indexOf('--tail');
     if (tailIndex !== -1 && args[tailIndex + 1]) {
       const parsed = parseInt(args[tailIndex + 1], 10);
@@ -530,7 +517,7 @@ export async function main(argv = process.argv) {
   }
 
   if (args.includes('--status')) {
-    await status();
+    await status({ fix: args.includes('--fix') });
     process.exit(0);
   }
 
@@ -561,6 +548,7 @@ export async function main(argv = process.argv) {
 
   const knownFlags = new Set([
     '--status',
+    '--fix',
     '--clear-cache',
     '--logs',
     '--tail',
@@ -596,21 +584,12 @@ export async function main(argv = process.argv) {
     process.exit(1);
   }
 
-  const isServerMode = !(
-    args.includes('--status') ||
-    args.includes('--clear-cache') ||
-    args.includes('--logs') ||
-    args.includes('--start') ||
-    args.includes('--stop') ||
-    args.includes('--register')
-  );
-
-  if (
-    isServerMode &&
-    !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test')
-  ) {
-    enableStderrOnlyLogging();
+  if (args.includes('--fix') && !args.includes('--status')) {
+    console.error('[Error] --fix can only be used with --status');
+    printHelp();
+    process.exit(1);
   }
+
 
   const { startBackgroundTasks } = await initialize(workspaceDir);
 

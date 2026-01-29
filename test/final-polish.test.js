@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CodebaseIndexer, handleToolCall } from '../features/index-codebase.js';
 import { EmbeddingsCache } from '../lib/cache.js';
 import fs from 'fs/promises';
-import path from 'path';
 
 // Mock dependencies
 vi.mock('fs/promises');
@@ -77,6 +76,8 @@ describe('Final Polish Coverage', () => {
       rebuildCallGraph: vi.fn(),
       ensureAnnIndex: vi.fn().mockResolvedValue(),
       deleteFileHash: vi.fn(),
+      setLastIndexDuration: vi.fn(),
+      setLastIndexStats: vi.fn(),
     };
 
     embedder = vi.fn().mockResolvedValue({ data: [] });
@@ -94,7 +95,7 @@ describe('Final Polish Coverage', () => {
       // While targeting 673, let's also cover metadata parsing failure if needed
       const config = { enableCache: true, cacheDirectory: '/c' };
       const cache = new EmbeddingsCache(config);
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       vi.spyOn(fs, 'mkdir').mockResolvedValue();
       // Return invalid JSON for meta
       vi.spyOn(fs, 'readFile').mockImplementation(async (p) => {

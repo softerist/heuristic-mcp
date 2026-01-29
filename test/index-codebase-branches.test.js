@@ -94,6 +94,8 @@ describe('CodebaseIndexer Branch Coverage', () => {
       rebuildCallGraph: vi.fn(),
       setFileCallData: vi.fn(),
       getAnnVector: vi.fn().mockReturnValue(new Float32Array([0.1])),
+      setLastIndexDuration: vi.fn(),
+      setLastIndexStats: vi.fn(),
     };
     mockConfig = {
       searchDirectory: '/test',
@@ -321,6 +323,8 @@ describe('CodebaseIndexer Branch Coverage', () => {
   it('covers indexAll stats increment and hash update (L764)', async () => {
     indexer.config.verbose = false;
     indexer.config.batchSize = 1;
+    indexer.config.workerThreads = 0;
+    indexer.config.allowSingleThreadFallback = true;
 
     indexer.discoverFiles = vi.fn().mockResolvedValue(['/test/a.js']);
     indexer.preFilterFiles = vi
@@ -340,6 +344,8 @@ describe('CodebaseIndexer Branch Coverage', () => {
   it('covers batch hash skip log (L803) and ANN error log (L860)', async () => {
     indexer.config.verbose = true;
     indexer.config.batchSize = 1;
+    indexer.config.workerThreads = 0;
+    indexer.config.allowSingleThreadFallback = true;
     indexer.discoverFiles = vi.fn().mockResolvedValue(['/test/a.js']);
     indexer.preFilterFiles = vi
       .fn()
@@ -364,6 +370,8 @@ describe('CodebaseIndexer Branch Coverage', () => {
   it('covers indexAll verbose=true edge cases (L804, L861)', async () => {
     indexer.config.verbose = true;
     indexer.config.batchSize = 1;
+    indexer.config.workerThreads = 0;
+    indexer.config.allowSingleThreadFallback = true;
 
     indexer.discoverFiles = vi.fn().mockResolvedValue(['/test/a.js']);
     indexer.preFilterFiles = vi

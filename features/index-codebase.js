@@ -4,6 +4,7 @@ import chokidar from 'chokidar';
 import path from 'path';
 import os from 'os';
 import { Worker } from 'worker_threads';
+import { spawn } from 'child_process';
 import { setTimeout as delay } from 'timers/promises';
 import { fileURLToPath } from 'url';
 import { smartChunk, hashContent } from '../lib/utils.js';
@@ -49,10 +50,9 @@ function normalizePath(filePath) {
 }
 
 function toFloat32Array(vector) {
-  if (vector instanceof Float32Array) {
-    return vector;
-  }
-  return Float32Array.from(vector);
+  // Always create a copy to ensure we have a unique buffer
+  // and avoid issues with reusable WASM memory views
+  return new Float32Array(vector);
 }
 
 function buildExcludeMatchers(patterns) {
@@ -95,6 +95,68 @@ export class CodebaseIndexer {
     this.processingWatchEvents = false;
     this.pendingWatchEvents = new Map();
     this.excludeMatchers = buildExcludeMatchers(this.config.excludePatterns || []);
+    this.workerFailureCount = 0;
+    this.workersDisabledUntil = 0;
+    this.workerCircuitOpen = false;
+    this._retryTimer = null;
+    this._lastProgress = null;
+    this.currentIndexMode = null;
+  }
+
+  maybeResetWorkerCircuit() {
+    if (
+      this.workerCircuitOpen &&
+      this.workersDisabledUntil &&
+      Date.now() >= this.workersDisabledUntil
+    ) {
+      this.workerCircuitOpen = false;
+      this.workersDisabledUntil = 0;
+      this.workerFailureCount = 0;
+      if (this.config.verbose) {
+        console.info('[Indexer] Worker circuit closed; resuming worker use');
+      }
+    }
+  }
+
+  shouldUseWorkers() {
+    this.maybeResetWorkerCircuit();
+    if (this.workersDisabledUntil && Date.now() < this.workersDisabledUntil) {
+      return false;
+    }
+    return os.cpus().length > 1 && this.config.workerThreads !== 0;
+  }
+
+  scheduleRetry() {
+    if (this._retryTimer || isTestEnv()) return;
+    const delayMs = Math.max(1000, this.workersDisabledUntil - Date.now());
+    if (!Number.isFinite(delayMs) || delayMs <= 0) return;
+    this._retryTimer = setTimeout(() => {
+      this._retryTimer = null;
+      if (!this.isIndexing && !this.processingWatchEvents) {
+        this.indexAll().catch(() => null);
+      }
+    }, delayMs);
+  }
+
+  recordWorkerFailure(reason) {
+    const threshold = Number.isInteger(this.config.workerFailureThreshold)
+      ? this.config.workerFailureThreshold
+      : 1;
+    const cooldownMs = Number.isInteger(this.config.workerFailureCooldownMs)
+      ? this.config.workerFailureCooldownMs
+      : 10 * 60 * 1000;
+
+    this.workerFailureCount += 1;
+    console.warn(`[Indexer] Worker failure: ${reason} (${this.workerFailureCount}/${threshold})`);
+
+    if (this.workerFailureCount >= threshold) {
+      this.workersDisabledUntil = Date.now() + cooldownMs;
+      this.workerCircuitOpen = true;
+      console.warn(
+        `[Indexer] Worker circuit open; pausing worker use for ${Math.round(cooldownMs / 1000)}s`
+      );
+      this.scheduleRetry();
+    }
   }
 
   /**
@@ -170,9 +232,6 @@ export class CodebaseIndexer {
               resolve(worker);
             } else if (msg.type === 'error') {
               console.warn(`[Indexer] Worker initialization failed: ${msg.error}`);
-              if (!isTestEnv()) {
-                console.error(`[Indexer] Worker initialization failed: ${msg.error}`);
-              }
               reject(new Error(msg.error));
             }
           });
@@ -180,9 +239,6 @@ export class CodebaseIndexer {
           worker.once('error', (err) => {
             clearTimeout(timeout);
             console.warn(`[Indexer] Worker initialization failed: ${err.message}`);
-            if (!isTestEnv()) {
-              console.error(`[Indexer] Worker initialization failed: ${err.message}`);
-            }
             reject(err);
           });
         });
@@ -191,9 +247,6 @@ export class CodebaseIndexer {
         this.workerReady.push(readyPromise);
       } catch (err) {
         console.warn(`[Indexer] Failed to create worker ${i}: ${err.message}`);
-        if (!isTestEnv()) {
-          console.error(`[Indexer] Failed to create worker ${i}: ${err.message}`);
-        }
       }
     }
 
@@ -208,11 +261,6 @@ export class CodebaseIndexer {
       console.warn(
         `[Indexer] Worker initialization failed: ${err.message}, falling back to single-threaded`
       );
-      if (!isTestEnv()) {
-        console.error(
-          `[Indexer] Worker initialization failed: ${err.message}, falling back to single-threaded`
-        );
-      }
       await this.terminateWorkers();
     }
   }
@@ -222,7 +270,9 @@ export class CodebaseIndexer {
    */
   async terminateWorkers() {
     const WORKER_SHUTDOWN_TIMEOUT = isTestEnv() ? 50 : 5000;
-    const terminations = this.workers.map((worker) => {
+    const terminations = this.workers
+      .filter(Boolean)
+      .map((worker) => {
       try {
         worker.postMessage({ type: 'shutdown' });
       } catch { /* ignore */ }
@@ -243,7 +293,7 @@ export class CodebaseIndexer {
         }
         return null;
       });
-    });
+      });
     await Promise.all(terminations);
     this.workers = [];
     this.workerReady = [];
@@ -269,68 +319,127 @@ export class CodebaseIndexer {
         // Silently ignore if client doesn't support progress notifications
       }
     }
+    this.writeProgressFile(progress, total, message).catch(() => null);
+  }
+
+  async writeProgressFile(progress, total, message) {
+    if (!this.config.enableCache) return;
+
+    const payload = {
+      progress,
+      total,
+      message,
+      updatedAt: new Date().toISOString(),
+      indexMode: this.currentIndexMode || null,
+      workerCircuitOpen: !!this.workerCircuitOpen,
+      workersDisabledUntil: Number.isFinite(this.workersDisabledUntil)
+        ? this.workersDisabledUntil
+        : null,
+    };
+
+    const prev = this._lastProgress;
+    if (
+      prev &&
+      prev.progress === payload.progress &&
+      prev.total === payload.total &&
+      prev.message === payload.message
+    ) {
+      return;
+    }
+
+    this._lastProgress = payload;
+    try {
+      await fs.mkdir(this.config.cacheDirectory, { recursive: true });
+      const progressPath = path.join(this.config.cacheDirectory, 'progress.json');
+      await fs.writeFile(progressPath, JSON.stringify(payload), 'utf-8');
+    } catch {
+      // ignore progress write errors
+    }
   }
 
   /**
    * Process chunks using worker thread pool with timeout and error recovery
    */
   async processChunksWithWorkers(allChunks) {
-    if (this.workers.length === 0) {
+    const activeWorkers = this.workers
+      .map((worker, index) => ({ worker, index }))
+      .filter((entry) => entry.worker);
+
+    if (activeWorkers.length === 0) {
       // Fallback to single-threaded processing
       return this.processChunksSingleThreaded(allChunks);
     }
 
     const results = [];
-    const chunkSize = Math.ceil(allChunks.length / this.workers.length);
+    const allowSingleThreadFallback = this.config.allowSingleThreadFallback !== false;
+    const chunkSize = Math.ceil(allChunks.length / activeWorkers.length);
     const workerPromises = [];
-    const WORKER_TIMEOUT = isTestEnv() ? 1000 : 300000; // 1s in tests, 5 minutes in prod
+    const configuredTimeout = Number.isInteger(this.config.workerBatchTimeoutMs)
+      ? this.config.workerBatchTimeoutMs
+      : 300000;
+    const WORKER_TIMEOUT = isTestEnv() ? 1000 : configuredTimeout; // 1s in tests, configurable in prod
 
     if (this.config.verbose) {
       console.info(
-        `[Indexer] Distributing ${allChunks.length} chunks across ${this.workers.length} workers (~${chunkSize} chunks each)`
+        `[Indexer] Distributing ${allChunks.length} chunks across ${activeWorkers.length} workers (~${chunkSize} chunks each)`
       );
     }
 
-    for (let i = 0; i < this.workers.length; i++) {
+    for (let i = 0; i < activeWorkers.length; i++) {
+      const { worker, index: workerIndex } = activeWorkers[i];
       const workerChunks = allChunks.slice(i * chunkSize, (i + 1) * chunkSize);
       if (workerChunks.length === 0) continue;
 
       if (this.config.verbose) {
-        console.info(`[Indexer] Worker ${i}: processing ${workerChunks.length} chunks`);
+        console.info(`[Indexer] Worker ${workerIndex}: processing ${workerChunks.length} chunks`);
       }
 
       const promise = new Promise((resolve, _reject) => {
-        const worker = this.workers[i];
         const batchId = `batch-${i}-${Date.now()}`;
         const batchResults = [];
 
         // Timeout handler
-        let timeout = setTimeout(() => {
+        const killWorker = async () => {
+          try {
+            await worker.terminate?.();
+          } catch {
+            // ignore terminate errors
+          }
+          this.workers[workerIndex] = null;
+        };
+
+        const handleTimeout = (label) => {
           worker.off('message', handler);
           worker.off('error', errorHandler);
           console.warn(
-            `[Indexer] Worker ${i} timed out, falling back to single-threaded for this batch`
+            `[Indexer] Worker ${workerIndex} timed out, ${label}`
           );
+          this.recordWorkerFailure(`timeout (batch ${batchId})`);
+          void killWorker();
           // Return empty and let fallback handle it
           resolve([]);
-        }, WORKER_TIMEOUT);
+        };
+
+        let timeout = setTimeout(
+          () => handleTimeout('killing worker and falling back to single-threaded for this batch'),
+          WORKER_TIMEOUT
+        );
 
         const resetTimeout = () => {
           clearTimeout(timeout);
-          timeout = setTimeout(() => {
-            worker.off('message', handler);
-            worker.off('error', errorHandler);
-            console.warn(
-              `[Indexer] Worker ${i} timed out, falling back to single-threaded for this batch`
-            );
-            resolve([]);
-          }, WORKER_TIMEOUT);
+          timeout = setTimeout(
+            () => handleTimeout('killing worker and falling back to single-threaded for this batch'),
+            WORKER_TIMEOUT
+          );
         };
+
+        let exitHandler;
 
         const finalize = (results) => {
           clearTimeout(timeout);
           worker.off('message', handler);
           worker.off('error', errorHandler);
+          if (exitHandler) worker.off('exit', exitHandler);
           resolve(results);
         };
 
@@ -346,10 +455,7 @@ export class CodebaseIndexer {
               }
               finalize(batchResults);
             } else if (msg.type === 'error') {
-              console.warn(`[Indexer] Worker ${i} error: ${msg.error}`);
-              if (!isTestEnv()) {
-                console.error(`[Indexer] Worker ${i} error: ${msg.error}`);
-              }
+              console.warn(`[Indexer] Worker ${workerIndex} error: ${msg.error}`);
               finalize([]); // Return empty, don't reject - let fallback handle
             }
           }
@@ -357,10 +463,22 @@ export class CodebaseIndexer {
 
         // Handle worker crash
         const errorHandler = (err) => {
-          console.warn(`[Indexer] Worker ${i} crashed: ${err.message}`);
+          console.warn(`[Indexer] Worker ${workerIndex} crashed: ${err.message}`);
+          this.recordWorkerFailure(`crash (${err.message})`);
+          void killWorker();
           finalize([]); // Return empty, don't reject
         };
         worker.once('error', errorHandler);
+
+        exitHandler = (code) => {
+          if (code !== 0) {
+            console.warn(`[Indexer] Worker ${workerIndex} exited unexpectedly with code ${code}`);
+            this.recordWorkerFailure(`exit ${code}`);
+            void killWorker();
+            finalize([]);
+          }
+        };
+        worker.once('exit', exitHandler);
 
         worker.on('message', handler);
         try {
@@ -389,15 +507,85 @@ export class CodebaseIndexer {
     }
 
     // Retry failed chunks with single-threaded fallback
-    if (failedChunks.length > 0) {
+    if (failedChunks.length > 0 && allowSingleThreadFallback) {
       console.warn(
         `[Indexer] Retrying ${failedChunks.length} chunks with single-threaded fallback...`
       );
       const retryResults = await this.processChunksSingleThreaded(failedChunks);
       results.push(...retryResults);
+    } else if (failedChunks.length > 0) {
+      console.warn(
+        `[Indexer] Skipping ${failedChunks.length} chunks (single-threaded fallback disabled)`
+      );
     }
 
     return results;
+  }
+
+  async processChunksInChildProcess(chunks) {
+    const nodePath = process.execPath || 'node';
+    const scriptPath = path.join(__dirname, '../lib/embedding-process.js');
+    const payload = {
+      embeddingModel: this.config.embeddingModel,
+      chunks,
+      numThreads: 1,
+    };
+
+    return new Promise((resolve) => {
+      const child = spawn(nodePath, [scriptPath], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk.toString();
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString();
+      });
+
+      const timeoutMs = Number.isInteger(this.config.workerBatchTimeoutMs)
+        ? this.config.workerBatchTimeoutMs
+        : 120000;
+      const timeout = setTimeout(() => {
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          // ignore
+        }
+        this.recordWorkerFailure('child process timeout');
+        resolve([]);
+      }, timeoutMs);
+
+      child.on('error', (err) => {
+        clearTimeout(timeout);
+        this.recordWorkerFailure(`child process error (${err.message})`);
+        resolve([]);
+      });
+
+      child.on('close', (code, signal) => {
+        clearTimeout(timeout);
+        if (code !== 0) {
+          this.recordWorkerFailure(
+            `child process exited (${code ?? 'null'}${signal ? `, signal=${signal}` : ''})`
+          );
+          if (stderr) {
+            console.warn(`[Indexer] Child process error: ${stderr.trim()}`);
+          }
+          return resolve([]);
+        }
+        try {
+          const parsed = JSON.parse(stdout);
+          resolve(parsed?.results || []);
+        } catch (err) {
+          this.recordWorkerFailure(`child process parse error (${err.message})`);
+          resolve([]);
+        }
+      });
+
+      child.stdin.end(JSON.stringify(payload));
+    });
   }
 
   /**
@@ -474,11 +662,6 @@ export class CodebaseIndexer {
           console.warn(
             `[Indexer] Skipped ${fileName} (too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB)`
           );
-          if (!isTestEnv()) {
-            console.error(
-              `[Indexer] Skipped ${fileName} (too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB)`
-            );
-          }
         }
         return 0;
       }
@@ -500,16 +683,11 @@ export class CodebaseIndexer {
         console.info(`[Indexer] Indexing ${fileName}...`);
       }
 
-      // Clear existing hash so failed reindex doesn't leave stale hash pointing to removed chunks
-      this.cache.deleteFileHash(file);
-      // Remove old chunks for this file
-      this.cache.removeFileFromStore(file);
-
       // Extract call graph data if enabled
+      let callData = null;
       if (this.config.callGraphEnabled) {
         try {
-          const callData = extractCallData(content, file);
-          this.cache.setFileCallData(file, callData);
+          callData = extractCallData(content, file);
         } catch (err) {
           if (this.config.verbose) {
             console.warn(
@@ -523,6 +701,7 @@ export class CodebaseIndexer {
       let addedChunks = 0;
       let failedChunks = 0;
       const totalChunks = chunks.length;
+      const newChunks = [];
 
       for (const chunk of chunks) {
         try {
@@ -530,8 +709,7 @@ export class CodebaseIndexer {
             pooling: 'mean',
             normalize: true,
           });
-
-          this.cache.addToStore({
+          newChunks.push({
             file,
             startLine: chunk.startLine,
             endLine: chunk.endLine,
@@ -546,7 +724,14 @@ export class CodebaseIndexer {
       }
 
       if (totalChunks === 0 || failedChunks === 0) {
+        this.cache.removeFileFromStore(file);
+        for (const chunk of newChunks) {
+          this.cache.addToStore(chunk);
+        }
         this.cache.setFileHash(file, hash);
+        if (this.config.callGraphEnabled && callData) {
+          this.cache.setFileCallData(file, callData);
+        }
       } else if (this.config.verbose) {
         console.warn(
           `[Indexer] Skipped hash update for ${fileName} (${addedChunks}/${totalChunks} chunks embedded)`
@@ -559,9 +744,6 @@ export class CodebaseIndexer {
     } catch (error) {
       if (this.config.verbose) {
         console.warn(`[Indexer] Error indexing ${fileName}:`, error.message);
-      }
-      if (!isTestEnv()) {
-        console.error(`[Indexer] Error indexing ${fileName}:`, error.message);
       }
       return 0;
     }
@@ -762,6 +944,14 @@ export class CodebaseIndexer {
       }
 
       const totalStartTime = Date.now();
+      const indexStartedAt = new Date(totalStartTime).toISOString();
+      let indexMode = force
+        ? 'full'
+        : this.cache.getVectorStore().length === 0
+          ? 'initial'
+          : 'incremental';
+      this.currentIndexMode = indexMode;
+      this.sendProgress(0, 100, 'Indexing started');
         console.info(`[Indexer] Starting optimized indexing in ${this.config.searchDirectory}...`);
 
       // Step 1: Fast file discovery with fdir
@@ -799,7 +989,6 @@ export class CodebaseIndexer {
         if (prunedCount > 0) {
           if (this.config.verbose) {
             console.info(`[Indexer] Pruned ${prunedCount} deleted/excluded files from index`);
-            console.error(`[Indexer] Pruned ${prunedCount} deleted/excluded files from index`);
           }
           // If we pruned files, we should save these changes even if no other files changed
         }
@@ -807,13 +996,20 @@ export class CodebaseIndexer {
         const prunedCallGraph = this.cache.pruneCallGraphData(currentFilesSet);
         if (prunedCallGraph > 0 && this.config.verbose) {
           console.info(`[Indexer] Pruned ${prunedCallGraph} call-graph entries`);
-          console.error(`[Indexer] Pruned ${prunedCallGraph} call-graph entries`);
         }
       }
 
       // Step 2: Pre-filter unchanged files (early hash check)
       const filesToProcess = await this.preFilterFiles(files);
       const filesToProcessSet = new Set(filesToProcess.map((entry) => entry.file));
+      indexMode = force
+        ? 'full'
+        : this.cache.getVectorStore().length === 0
+          ? 'initial'
+          : filesToProcess.length === files.length
+            ? 'full'
+            : 'incremental';
+      this.currentIndexMode = indexMode;
 
       if (filesToProcess.length === 0) {
         console.info('[Indexer] All files unchanged, nothing to index');
@@ -833,9 +1029,6 @@ export class CodebaseIndexer {
 
           if (missingCallData.length > 0) {
             console.info(
-              `[Indexer] Found ${missingCallData.length} files missing call graph data, re-indexing...`
-            );
-            console.error(
               `[Indexer] Found ${missingCallData.length} files missing call graph data, re-indexing...`
             );
             const BATCH_SIZE = 100;
@@ -885,6 +1078,7 @@ export class CodebaseIndexer {
       }
 
       // Send progress: filtering complete
+      console.info(`[Indexer] Processing ${filesToProcess.length} changed files`);
       this.sendProgress(10, 100, `Processing ${filesToProcess.length} changed files`);
 
       // Step 3: Determine batch size based on project size
@@ -901,7 +1095,7 @@ export class CodebaseIndexer {
       }
 
       // Step 4: Initialize worker threads (skip if explicitly disabled)
-      const useWorkers = os.cpus().length > 1 && this.config.workerThreads !== 0;
+      const useWorkers = this.shouldUseWorkers();
 
       if (useWorkers) {
         await this.initializeWorkers();
@@ -909,17 +1103,24 @@ export class CodebaseIndexer {
           console.info(`[Indexer] Multi-threaded mode: ${this.workers.length} workers active`);
         }
       } else if (this.config.verbose) {
-        console.info(`[Indexer] Single-threaded mode (single-core system)`);
+        const until = this.workersDisabledUntil - Date.now();
+        if (this.workersDisabledUntil && until > 0) {
+          console.info(
+            `[Indexer] Workers disabled for ${Math.round(until / 1000)}s; single-threaded fallback ${this.config.allowSingleThreadFallback ? 'enabled' : 'disabled'}`
+          );
+        } else {
+          console.info(`[Indexer] Single-threaded mode (single-core system)`);
+        }
       }
+
+      const resolvedWorkerThreads = useWorkers ? this.workers.length : 0;
 
       let totalChunks = 0;
       let processedFiles = 0;
 
-      if (this.config.verbose) {
-        console.info(
-          `[Indexer] Embedding pass started: ${filesToProcess.length} files using ${this.config.embeddingModel}`
-        );
-      }
+      console.info(
+        `[Indexer] Embedding pass started: ${filesToProcess.length} files using ${this.config.embeddingModel}`
+      );
 
       // Step 5: Process files in adaptive batches
       for (let i = 0; i < filesToProcess.length; i += adaptiveBatchSize) {
@@ -941,6 +1142,9 @@ export class CodebaseIndexer {
            // Optimization: could reduce batch size dynamically here
         }
 
+        const newChunksByFile = new Map();
+        const callDataByFile = new Map();
+
         for (const { file, force, content: presetContent, hash: presetHash } of batch) {
           let content = presetContent;
           let liveHash = presetHash;
@@ -958,9 +1162,6 @@ export class CodebaseIndexer {
                 console.warn(
                   `[Indexer] Skipped ${path.basename(file)} (too large: ${(byteSize / 1024 / 1024).toFixed(2)}MB)`,
                 );
-                console.error(
-                  `[Indexer] Skipped ${path.basename(file)} (too large: ${(byteSize / 1024 / 1024).toFixed(2)}MB)`,
-                );
               }
               continue;
             }
@@ -971,9 +1172,6 @@ export class CodebaseIndexer {
           } catch (err) {
             if (this.config.verbose) {
               console.warn(
-                `[Indexer] Failed to stat ${path.basename(file)}: ${err.message}`,
-              );
-              console.error(
                 `[Indexer] Failed to stat ${path.basename(file)}: ${err.message}`,
               );
             }
@@ -1023,16 +1221,11 @@ export class CodebaseIndexer {
             continue;
           }
 
-          // Clear existing hash so failed reindex doesn't leave stale hash pointing to removed chunks
-          this.cache.deleteFileHash(file);
-          // Remove old chunks for this file
-          this.cache.removeFileFromStore(file);
-
           // Extract call graph data if enabled
           if (this.config.callGraphEnabled) {
             try {
               const callData = extractCallData(content, file);
-              this.cache.setFileCallData(file, callData);
+              callDataByFile.set(file, callData);
             } catch (err) {
               if (this.config.verbose) {
                 console.warn(
@@ -1060,35 +1253,86 @@ export class CodebaseIndexer {
         }
 
         // Process chunks (with workers if available, otherwise single-threaded)
-        let results;
-        if (useWorkers && this.workers.length > 0) {
-          results = await this.processChunksWithWorkers(allChunks);
-        } else {
-          results = await this.processChunksSingleThreaded(allChunks);
+        let results = [];
+        const maxChunksPerBatch = Number.isInteger(this.config.workerMaxChunksPerBatch)
+          ? this.config.workerMaxChunksPerBatch
+          : 100;
+        const slices =
+          maxChunksPerBatch > 0 && allChunks.length > maxChunksPerBatch
+            ? Math.ceil(allChunks.length / maxChunksPerBatch)
+            : 1;
+
+        for (let s = 0; s < slices; s++) {
+          const sliceStart = s * maxChunksPerBatch;
+          const sliceEnd =
+            maxChunksPerBatch > 0 ? sliceStart + maxChunksPerBatch : allChunks.length;
+          const slice = slices === 1 ? allChunks : allChunks.slice(sliceStart, sliceEnd);
+
+          if (this.config.embeddingProcessPerBatch) {
+            const sliceResults = await this.processChunksInChildProcess(slice);
+            results.push(...sliceResults);
+          } else if (useWorkers && this.workers.length > 0) {
+            const sliceResults = await this.processChunksWithWorkers(slice);
+            results.push(...sliceResults);
+            if (this.workerCircuitOpen) {
+              console.warn('[Indexer] Worker circuit open; pausing indexing');
+              if (!this.config.allowSingleThreadFallback) {
+                return {
+                  skipped: true,
+                  reason: 'worker_circuit_open',
+                  retryAfterMs: Math.max(0, this.workersDisabledUntil - Date.now()),
+                };
+              }
+            }
+          } else {
+            if (!this.config.allowSingleThreadFallback) {
+              console.warn('[Indexer] Single-threaded fallback disabled; pausing indexing');
+              return {
+                skipped: true,
+                reason: 'workers_disabled',
+                retryAfterMs: Math.max(0, this.workersDisabledUntil - Date.now()),
+              };
+            }
+            const sliceResults = await this.processChunksSingleThreaded(slice);
+            results.push(...sliceResults);
+          }
         }
 
-        // Store successful results
+        // Collect successful results (do not mutate cache yet)
         for (const result of results) {
           const stats = fileStats.get(result.file);
           if (result.success) {
-            this.cache.addToStore({
+            const items = newChunksByFile.get(result.file) || [];
+            items.push({
               file: result.file,
               startLine: result.startLine,
               endLine: result.endLine,
               content: result.content,
-              vector: result.vector,
+              vector: toFloat32Array(result.vector),
             });
-            totalChunks++;
+            newChunksByFile.set(result.file, items);
             if (stats) {
               stats.successChunks++;
             }
           }
         }
 
-        // Update file hashes
+        // Update file hashes and swap in new chunks only when fully successful
         for (const [file, stats] of fileStats) {
           if (stats.totalChunks === 0 || stats.successChunks === stats.totalChunks) {
+            this.cache.removeFileFromStore(file);
+            const newChunks = newChunksByFile.get(file) || [];
+            for (const chunk of newChunks) {
+              this.cache.addToStore(chunk);
+              totalChunks++;
+            }
             this.cache.setFileHash(file, stats.hash);
+            if (this.config.callGraphEnabled) {
+              const callData = callDataByFile.get(file);
+              if (callData) {
+                this.cache.setFileCallData(file, callData);
+              }
+            }
           } else if (this.config.verbose) {
             console.warn(
               `[Indexer] Skipped hash update for ${path.basename(file)} (${stats.successChunks}/${stats.totalChunks} chunks embedded)`
@@ -1129,7 +1373,8 @@ export class CodebaseIndexer {
         await this.terminateWorkers();
       }
 
-      const totalTime = ((Date.now() - totalStartTime) / 1000).toFixed(1);
+      const totalDurationMs = Date.now() - totalStartTime;
+      const totalTime = (totalDurationMs / 1000).toFixed(1);
       console.info(
         `[Indexer] Embedding pass complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
       );
@@ -1141,6 +1386,17 @@ export class CodebaseIndexer {
         `Complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
       );
 
+      this.cache.setLastIndexDuration(totalDurationMs);
+      this.cache.setLastIndexStats({
+        lastIndexStartedAt: indexStartedAt,
+        lastIndexEndedAt: new Date().toISOString(),
+        lastDiscoveredFiles: files.length,
+        lastFilesProcessed: filesToProcess.length,
+        lastIndexMode: indexMode,
+        lastBatchSize: adaptiveBatchSize,
+        lastWorkerThreads: resolvedWorkerThreads,
+        lastEmbeddingProcessPerBatch: this.config.embeddingProcessPerBatch,
+      });
       await this.cache.save();
 
       // Rebuild call graph in background

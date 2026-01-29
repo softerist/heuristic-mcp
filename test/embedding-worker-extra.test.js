@@ -203,7 +203,7 @@ describe('embedding-worker coverage', () => {
     const resultsCall = parentPort.postMessage.mock.calls.find(
       (call) => call[0]?.type === 'results'
     );
-    expect(resultsCall[0].results[0].vector).toBe(float32Data);
+    expect(resultsCall[0].results[0].vector).toEqual(float32Data);
   });
 
   it('hits flush without transferList and final postMessage without transferList', async () => {

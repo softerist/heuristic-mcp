@@ -517,6 +517,7 @@ describe('Index Codebase Branch Maximizer', () => {
     // ... (rest of the file)
     // Cover line 287: failedChunks check
     const chunks = [{ file: 'f.js', text: 't' }];
+    fixtures.indexer.config.allowSingleThreadFallback = true;
     fixtures.indexer.workers = [
       {
         postMessage: vi.fn(),

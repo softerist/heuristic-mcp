@@ -151,7 +151,7 @@ describe('EmbeddingsCache Helper Methods', () => {
       cache.fileCallData.set('f.js', {});
 
       // Spy on console to verify success
-      const logSpy = vi.spyOn(console, 'error');
+      const logSpy = vi.spyOn(console, 'info');
 
       // Trigger rebuild
       await cache.rebuildCallGraph();

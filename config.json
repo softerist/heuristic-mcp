@@ -789,19 +789,12 @@
     "jsconfig.json",
 
     "package.json",
-    "package-lock.json",
-    "yarn.lock",
-    "pnpm-lock.yaml",
-    "bun.lockb",
 
     "composer.json",
-    "composer.lock",
 
     "Cargo.toml",
-    "Cargo.lock",
 
     "go.mod",
-    "go.sum",
 
     "pom.xml",
     "build.gradle",
@@ -811,18 +804,13 @@
 
     "requirements.txt",
     "Pipfile",
-    "Pipfile.lock",
-    "poetry.lock",
     "pyproject.toml",
 
     "Gemfile",
-    "Gemfile.lock",
 
     "mix.exs",
-    "mix.lock",
 
     "pubspec.yaml",
-    "pubspec.lock",
 
     "docker-compose.yml",
     "docker-compose.yaml",
@@ -843,12 +831,13 @@
     "**/.smart-coding-cache/**"
   ],
   "smartIndexing": true,
-  "chunkSize": 25,
-  "chunkOverlap": 5,
-  "batchSize": 100,
+  "chunkSize": 16,
+  "chunkOverlap": 4,
+  "batchSize": 50,
   "maxFileSize": 1048576,
   "maxResults": 5,
   "enableCache": true,
+  "autoCleanStaleCaches": true,
   "cacheVectorAssumeFinite": true,
   "cacheVectorFloatDigits": null,
   "cacheWriteHighWaterMark": 262144,
@@ -857,12 +846,18 @@
   "cacheVectorNoMutation": false,
   "cacheVectorJoinThreshold": 8192,
   "cacheVectorJoinChunkSize": 2048,
-  "watchFiles": false,
+  "watchFiles": true,
   "verbose": false,
   "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
   "semanticWeight": 0.7,
   "exactMatchBoost": 1.5,
-  "workerThreads": 1,
+  "workerThreads": "auto",
+  "workerBatchTimeoutMs": 120000,
+  "workerFailureThreshold": 1,
+  "workerFailureCooldownMs": 600000,
+  "workerMaxChunksPerBatch": 100,
+  "allowSingleThreadFallback": false,
+  "embeddingProcessPerBatch": true,
   "annEnabled": true,
   "annMinChunks": 5000,
   "annMinCandidates": 50,
@@ -874,3 +869,4 @@
   "annIndexCache": true,
   "annMetric": "cosine"
 }
+

@@ -12,6 +12,7 @@ let findHandleToolCall;
 let annHandleToolCall;
 let callSchema;
 let listSchema;
+let logsMock;
 
 const configMock = {
   loadConfig: vi.fn(),
@@ -112,7 +113,7 @@ vi.mock('../features/lifecycle.js', () => ({
   stop: (...args) => stopMock(...args),
   start: (...args) => startMock(...args),
   status: (...args) => statusMock(...args),
-  logs: vi.fn(),
+  logs: (...args) => logsMock(...args),
 }));
 
 const baseConfig = {
@@ -145,6 +146,7 @@ describe('index.js CLI coverage', () => {
     clearHandleToolCall = vi.fn();
     findHandleToolCall = vi.fn();
     annHandleToolCall = vi.fn();
+    logsMock = vi.fn();
     registerMock.mockReset();
     stopMock.mockReset();
     startMock.mockReset();
@@ -237,19 +239,12 @@ describe('index.js CLI coverage', () => {
     configMock.loadConfig.mockResolvedValue(baseConfig);
     fsMock.access.mockResolvedValue(undefined);
     pipelineMock.mockResolvedValue(() => ({}));
-    const logsFlagSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     const { main } = await import('../index.js');
     await main();
 
-    const called = infoSpy.mock.calls.some(
-      (call) => typeof call[0] === 'string' && call[0].includes('Starting server with verbose')
-    );
-    if (!called) {
-      console.info('Info calls:', JSON.stringify(infoSpy.mock.calls));
-    }
     expect(process.env.SMART_CODING_VERBOSE).toBe('true');
-    expect(called).toBe(true);
+    expect(logsMock).toHaveBeenCalled();
   });
 
   it('logs memory stats when verbose is enabled', async () => {
@@ -275,7 +270,7 @@ describe('index.js CLI coverage', () => {
     accessResolve();
     await importPromise;
 
-    const messages = errorSpy.mock.calls.map((call) => call[0]);
+    const messages = infoSpy.mock.calls.map((call) => call[0]);
     const hasStartup = messages.some(
       (message) => typeof message === 'string' && message.includes('[Server] Memory (startup)')
     );
@@ -346,6 +341,7 @@ describe('index.js CLI coverage', () => {
   });
 
   it('parses workspace args with equals and starts watcher', async () => {
+    vi.useFakeTimers();
     process.argv = ['node', 'index.js', '--workspace=C:\\work'];
     configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
     configMock.loadConfig.mockResolvedValue({
@@ -357,6 +353,11 @@ describe('index.js CLI coverage', () => {
 
     const { main } = await import('../index.js');
     await main();
+    
+    // Trigger the background initialization timeout
+    await vi.runAllTimersAsync();
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(setupFileWatcherMock).toHaveBeenCalled();
   });
@@ -379,6 +380,7 @@ describe('index.js CLI coverage', () => {
   });
 
   it('logs background indexing errors', async () => {
+    vi.useFakeTimers();
     process.argv = ['node', 'index.js', '--workspace', 'C:\\work'];
     configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
     configMock.loadConfig.mockResolvedValue(baseConfig);
@@ -388,6 +390,11 @@ describe('index.js CLI coverage', () => {
 
     const { main } = await import('../index.js');
     await main();
+    
+    // Trigger the background initialization timeout
+    await vi.runAllTimersAsync();
+    await Promise.resolve();
+    await Promise.resolve();
 
     const errors = errorSpy.mock.calls.map((call) => call[0]);
     const hasError = errors.some(

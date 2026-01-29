@@ -76,6 +76,8 @@ const createCache = () => ({
   save: vi.fn().mockResolvedValue(undefined),
   rebuildCallGraph: vi.fn(),
   ensureAnnIndex: vi.fn().mockResolvedValue(null),
+  setLastIndexDuration: vi.fn(),
+  setLastIndexStats: vi.fn(),
 });
 
 describe('index-codebase branch coverage focused', () => {
@@ -412,6 +414,8 @@ describe('index-codebase branch coverage focused', () => {
       maxFileSize: 1000,
       callGraphEnabled: false,
       verbose: true,
+      workerThreads: 0,
+      allowSingleThreadFallback: true,
     };
     const indexer = new CodebaseIndexer(vi.fn(), cache, config);
 
@@ -473,6 +477,8 @@ describe('index-codebase branch coverage focused', () => {
         maxFileSize: 1000,
         callGraphEnabled: false,
         verbose: false,
+        workerThreads: 0,
+        allowSingleThreadFallback: true,
       };
       const indexer = new CodebaseIndexer(vi.fn(), cache, config);
 
@@ -504,6 +510,8 @@ describe('index-codebase branch coverage focused', () => {
       maxFileSize: 1000,
       callGraphEnabled: false,
       verbose: true,
+      workerThreads: 0,
+      allowSingleThreadFallback: true,
     };
     const indexer = new CodebaseIndexer(vi.fn(), cache, config);
 
@@ -547,6 +555,8 @@ describe('index-codebase branch coverage focused', () => {
       maxFileSize: 1000,
       callGraphEnabled: false,
       verbose: false,
+      workerThreads: 0,
+      allowSingleThreadFallback: true,
     };
     const indexer = new CodebaseIndexer(vi.fn(), cache, config);
 
@@ -586,6 +596,8 @@ describe('index-codebase branch coverage focused', () => {
       maxFileSize: 1000,
       callGraphEnabled: false,
       verbose: true,
+      workerThreads: 0,
+      allowSingleThreadFallback: true,
     };
     const indexer = new CodebaseIndexer(vi.fn(), cache, config);
 
@@ -622,6 +634,8 @@ describe('index-codebase branch coverage focused', () => {
       maxFileSize: 1000,
       callGraphEnabled: false,
       verbose: false,
+      workerThreads: 0,
+      allowSingleThreadFallback: true,
     };
     const indexer = new CodebaseIndexer(vi.fn(), cache, config);
 

@@ -35,7 +35,8 @@ describe('lifecycle', () => {
     fsMock.unlink = vi.fn().mockResolvedValue();
     fsMock.readdir = vi.fn();
     fsMock.stat = vi.fn();
-    fsMock.access = vi.fn();
+    fsMock.access = vi.fn().mockRejectedValue(new Error('missing'));
+    fsMock.writeFile = vi.fn().mockResolvedValue();
     osMock.homedir = () => 'C:/Users/test';
     registerMock = vi.fn();
     consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -69,16 +70,23 @@ describe('lifecycle', () => {
 
   it('stops win32 processes and warns on kill failures', async () => {
     setPlatform('win32');
-    execPromiseMock.mockResolvedValue({
-      stdout: `${originalPid}\n1234\n5678\n`,
-    });
-    killSpy.mockImplementation((pid, signal) => {
-      if (pid === 5678) {
+    fsMock.readFile.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }));
+    execPromiseMock.mockImplementation(async (cmd) => {
+      if (String(cmd).startsWith('wmic process')) {
+        return { stdout: 'ProcessId=1234\nProcessId=5678\n' };
+      }
+      if (
+        String(cmd).startsWith(
+          'powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object'
+        )
+      ) {
+        return { stdout: '1234\n5678\n' };
+      }
+      if (String(cmd).startsWith('taskkill') && String(cmd).includes('/PID 5678')) {
         const err = new Error('Denied');
-        err.code = 'EPERM';
         throw err;
       }
-      return true;
+      return { stdout: '' };
     });
     const { stop } = await import('../features/lifecycle.js');
 
@@ -340,8 +348,12 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Indexing: ⚠️  NO FILES'));
-    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Indexing: ⚠️  INCOMPLETE'));
+    expect(consoleInfo).toHaveBeenCalledWith(
+      expect.stringContaining('Cached index: ⚠️  NO FILES')
+    );
+    expect(consoleInfo).toHaveBeenCalledWith(
+      expect.stringContaining('Cached index: ⚠️  INCOMPLETE')
+    );
     expect(consoleInfo).toHaveBeenCalledWith(
       expect.stringContaining('Library\\Application Support\\Cursor\\User\\settings.json')
     );
@@ -491,8 +503,8 @@ describe('lifecycle', () => {
   });
 
   it('handles ESRCH error when killing a process', async () => {
-    setPlatform('win32');
-    execPromiseMock.mockResolvedValue({ stdout: '1234\n' });
+    setPlatform('linux');
+    execPromiseMock.mockResolvedValue({ stdout: '1234' });
     killSpy.mockImplementation(() => {
       const err = new Error('Already dead');
       err.code = 'ESRCH';

@@ -81,6 +81,8 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
       rebuildCallGraph: vi.fn(),
       ensureAnnIndex: vi.fn().mockResolvedValue(),
       deleteFileHash: vi.fn(),
+      setLastIndexDuration: vi.fn(),
+      setLastIndexStats: vi.fn(),
     };
 
     embedder = vi.fn().mockResolvedValue({ data: [] });
