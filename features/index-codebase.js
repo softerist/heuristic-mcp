@@ -188,7 +188,7 @@ export class CodebaseIndexer {
       try {
     let numWorkers =
       this.config.workerThreads === 'auto'
-        ? Math.min(2, Math.max(1, os.cpus().length - 1)) // Cap 'auto' at 2 workers
+        ? Math.min(8, Math.max(1, os.cpus().length - 1)) // Cap 'auto' at 8 workers (was 2)
         : typeof this.config.workerThreads === 'number'
           ? this.config.workerThreads
           : 1;
@@ -503,11 +503,12 @@ export class CodebaseIndexer {
         };
 
         const handleTimeout = () => {
+          // Terminate first to ensure no more messages arrive
+          void killWorker();
           worker.off('message', handler);
           worker.off('error', errorHandler);
           console.warn(`[Indexer] Worker ${workerIndex} timed out (files)`);
           this.recordWorkerFailure(`timeout (batch ${batchId})`);
-          void killWorker();
           resolve([]);
         };
 
@@ -828,8 +829,8 @@ export class CodebaseIndexer {
     let processedSinceGc = 0;
     
     for (const chunk of chunks) {
-      // Throttle speed (balanced)
-      await delay(10);
+      // Throttle speed (balanced) - yield to event loop but don't wait unnecessarily
+      await delay(0);
 
       try {
           const output = await this.embedder(chunk.text, {
@@ -1434,7 +1435,10 @@ export class CodebaseIndexer {
           } else {
             if (typeof content !== 'string') content = String(content);
             if (!liveHash) liveHash = hashContent(content);
-            if (!Number.isFinite(size)) size = Buffer.byteLength(content, 'utf8');
+            if (!Number.isFinite(size)) {
+                // Use character length as approximation to avoid blocking Buffer.byteLength on large strings
+                size = content.length;
+            }
             if (size > this.config.maxFileSize) {
               if (this.config.verbose) {
                 console.warn(

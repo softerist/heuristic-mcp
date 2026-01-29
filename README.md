@@ -110,7 +110,7 @@ Example `config.json`:
   "fileNames": ["Dockerfile", ".env.example", "Makefile"],
   "smartIndexing": true,
   "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
-  "workerThreads": "auto",
+  "workerThreads": 0,
   "recencyBoost": 0.1,
   "recencyDecayDays": 30,
   "callGraphEnabled": true,
@@ -132,7 +132,7 @@ Cache location:
 Selected overrides (prefix `SMART_CODING_`):
 
 - `SMART_CODING_VERBOSE=true|false`
-- `SMART_CODING_WORKER_THREADS=auto|N`
+- `SMART_CODING_WORKER_THREADS=auto|0|N`
 - `SMART_CODING_BATCH_SIZE=100`
 - `SMART_CODING_CHUNK_SIZE=25`
 - `SMART_CODING_MAX_RESULTS=5`

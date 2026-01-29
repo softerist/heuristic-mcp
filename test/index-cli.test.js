@@ -457,8 +457,16 @@ describe('index.js CLI coverage', () => {
     lastIndexer.terminateWorkers = null;
     lastCache = null;
 
-    await listeners.SIGINT();
-    await listeners.SIGTERM();
+    vi.useFakeTimers();
+    exitSpy.mockClear();
+    const runHandler = async (handler) => {
+      const promise = handler();
+      await vi.runAllTimersAsync();
+      await promise;
+    };
+
+    await runHandler(listeners.SIGINT);
+    await runHandler(listeners.SIGTERM);
 
     expect(exitSpy).toHaveBeenCalledWith(0);
   });

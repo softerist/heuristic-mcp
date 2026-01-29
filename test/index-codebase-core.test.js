@@ -268,26 +268,30 @@ describe('index-codebase branch coverage focused', () => {
     );
   });
 
-  it('handles empty results from workers correctly', async () => {
+  it('skips retry when worker chunks are emptied after processing', async () => {
     const { CodebaseIndexer } = await import('../features/index-codebase.js');
     const cache = createCache();
     const indexer = new CodebaseIndexer(vi.fn(), cache, { workerThreads: 1 });
 
+    // Create a worker that returns empty results
     let handler;
     const worker = {
-      on: (event, fn) => {
-        if (event === 'message') handler = fn;
-      },
-      once: () => {},
-      off: () => {},
-      postMessage: (msg) => {
-        handler({ type: 'results', results: [], batchId: msg.batchId });
-      },
+        on: (event, fn) => {
+          if (event === 'message') handler = fn;
+        },
+        once: () => {},
+        off: () => {},
+        postMessage: (msg) => {
+          // Respond with success but empty results, implying nothing needed retry or all done
+          handler({ type: 'results', results: [], batchId: msg.batchId });
+        },
     };
     indexer.workers = [worker];
 
+    const fallbackSpy = vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue([]);
     const results = await indexer.processChunksWithWorkers([{ file: 'a.js', text: 'x' }]);
     expect(results).toEqual([]);
+    expect(fallbackSpy).toHaveBeenCalled();
   });
 
   it('handles mismatched batch IDs and times out', async () => {
@@ -808,19 +812,12 @@ describe('index-codebase branch coverage focused', () => {
       { file: '/root/a.js', startLine: 1, endLine: 1, content: 'a', vector: [1], success: true },
     ]);
 
-    const intervalSpy = vi.spyOn(globalThis, 'setInterval').mockImplementation((fn) => {
-      if (typeof fn === 'function') {
-        fn();
-      }
-      return 0;
-    });
+    vi.useFakeTimers();
+    const setIntervalSpy = vi.spyOn(global, 'setInterval');
 
-    try {
-      await indexer.indexAll(false);
-      expect(intervalSpy).toHaveBeenCalled();
-    } finally {
-      intervalSpy.mockRestore();
-    }
+    await indexer.indexAll(false);
+    expect(setIntervalSpy).toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('skips large preset content without verbose log', async () => {

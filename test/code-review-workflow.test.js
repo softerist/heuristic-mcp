@@ -5,8 +5,11 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-const workflowPath = path.join(process.cwd(), '.agent', 'workflows', 'code-review.md');
+const testDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(testDir, '..');
+const workflowPath = path.join(repoRoot, '.agent', 'workflows', 'code-review.md');
 
 async function readWorkflow() {
   return fs.readFile(workflowPath, 'utf8');

@@ -457,7 +457,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     await handlers['add']('file.js');
   });
 
-  it('skips files provided with content if too large (lines 825-837)', async () => {
+  it('skips files provided with content if too large', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['file-large-content.js']);
     // Mock preFilterFiles to return an entry with content that exceeds maxFileSize
     indexer.preFilterFiles = vi.fn().mockResolvedValue([
@@ -477,7 +477,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     expect(mockEmbedder).not.toHaveBeenCalled();
   });
 
-  it('skips files with invalid stat results (line 846)', async () => {
+  it('skips files with invalid stat results', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['invalid-stat.js']);
     indexer.preFilterFiles = vi.fn().mockResolvedValue([
       { file: 'invalid-stat.js', force: false }
@@ -492,7 +492,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     );
   });
 
-  it('skips files that are too large via stat check (lines 859-864)', async () => {
+  it('skips files that are too large via stat check', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['large-stat.js']);
     indexer.preFilterFiles = vi.fn().mockResolvedValue([
       { file: 'large-stat.js', force: false }
@@ -511,7 +511,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     );
   });
 
-  it('handles read file failures (lines 867-870)', async () => {
+  it('handles read file failures', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['read-error.js']);
     indexer.preFilterFiles = vi.fn().mockResolvedValue([
       { file: 'read-error.js', force: false }
@@ -531,7 +531,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     );
   });
 
-  it('skips unchanged files when hash matches (line 882)', async () => {
+  it('skips unchanged files when hash matches', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['unchanged.js']);
     indexer.preFilterFiles = vi.fn().mockResolvedValue([
       { file: 'unchanged.js', force: false }
@@ -555,7 +555,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     expect(mockEmbedder).not.toHaveBeenCalled();
   });
 
-  it('queues watch events when indexing is in progress (lines 1106, 1126, 1146)', async () => {
+  it('queues watch events when indexing is in progress', async () => {
     await indexer.setupFileWatcher();
     
     // Simulate indexing in progress
