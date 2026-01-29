@@ -152,7 +152,7 @@ describe('EmbeddingsCache Perfection', () => {
       expect((await cache.getRelatedFiles([])).size).toBe(0);
 
       // Branch: callGraph is null and fileCallData is empty
-      cache.fileCallData.clear();
+      cache.clearFileCallData();
       cache.callGraph = null;
       expect((await cache.getRelatedFiles(['sym'])).size).toBe(0);
     });
@@ -228,7 +228,7 @@ describe('EmbeddingsCache Perfection', () => {
 
   it('covers rebuildCallGraph error', async () => {
     const cache = new EmbeddingsCache(makeConfig('dir', { verbose: true }));
-    cache.fileCallData.set('a.js', {});
+    cache.setFileCallData('a.js', {});
 
     // We can't easily mock the dynamic import here to fail,
     // but we can at least call it and hope it runs.
@@ -330,7 +330,7 @@ describe('EmbeddingsCache Perfection', () => {
       await fs.writeFile(path.join(dir, 'embeddings.json'), '[]');
       await cache.clear();
       expect(cache.getVectorStore()).toHaveLength(0);
-      expect(cache.fileHashes.size).toBe(0);
+      expect(cache.getFileHashCount()).toBe(0);
       await expect(fs.access(dir)).rejects.toThrow();
     });
   });
@@ -341,7 +341,7 @@ describe('EmbeddingsCache Perfection', () => {
       const cache = new EmbeddingsCache(config);
 
       // Branch: callGraph is null but fileCallData exists
-      cache.fileCallData.set('a.js', { definitions: [], calls: [] });
+      cache.setFileCallData('a.js', { definitions: [], calls: [] });
       const result = await cache.getRelatedFiles(['sym']);
       expect(result).toBeDefined();
     });

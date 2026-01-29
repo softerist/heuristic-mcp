@@ -24,7 +24,11 @@ describe('HybridSearch coverage', () => {
       getVectorStore: () => vectorStore,
       // ANN returns only the first chunk
       queryAnn: async () => [0],
-      getRelatedFiles: async () => new Map()
+      getRelatedFiles: async () => new Map(),
+      getStoreSize: () => vectorStore.length,
+      getVector: (idx) => vectorStore[idx]?.vector,
+      getChunk: (idx) => vectorStore[idx],
+      getChunkContent: (idx) => vectorStore[idx]?.content
     };
 
     const config = {

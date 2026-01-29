@@ -61,6 +61,7 @@ describe('CodebaseIndexer Detailed Coverage', () => {
       rebuildCallGraph: vi.fn(),
       ensureAnnIndex: vi.fn().mockResolvedValue({}),
       fileCallData: new Map(),
+      getFileHashKeys: vi.fn().mockReturnValue([]),
     };
     config = {
       searchDirectory: '/root',

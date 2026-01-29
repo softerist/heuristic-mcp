@@ -84,7 +84,7 @@ describe('Final Coverage Gaps', () => {
     it('covers getRelatedFiles missing graph path', async () => {
       const cache = new EmbeddingsCache({ callGraphEnabled: true });
       // Correct format for fileCallData: file -> { definitions: [], calls: [] }
-      cache.fileCallData.set('f.js', { definitions: [], calls: [] });
+      cache.setFileCallData('f.js', { definitions: [], calls: [] });
       // Avoid rebuildCallGraph which is async/lazy
       cache.callGraph = null;
 

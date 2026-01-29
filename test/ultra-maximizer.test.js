@@ -61,8 +61,8 @@ describe('Ultra Maximizer', () => {
 
       await cache.load();
 
-      expect(cache.fileCallData.size).toBe(1);
-      expect(cache.fileCallData.has('f.js')).toBe(true);
+      expect(cache.getFileCallDataCount()).toBe(1);
+      expect(cache.hasFileCallData('f.js')).toBe(true);
     });
   });
 

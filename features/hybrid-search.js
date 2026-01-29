@@ -11,18 +11,12 @@ export class HybridSearch {
     this.fileModTimes = new Map(); // Cache for file modification times
   }
 
-  getChunkContent(chunk) {
-    if (this.cache?.getChunkContent) {
-      return this.cache.getChunkContent(chunk);
-    }
-    return chunk?.content ?? '';
+  async getChunkContent(chunkOrIndex) {
+    return await this.cache.getChunkContent(chunkOrIndex);
   }
 
   getChunkVector(chunk) {
-    if (this.cache?.getChunkVector) {
-      return this.cache.getChunkVector(chunk);
-    }
-    return chunk?.vector ?? null;
+    return this.cache.getChunkVector(chunk);
   }
 
   getAnnCandidateCount(maxResults, totalChunks) {
@@ -41,7 +35,7 @@ export class HybridSearch {
     for (const file of uniqueFiles) {
       if (!this.fileModTimes.has(file)) {
         // Try to get from cache metadata first (fast)
-        const meta = this.cache.getFileMeta?.(file);
+        const meta = this.cache.getFileMeta(file);
         if (meta && typeof meta.mtimeMs === 'number') {
           this.fileModTimes.set(file, meta.mtimeMs);
         } else {
@@ -68,6 +62,14 @@ export class HybridSearch {
         })
       );
     }
+
+    // Prevent unbounded growth (simple eviction)
+    if (this.fileModTimes.size > 5000) {
+      for (const [key] of this.fileModTimes) {
+        this.fileModTimes.delete(key);
+        if (this.fileModTimes.size <= 4000) break;
+      }
+    }
   }
 
   // Cache invalidation helper
@@ -76,51 +78,46 @@ export class HybridSearch {
   }
 
   async search(query, maxResults) {
-    // Create a shallow copy to prevent race conditions during iteration
-    // (Background indexing might mutate the array in-place)
-    const vectorStore = [...this.cache.getVectorStore()];
+    try {
+      this.cache.startRead();
+      
+      const storeSize = this.cache.getStoreSize();
 
-    if (vectorStore.length === 0) {
-      return {
-        results: [],
-        message: 'No code has been indexed yet. Please wait for initial indexing to complete.',
-      };
-    }
+      if (storeSize === 0) {
+        return {
+          results: [],
+          message: 'No code has been indexed yet. Please wait for initial indexing to complete.',
+        };
+      }
 
-    // Generate query embedding
-    console.info(`[Search] Query: "${query}"`);
-    const queryEmbed = await this.embedder(query, {
-      pooling: 'mean',
-      normalize: true,
-    });
-    const queryVector = queryEmbed.data; // Keep as Float32Array for performance
-    const queryVectorTyped = queryVector;
+      // Generate query embedding
+      console.info(`[Search] Query: "${query}"`);
+      const queryEmbed = await this.embedder(query, {
+        pooling: 'mean',
+        normalize: true,
+      });
+      const queryVector = queryEmbed.data; // Keep as Float32Array for performance
+      const queryVectorTyped = queryVector;
 
-    let candidates = vectorStore;
+      let candidateIndices = null; // null implies full scan of all chunks
     let usedAnn = false;
+
     if (this.config.annEnabled) {
-      const candidateCount = this.getAnnCandidateCount(maxResults, vectorStore.length);
+      const candidateCount = this.getAnnCandidateCount(maxResults, storeSize);
       const annLabels = await this.cache.queryAnn(queryVectorTyped, candidateCount);
       if (annLabels && annLabels.length >= maxResults) {
         usedAnn = true;
         console.info(`[Search] Using ANN index (${annLabels.length} candidates)`);
-        const seen = new Set();
-        candidates = annLabels
-          .map((index) => {
-            if (seen.has(index)) return null;
-            seen.add(index);
-            return vectorStore[index];
-          })
-          .filter(Boolean);
+        candidateIndices = Array.from(new Set(annLabels)); // dedupe
       }
     }
 
     if (!usedAnn) {
-      console.info(`[Search] Using full scan (${vectorStore.length} chunks)`);
+      console.info(`[Search] Using full scan (${storeSize} chunks)`);
     }
 
-    if (usedAnn && candidates.length < maxResults) {
-      candidates = vectorStore;
+    if (usedAnn && candidateIndices && candidateIndices.length < maxResults) {
+      candidateIndices = null; // Fallback to full scan
       usedAnn = false;
     }
 
@@ -129,30 +126,35 @@ export class HybridSearch {
       lowerQuery.length > 1 ? lowerQuery.split(/\s+/).filter((word) => word.length > 2) : [];
     const queryWordCount = queryWords.length;
 
-    if (usedAnn && lowerQuery.length > 1) {
+    if (usedAnn && candidateIndices && lowerQuery.length > 1) {
       let exactMatchCount = 0;
-      for (const chunk of candidates) {
-        const content = this.getChunkContent(chunk);
+      for (const index of candidateIndices) {
+        const content = await this.getChunkContent(index);
         if (content && content.toLowerCase().includes(lowerQuery)) {
           exactMatchCount++;
         }
       }
 
       if (exactMatchCount < maxResults) {
-        const seen = new Set(
-          candidates.map((chunk) => `${chunk.file}:${chunk.startLine}:${chunk.endLine}`)
-        );
-        for (const chunk of vectorStore) {
-          const content = this.getChunkContent(chunk).toLowerCase();
-          if (!content.includes(lowerQuery)) continue;
-
-          const key = `${chunk.file}:${chunk.startLine}:${chunk.endLine}`;
-          if (seen.has(key)) {
-            continue;
-          }
-
-          seen.add(key);
-          candidates.push(chunk);
+        // Fallback to full scan if keyword constraint isn't met in candidates
+        // Note: This is expensive as it iterates everything.
+        // We can check if we should just abandon ANN or augment it.
+        // Current logic: scan everything for keyword matches and ADD them.
+        
+        const seen = new Set(candidateIndices);
+        
+        // Full scan logic for keyword augmentation
+        // Iterate by index
+        for (let i = 0; i < storeSize; i++) {
+           if (seen.has(i)) continue;
+           
+           // Lazy load content only if needed (this might be slow for huge repo)
+           // But `getChunkContent` should use cache.
+           const content = await this.getChunkContent(i);
+           if (content && content.toLowerCase().includes(lowerQuery)) {
+               seen.add(i);
+               candidateIndices.push(i);
+           }
         }
       }
     }
@@ -166,6 +168,9 @@ export class HybridSearch {
     let recencyBoost = this.config.recencyBoost;
 
     if (recencyBoostEnabled) {
+      const candidates = candidateIndices
+        ? candidateIndices.map((idx) => this.cache.getChunk(idx)).filter(Boolean)
+        : Array.from({ length: storeSize }, (_, i) => this.cache.getChunk(i)).filter(Boolean);
       // optimization: avoid IO storm during full scan fallbacks
       // For large candidate sets, we strictly rely on cached metadata
       // For small sets, we allow best-effort fs.stat
@@ -175,7 +180,7 @@ export class HybridSearch {
         // Bulk pre-populate from cache only (no syscalls)
         for (const chunk of candidates) {
           if (!this.fileModTimes.has(chunk.file)) {
-            const meta = this.cache.getFileMeta?.(chunk.file);
+            const meta = this.cache.getFileMeta(chunk.file);
             if (meta && typeof meta.mtimeMs === 'number') {
               this.fileModTimes.set(chunk.file, meta.mtimeMs);
             }
@@ -189,46 +194,57 @@ export class HybridSearch {
     const scoredChunks = [];
 
     // Process in batches
-    for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
-      const batch = candidates.slice(i, i + BATCH_SIZE);
+    // Candidates is now implicitly range 0..storeSize OR candidateIndices
+    const totalCandidates = candidateIndices ? candidateIndices.length : storeSize;
 
+    for (let i = 0; i < totalCandidates; i += BATCH_SIZE) {
       // Allow event loop to tick between batches
       if (i > 0) {
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
 
-      for (const chunk of batch) {
-        // Semantic similarity (vectors are normalized)
-        const vector = this.getChunkVector(chunk);
+      const limit = Math.min(totalCandidates, i + BATCH_SIZE);
+      
+      for (let j = i; j < limit; j++) {
+        const idx = candidateIndices ? candidateIndices[j] : j;
+        
+        // Lazy load keys
+        const vector = this.cache.getVector(idx);
         if (!vector) continue;
+        
         let score = dotSimilarity(queryVector, vector) * semanticWeight;
 
         // Exact match boost
-        const lowerContent = this.getChunkContent(chunk).toLowerCase();
+        const content = await this.getChunkContent(idx);
+        const lowerContent = content ? content.toLowerCase() : '';
 
         if (lowerContent && lowerContent.includes(lowerQuery)) {
           score += exactMatchBoost;
         } else if (lowerContent && queryWordCount > 0) {
           // Partial word matching (optimized)
           let matchedWords = 0;
-          for (let j = 0; j < queryWordCount; j++) {
-            if (lowerContent.includes(queryWords[j])) matchedWords++;
+          for (let k = 0; k < queryWordCount; k++) {
+            if (lowerContent.includes(queryWords[k])) matchedWords++;
           }
           score += (matchedWords / queryWordCount) * 0.3;
         }
 
-        // Recency boost - recently modified files rank higher
-        if (recencyBoostEnabled) {
-          const mtime = this.fileModTimes.get(chunk.file);
-          if (typeof mtime === 'number') {
-            const ageMs = now - mtime;
-            // Linear decay: full boost at 0 age, 0 boost at recencyDecayMs
-            const recencyFactor = Math.max(0, 1 - ageMs / recencyDecayMs);
-            score += recencyFactor * recencyBoost;
-          }
+        // Needs chunk info for result
+        const chunkInfo = this.cache.getChunk(idx);
+        
+        // Recency boost
+        if (recencyBoostEnabled && chunkInfo) {
+              const mtime = this.fileModTimes.get(chunkInfo.file);
+              if (typeof mtime === 'number') {
+                const ageMs = now - mtime;
+                const recencyFactor = Math.max(0, 1 - ageMs / recencyDecayMs);
+                score += recencyFactor * recencyBoost;
+              }
         }
-
-        scoredChunks.push({ ...chunk, score });
+        
+        if (chunkInfo) {
+            scoredChunks.push({ ...chunkInfo, score, content });
+        }
       }
     }
 
@@ -241,7 +257,7 @@ export class HybridSearch {
       const topN = Math.min(5, scoredChunks.length);
       const symbolsFromTop = new Set();
       for (let i = 0; i < topN; i++) {
-        const content = this.getChunkContent(scoredChunks[i]);
+        const content = await this.getChunkContent(scoredChunks[i]);
         const symbols = extractSymbolsFromContent(content || '');
         for (const sym of symbols) {
           symbolsFromTop.add(sym);
@@ -265,12 +281,12 @@ export class HybridSearch {
     }
 
     // Get top results
-    const results = scoredChunks.slice(0, maxResults).map((chunk) => {
+    const results = await Promise.all(scoredChunks.slice(0, maxResults).map(async (chunk) => {
       if (chunk.content === undefined || chunk.content === null) {
-        return { ...chunk, content: this.getChunkContent(chunk) };
+        return { ...chunk, content: await this.getChunkContent(chunk) };
       }
       return chunk;
-    });
+    }));
 
     if (results.length > 0) {
       console.info(`[Search] Found ${results.length} results. Top score: ${results[0].score.toFixed(4)}`);
@@ -279,30 +295,33 @@ export class HybridSearch {
     }
 
     return { results, message: null };
+    } finally {
+      this.cache.endRead();
+    }
   }
 
-  formatResults(results) {
+  async formatResults(results) {
     if (results.length === 0) {
       return 'No matching code found for your query.';
     }
 
-    return results
-      .map((r, idx) => {
-        const relPath = path.relative(this.config.searchDirectory, r.file);
-        const content = r.content ?? this.getChunkContent(r);
-        return (
-          `## Result ${idx + 1} (Relevance: ${(r.score * 100).toFixed(1)}%)\n` +
-          `**File:** \`${relPath}\`\n` +
-          `**Lines:** ${r.startLine}-${r.endLine}\n\n` +
-          '```' +
-          path.extname(r.file).slice(1) +
-          '\n' +
-          content +
-          '\n' +
-          '```\n'
-        );
-      })
-      .join('\n');
+    const formatted = await Promise.all(results.map(async (r, idx) => {
+      const relPath = path.relative(this.config.searchDirectory, r.file);
+      const content = r.content ?? await this.getChunkContent(r);
+      return (
+        `## Result ${idx + 1} (Relevance: ${(r.score * 100).toFixed(1)}%)\n` +
+        `**File:** \`${relPath}\`\n` +
+        `**Lines:** ${r.startLine}-${r.endLine}\n\n` +
+        '```' +
+        path.extname(r.file).slice(1) +
+        '\n' +
+        content +
+        '\n' +
+        '```\n'
+      );
+    }));
+
+    return formatted.join('\n');
   }
 }
 
@@ -351,7 +370,7 @@ export async function handleToolCall(request, hybridSearch) {
     };
   }
 
-  const formattedText = hybridSearch.formatResults(results);
+  const formattedText = await hybridSearch.formatResults(results);
 
   return {
     content: [{ type: 'text', text: formattedText }],

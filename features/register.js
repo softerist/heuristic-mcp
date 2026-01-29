@@ -4,6 +4,7 @@ import { writeFileSync, existsSync, statSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
+import { parseJsonc, upsertMcpServerEntryInText } from '../lib/settings-editor.js';
 
 // Detect which IDE is running the install
 function detectCurrentIDE() {
@@ -94,7 +95,7 @@ function getConfigPaths() {
 function forceLog(message) {
   try {
     if (process.platform !== 'win32') {
-      fs.writeFileSync('/dev/tty', message + '\n');
+      writeFileSync('/dev/tty', message + '\n');
     } else {
       console.error(message);
     }
@@ -111,7 +112,8 @@ export async function register(filter = null) {
   // For Antigravity, we MUST use absolute path because ${workspaceFolder} variable expansion
   // is not supported in the current version, and '.' uses the wrong CWD.
   // Use INIT_CWD (where npm install was run) if available, otherwise cwd.
-  const workspacePath = currentIDE === 'Antigravity' ? process.env.INIT_CWD || process.cwd() : '.';
+  const workspacePath =
+    currentIDE === 'Antigravity' ? process.env.INIT_CWD || process.cwd() : '${workspaceFolder}';
 
   const serverConfig = {
     command: binaryPath,
@@ -131,7 +133,6 @@ export async function register(filter = null) {
 
     try {
       // Check if file exists - create if canCreate is true for this IDE
-      let config = {};
       let fileExists = true;
 
       try {
@@ -156,34 +157,30 @@ export async function register(filter = null) {
         }
       }
 
-      // Read existing config if file exists
+      let content = '';
       if (fileExists) {
-        const content = await fs.readFile(configPath, 'utf-8');
-        try {
-          if (!content || content.trim() === '') {
-            // Empty file - treat as new
-            config = {};
-          } else {
-            config = JSON.parse(content);
+        content = await fs.readFile(configPath, 'utf-8');
+        if (content.trim()) {
+          const parsed = parseJsonc(content);
+          if (!parsed) {
+            forceLog(
+              `[Auto-Register] Warning: ${name} config is not valid JSON/JSONC; skipping to avoid data loss.`
+            );
+            continue;
           }
-        } catch (e) {
-          forceLog(
-            `[Auto-Register] Warning: Corrupt/empty ${name} config, resetting to default. Error: ${e.message}`
-          );
-          config = {};
         }
       }
 
-      // Init mcpServers if missing
-      if (!config.mcpServers) {
-        config.mcpServers = {};
+      const updated = upsertMcpServerEntryInText(content, 'heuristic-mcp', serverConfig);
+      if (!updated) {
+        forceLog(
+          `[Auto-Register] Warning: Failed to update ${name} config (could not locate root object).`
+        );
+        continue;
       }
 
-      // Inject configuration
-      config.mcpServers['heuristic-mcp'] = serverConfig;
-
       // Write back synchronously to avoid race conditions
-      writeFileSync(configPath, JSON.stringify(config, null, 2));
+      writeFileSync(configPath, updated);
 
       forceLog(`\x1b[32m[Auto-Register] ✅ Successfully registered with ${name}\x1b[0m`);
       registeredCount++;

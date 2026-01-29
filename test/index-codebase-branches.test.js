@@ -96,6 +96,10 @@ describe('CodebaseIndexer Branch Coverage', () => {
       getAnnVector: vi.fn().mockReturnValue(new Float32Array([0.1])),
       setLastIndexDuration: vi.fn(),
       setLastIndexStats: vi.fn(),
+      getFileHashKeys: vi.fn().mockImplementation(() => [...mockCache.fileHashes.keys()]),
+      setFileHashes: vi.fn((map) => { mockCache.fileHashes = map; }),
+      getFileCallDataKeys: vi.fn().mockImplementation(() => [...mockCache.fileCallData.keys()]),
+      setFileCallDataEntries: vi.fn((map) => { mockCache.fileCallData = map; }),
     };
     mockConfig = {
       searchDirectory: '/test',

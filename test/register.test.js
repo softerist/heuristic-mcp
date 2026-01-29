@@ -112,7 +112,7 @@ describe('register', () => {
     await register();
 
     expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('Warning'));
-    expect(fsMock.writeFileSync).toHaveBeenCalled();
+    expect(fsMock.writeFileSync).not.toHaveBeenCalled();
   });
 
   it('handles empty config files as new', async () => {
@@ -191,8 +191,10 @@ describe('register', () => {
     setPlatform('linux');
     fsPromisesMock.access.mockRejectedValue(new Error('missing'));
     fsPromisesMock.mkdir.mockResolvedValue();
-    fsPromisesMock.writeFileSync.mockImplementation(() => {
-      throw new Error('tty denied');
+    fsMock.writeFileSync.mockImplementation((targetPath) => {
+      if (targetPath === '/dev/tty') {
+        throw new Error('tty denied');
+      }
     });
 
     const { register } = await import('../features/register.js');

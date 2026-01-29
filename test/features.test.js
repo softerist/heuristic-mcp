@@ -129,7 +129,7 @@ describe('Features Coverage Maximizer', () => {
       tool.config.annEnabled = false;
       mockCache.getVectorStore = () => [{ file: 'a.js', content: 'y', vector: [0, 1] }]; // No match
       const r3 = await tool.execute({ code: 'z', minSimilarity: 0.9 });
-      expect(tool.formatResults(r3.results)).toContain('No similar code patterns found');
+      await expect(tool.formatResults(r3.results)).resolves.toContain('No similar code patterns found');
     });
   });
 });

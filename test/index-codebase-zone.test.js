@@ -24,7 +24,7 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
     await fixtures.indexer.terminateWorkers();
     await clearTestCache(fixtures.config);
     fixtures.cache.setVectorStore([]);
-    fixtures.cache.fileHashes = new Map();
+    fixtures.cache.clearFileHashes();
     fixtures.config.verbose = true;
   });
 

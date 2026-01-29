@@ -64,6 +64,24 @@ const createCache = () => ({
   vectorStore: [],
   fileHashes: new Map(),
   fileCallData: new Map(),
+  getFileHashKeys() {
+    return Array.from(this.fileHashes.keys());
+  },
+  getFileHashCount() {
+    return this.fileHashes.size;
+  },
+  clearFileHashes() {
+    this.fileHashes.clear();
+  },
+  getFileCallDataKeys() {
+    return Array.from(this.fileCallData.keys());
+  },
+  getFileCallDataCount() {
+    return this.fileCallData.size;
+  },
+  clearFileCallData() {
+    this.fileCallData.clear();
+  },
   getFileHash: vi.fn(),
   setFileHash: vi.fn(),
   deleteFileHash: vi.fn(),
@@ -78,6 +96,7 @@ const createCache = () => ({
   ensureAnnIndex: vi.fn().mockResolvedValue(null),
   setLastIndexDuration: vi.fn(),
   setLastIndexStats: vi.fn(),
+  getFileHashKeys: vi.fn().mockReturnValue([]),
 });
 
 describe('index-codebase branch coverage focused', () => {

@@ -51,6 +51,8 @@ describe('Coverage Gap Filling', () => {
       save: vi.fn().mockResolvedValue(),
       ensureAnnIndex: vi.fn().mockResolvedValue(null),
       rebuildCallGraph: vi.fn(),
+      getFileHashKeys: vi.fn().mockReturnValue([]),
+      getFileCallDataKeys: vi.fn().mockReturnValue([]),
     };
     config = {
       embeddingModel: 'test-model',

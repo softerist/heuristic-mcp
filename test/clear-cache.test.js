@@ -65,7 +65,7 @@ describe('CacheClearer', () => {
 
       // Both should be empty
       expect(fixtures.cache.getVectorStore().length).toBe(0);
-      expect(fixtures.cache.fileHashes.size).toBe(0);
+      expect(fixtures.cache.getFileHashCount()).toBe(0);
     });
 
     it('should delete cache directory', async () => {
@@ -88,7 +88,7 @@ describe('CacheClearer', () => {
       // Simulate indexing in progress
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
-      fixtures.cache.fileHashes = new Map();
+      fixtures.cache.clearFileHashes();
 
       const indexPromise = fixtures.indexer.indexAll(true);
       expect(fixtures.indexer.isIndexing).toBe(true);
@@ -245,7 +245,7 @@ describe('Clear Cache Tool Handler', () => {
       // Simulate indexing
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
-      fixtures.cache.fileHashes = new Map();
+      fixtures.cache.clearFileHashes();
 
       const indexPromise = fixtures.indexer.indexAll(true);
       expect(fixtures.indexer.isIndexing).toBe(true);

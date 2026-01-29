@@ -50,7 +50,7 @@ describe('CodebaseIndexer', () => {
       // Clear cache first
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
-      fixtures.cache.fileHashes = new Map();
+      fixtures.cache.clearFileHashes();
 
       // Run indexing (measure time for basic performance sanity check)
       const { result, duration } = await measureTime(() => fixtures.indexer.indexAll(true));
@@ -96,7 +96,7 @@ describe('CodebaseIndexer', () => {
       // Clear for clean state
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
-      fixtures.cache.fileHashes = new Map();
+      fixtures.cache.clearFileHashes();
 
       // Start first indexing
       const promise1 = fixtures.indexer.indexAll(true);
@@ -115,7 +115,7 @@ describe('CodebaseIndexer', () => {
       // Clear cache to ensure indexing actually runs
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
-      fixtures.cache.fileHashes = new Map();
+      fixtures.cache.clearFileHashes();
 
       expect(fixtures.indexer.isIndexing).toBe(false);
 
@@ -252,7 +252,7 @@ describe('CodebaseIndexer', () => {
     it('should swallow ANN build errors in background when verbose', async () => {
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
-      fixtures.cache.fileHashes = new Map();
+      fixtures.cache.clearFileHashes();
       fixtures.config.verbose = true;
 
       const ensureAnnIndex = fixtures.cache.ensureAnnIndex;
@@ -366,7 +366,7 @@ describe('Index Codebase Tool Handler', () => {
       // Start first indexing
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
-      fixtures.cache.fileHashes = new Map();
+      fixtures.cache.clearFileHashes();
 
       const promise1 = IndexCodebaseFeature.handleToolCall(
         createMockRequest('b_index_codebase', { force: true }),

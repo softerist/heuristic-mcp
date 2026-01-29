@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { exec } from 'child_process';
 import util from 'util';
 import path from 'path';
@@ -8,6 +7,7 @@ import fsSync from 'fs';
 import { loadConfig } from '../lib/config.js';
 import { getLogFilePath } from '../lib/logging.js';
 import { clearStaleCaches } from '../lib/cache-utils.js';
+import { findMcpServerEntry, parseJsonc, upsertMcpServerEntryInText } from '../lib/settings-editor.js';
 
 const execPromise = util.promisify(exec);
 
@@ -285,7 +285,7 @@ async function setMcpServerEnabled(enabled) {
   const target = 'heuristic-mcp';
   let changed = 0;
 
-  for (const { name, path: configPath, settingsMode } of paths) {
+  for (const { name, path: configPath } of paths) {
     try {
       await fs.access(configPath);
     } catch {
@@ -294,12 +294,30 @@ async function setMcpServerEnabled(enabled) {
 
     try {
       const raw = await fs.readFile(configPath, 'utf-8');
-      const config = raw && raw.trim() ? JSON.parse(raw) : {};
-      const updated = settingsMode
-        ? updateSettingsMcpServer(config, target, enabled)
-        : updateMcpServers(config, target, enabled);
-      if (!updated) continue;
-      await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+      if (!raw || !raw.trim()) {
+        continue;
+      }
+      const parsed = parseJsonc(raw);
+      if (!parsed) {
+        console.warn(
+          `[Lifecycle] Skipping ${name} config: not valid JSON/JSONC (won't overwrite).`
+        );
+        continue;
+      }
+
+      const found = findMcpServerEntry(parsed, target);
+      if (!found || !found.entry || typeof found.entry !== 'object') {
+        continue;
+      }
+
+      const updatedEntry = { ...found.entry, disabled: !enabled };
+      const updatedText = upsertMcpServerEntryInText(raw, target, updatedEntry);
+      if (!updatedText) {
+        console.warn(`[Lifecycle] Failed to update ${name} config (unparseable layout).`);
+        continue;
+      }
+
+      await fs.writeFile(configPath, updatedText);
       changed++;
     } catch (err) {
       console.warn(`[Lifecycle] Failed to update ${name} config: ${err.message}`);
@@ -311,36 +329,6 @@ async function setMcpServerEnabled(enabled) {
       `[Lifecycle] MCP server ${enabled ? 'enabled' : 'disabled'} in ${changed} config file(s).`
     );
   }
-}
-
-function updateMcpServers(config, target, enabled) {
-  if (!config.mcpServers || !config.mcpServers[target]) return false;
-  config.mcpServers[target].disabled = !enabled;
-  return true;
-}
-
-function updateSettingsMcpServer(config, target, enabled) {
-  const candidateKeys = ['mcpServers', 'cline.mcpServers'];
-  let updated = false;
-  for (const key of candidateKeys) {
-    const current = getNestedValue(config, key);
-    if (current && current[target]) {
-      current[target].disabled = !enabled;
-      updated = true;
-    }
-  }
-  return updated;
-}
-
-function getNestedValue(obj, key) {
-  if (!obj || !key) return null;
-  const parts = key.split('.');
-  let current = obj;
-  for (const part of parts) {
-    if (!current || typeof current !== 'object') return null;
-    current = current[part];
-  }
-  return current;
 }
 
 function getMcpConfigPaths() {

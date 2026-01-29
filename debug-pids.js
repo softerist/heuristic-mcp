@@ -4,7 +4,7 @@ import util from 'util';
 const execPromise = util.promisify(exec);
 
 async function check() {
-  console.log('Checking processes...');
+  console.info('Checking processes...');
   try {
     const { stdout } = await execPromise(
       `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' } | Select-Object ProcessId, CommandLine, ParentProcessId | ConvertTo-Json"`
@@ -14,9 +14,9 @@ async function check() {
     
     for (const p of list) {
       if (p.CommandLine && (p.CommandLine.includes('heuristic-mcp') || p.CommandLine.includes('index.js'))) {
-        console.log(`PID: ${p.ProcessId}, Parent: ${p.ParentProcessId}`);
-        console.log(`CMD: ${p.CommandLine}`);
-        console.log('---');
+        console.info(`PID: ${p.ProcessId}, Parent: ${p.ParentProcessId}`);
+        console.info(`CMD: ${p.CommandLine}`);
+        console.info('---');
       }
     }
   } catch (err) {

@@ -31,7 +31,10 @@ describe('BinaryVectorStore smoke', () => {
       const loaded = await BinaryVectorStore.load(dir, { contentCacheEntries: 4 });
       expect(loaded.length).toBe(count);
       expect(loaded.dim).toBe(3);
-      expect(loaded.getContent(0)).toContain('line-0');
+      expect(await loaded.getContent(0)).toContain('line-0');
+
+      await store.close();
+      await loaded.close();
     });
   });
 });

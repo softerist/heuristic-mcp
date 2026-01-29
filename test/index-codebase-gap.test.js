@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CodebaseIndexer } from '../features/index-codebase.js';
 import * as utils from '../lib/utils.js';
 import fs from 'fs/promises';
-import path from 'path';
 
 // Mock dependencies
 vi.mock('fs/promises');
@@ -64,6 +63,8 @@ describe('CodebaseIndexer Gap Coverage', () => {
       fileHashes: new Map(),
       rebuildCallGraph: vi.fn(),
       setFileCallData: vi.fn(),
+      getFileHashKeys: vi.fn().mockReturnValue([]),
+      getFileCallDataKeys: vi.fn().mockReturnValue([]),
     };
 
     mockConfig = {

@@ -62,7 +62,7 @@ async function main() {
     // ignore
   }
 
-  console.log(JSON.stringify(stats, null, 2));
+  console.info(JSON.stringify(stats, null, 2));
 }
 
 main().catch((err) => {

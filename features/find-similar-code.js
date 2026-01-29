@@ -12,18 +12,12 @@ export class FindSimilarCode {
     this.config = config;
   }
 
-  getChunkContent(chunk) {
-    if (this.cache?.getChunkContent) {
-      return this.cache.getChunkContent(chunk);
-    }
-    return chunk?.content ?? '';
+  async getChunkContent(chunk) {
+    return this.cache.getChunkContent(chunk);
   }
 
   getChunkVector(chunk) {
-    if (this.cache?.getChunkVector) {
-      return this.cache.getChunkVector(chunk);
-    }
-    return chunk?.vector ?? null;
+    return this.cache.getChunkVector(chunk);
   }
 
   getAnnCandidateCount(maxResults, totalChunks) {
@@ -115,9 +109,8 @@ export class FindSimilarCode {
           if (similarity >= minSimilarity) {
             // Deduplicate against input
             if (normalizedInput) {
-              const normalizedChunk = this.getChunkContent(chunk)
-                .trim()
-                .replace(/\s+/g, ' ');
+              const content = await this.getChunkContent(chunk);
+              const normalizedChunk = content.trim().replace(/\s+/g, ' ');
               if (normalizedChunk === normalizedInput) continue;
             }
             
@@ -135,12 +128,14 @@ export class FindSimilarCode {
     if (usedAnn && filteredResults.length < maxResults) {
       filteredResults = await scoreAndFilter(vectorStore);
     }
-    const results = filteredResults.slice(0, maxResults).map((chunk) => {
-      if (chunk.content === undefined || chunk.content === null) {
-        return { ...chunk, content: this.getChunkContent(chunk) };
-      }
-      return chunk;
-    });
+    const results = await Promise.all(
+      filteredResults.slice(0, maxResults).map(async (chunk) => {
+        if (chunk.content === undefined || chunk.content === null) {
+          return { ...chunk, content: await this.getChunkContent(chunk) };
+        }
+        return chunk;
+      }),
+    );
 
     return {
       results,
@@ -148,15 +143,15 @@ export class FindSimilarCode {
     };
   }
 
-  formatResults(results) {
+  async formatResults(results) {
     if (results.length === 0) {
       return 'No similar code patterns found in the codebase.';
     }
 
-    return results
-      .map((r, idx) => {
+    const formatted = await Promise.all(
+      results.map(async (r, idx) => {
         const relPath = path.relative(this.config.searchDirectory, r.file);
-        const content = r.content ?? this.getChunkContent(r);
+        const content = r.content ?? await this.getChunkContent(r);
         return (
           `## Similar Code ${idx + 1} (Similarity: ${(r.similarity * 100).toFixed(1)}%)\n` +
           `**File:** \`${relPath}\`\n` +
@@ -168,8 +163,10 @@ export class FindSimilarCode {
           '\n' +
           '```\n'
         );
-      })
-      .join('\n');
+      }),
+    );
+
+    return formatted.join('\n');
   }
 }
 
@@ -227,7 +224,7 @@ export async function handleToolCall(request, findSimilarCode) {
     };
   }
 
-  const formattedText = findSimilarCode.formatResults(results);
+  const formattedText = await findSimilarCode.formatResults(results);
 
   return {
     content: [{ type: 'text', text: formattedText }],

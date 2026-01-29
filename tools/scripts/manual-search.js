@@ -21,12 +21,12 @@ async function runSearch(query) {
   };
 
   const searcher = new HybridSearch(embedder, cache, config);
-  console.log(`\n--- Searching for: "${query}" ---`);
+  console.info(`\n--- Searching for: "${query}" ---`);
   const { results } = await searcher.search(query, 5);
 
   results.forEach((r, i) => {
-    console.log(`[${i+1}] ${r.file}:${r.startLine}-${r.endLine} (Score: ${r.score.toFixed(4)})`);
-    console.log(`    Content: ${r.content.substring(0, 200).replace(/\n/g, ' ')}...`);
+    console.info(`[${i+1}] ${r.file}:${r.startLine}-${r.endLine} (Score: ${r.score.toFixed(4)})`);
+    console.info(`    Content: ${r.content.substring(0, 200).replace(/\n/g, ' ')}...`);
   });
 }
 

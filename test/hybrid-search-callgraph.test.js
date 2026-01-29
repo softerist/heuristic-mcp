@@ -19,6 +19,10 @@ describe('HybridSearch Final Coverage', () => {
         getVectorStore: () => vectorStore,
         queryAnn: async () => null,
         getRelatedFiles: async () => new Map(),
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       const config = {
         annEnabled: false,
@@ -54,6 +58,10 @@ describe('HybridSearch Final Coverage', () => {
         getVectorStore: () => vectorStore,
         queryAnn: async () => null,
         getRelatedFiles: async () => new Map(),
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       const config = {
         annEnabled: false,
@@ -112,6 +120,10 @@ describe('HybridSearch Final Coverage', () => {
         getVectorStore: () => vectorStore,
         queryAnn: async () => null,
         getRelatedFiles: async () => relatedMap,
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       
       const config = {
@@ -161,7 +173,11 @@ describe('HybridSearch Final Coverage', () => {
       const cache = {
         getVectorStore: () => vectorStore,
         queryAnn: async () => [0],
-        getRelatedFiles: async () => new Map()
+        getRelatedFiles: async () => new Map(),
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       
       const config = {
@@ -190,7 +206,11 @@ describe('HybridSearch Final Coverage', () => {
       const cache = {
         getVectorStore: () => vectorStore,
         queryAnn: async () => [0],
-        getRelatedFiles: async () => new Map()
+        getRelatedFiles: async () => new Map(),
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       const config = {
         annEnabled: true,
@@ -213,7 +233,11 @@ describe('HybridSearch Final Coverage', () => {
       const cache = {
         getVectorStore: () => vectorStore,
         queryAnn: async () => [0],
-        getRelatedFiles: async () => new Map()
+        getRelatedFiles: async () => new Map(),
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       const config = {
         annEnabled: true,

@@ -18,6 +18,7 @@ describe('HybridSearch Branch Coverage', () => {
     const embedder = vi.fn();
     const cache = {
       getVectorStore: () => [],
+      getStoreSize: () => 0,
     };
     const hybrid = new HybridSearch(embedder, cache, config);
 
@@ -62,6 +63,10 @@ describe('HybridSearch Branch Coverage', () => {
       getVectorStore: () => vectorStore,
       queryAnn: async () => null,
       getRelatedFiles: async () => new Map(),
+      getStoreSize: () => vectorStore.length,
+      getVector: (idx) => vectorStore[idx]?.vector,
+      getChunk: (idx) => vectorStore[idx],
+      getChunkContent: (idx) => vectorStore[idx]?.content,
     };
     const config = {
       annEnabled: false,
@@ -97,6 +102,10 @@ describe('HybridSearch Branch Coverage', () => {
       getVectorStore: () => vectorStore,
       queryAnn: async () => null,
       getRelatedFiles: vi.fn(),
+      getStoreSize: () => vectorStore.length,
+      getVector: (idx) => vectorStore[idx]?.vector,
+      getChunk: (idx) => vectorStore[idx],
+      getChunkContent: (idx) => vectorStore[idx]?.content,
     };
     const config = {
       annEnabled: false,
@@ -128,6 +137,10 @@ describe('HybridSearch Branch Coverage', () => {
       getVectorStore: () => vectorStore,
       queryAnn: async () => [0], // ANN finds it
       getRelatedFiles: async () => new Map(),
+      getStoreSize: () => vectorStore.length,
+      getVector: (idx) => vectorStore[idx]?.vector,
+      getChunk: (idx) => vectorStore[idx],
+      getChunkContent: (idx) => vectorStore[idx]?.content,
     };
     const config = {
       annEnabled: true,
@@ -169,6 +182,10 @@ describe('HybridSearch Branch Coverage', () => {
       getVectorStore: () => vectorStore,
       queryAnn: async () => [0], // ANN finds it!
       getRelatedFiles: async () => new Map(),
+      getStoreSize: () => vectorStore.length,
+      getVector: (idx) => vectorStore[idx]?.vector,
+      getChunk: (idx) => vectorStore[idx],
+      getChunkContent: (idx) => vectorStore[idx]?.content,
     };
     const config = {
       annEnabled: true,

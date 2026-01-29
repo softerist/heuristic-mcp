@@ -24,6 +24,10 @@ describe('HybridSearch extra coverage', () => {
       getVectorStore: () => vectorStore,
       queryAnn: async () => [0, 1],
       getRelatedFiles: async () => new Map(),
+      getStoreSize: () => vectorStore.length,
+      getVector: (idx) => vectorStore[idx]?.vector,
+      getChunk: (idx) => vectorStore[idx],
+      getChunkContent: (idx) => vectorStore[idx]?.content,
     };
 
     const config = {
@@ -57,6 +61,10 @@ describe('HybridSearch extra coverage', () => {
       getVectorStore: () => vectorStore,
       queryAnn: async () => [0, 1],
       getRelatedFiles: async () => new Map(),
+      getStoreSize: () => vectorStore.length,
+      getVector: (idx) => vectorStore[idx]?.vector,
+      getChunk: (idx) => vectorStore[idx],
+      getChunkContent: (idx) => vectorStore[idx]?.content,
     };
 
     const config = {

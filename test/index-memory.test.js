@@ -61,6 +61,15 @@ vi.mock('../lib/cache.js', () => ({
     }
     setVectorStore() {}
     fileHashes = new Map();
+    getFileHashKeys() {
+      return Array.from(this.fileHashes.keys());
+    }
+    clearFileHashes() {
+      this.fileHashes.clear();
+    }
+    getFileHashCount() {
+      return this.fileHashes.size;
+    }
     clearCallGraphData() {}
     pruneCallGraphData() {}
     getVectorStore() {

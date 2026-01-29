@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable no-console */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { stop, start, status, logs } from './features/lifecycle.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -23,7 +22,6 @@ import { fileURLToPath } from 'url';
 const require = createRequire(import.meta.url);
 const packageJson = require('./package.json');
 
-const BUILD_SIGNATURE = `[Server] Local build: ${fileURLToPath(import.meta.url)}`;
 
 import { loadConfig, getGlobalCacheDir } from './lib/config.js';
 import { clearStaleCaches } from './lib/cache-utils.js';

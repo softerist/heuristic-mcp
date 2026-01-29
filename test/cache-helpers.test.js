@@ -106,7 +106,7 @@ describe('EmbeddingsCache Helper Methods', () => {
       cache.setFileCallData('a.js', {});
       await cache.clearCallGraphData({ removeFile: true });
 
-      expect(cache.fileCallData.size).toBe(0);
+      expect(cache.getFileCallDataCount()).toBe(0);
       expect(fs.rm).toHaveBeenCalledWith(
         expect.stringContaining('call-graph.json'),
         expect.any(Object)
@@ -148,7 +148,7 @@ describe('EmbeddingsCache Helper Methods', () => {
       const { EmbeddingsCache } = await import('../lib/cache.js');
       const cache = new EmbeddingsCache({ ...config, verbose: true });
 
-      cache.fileCallData.set('f.js', {});
+      cache.setFileCallData('f.js', {});
 
       // Spy on console to verify success
       const logSpy = vi.spyOn(console, 'info');
@@ -183,7 +183,7 @@ describe('EmbeddingsCache Helper Methods', () => {
     it('getRelatedFiles should rebuild graph if missing', async () => {
       const { EmbeddingsCache } = await import('../lib/cache.js');
       const cache = new EmbeddingsCache(config);
-      cache.fileCallData.set('f.js', {});
+      cache.setFileCallData('f.js', {});
 
       const result = await cache.getRelatedFiles(['sym']);
 

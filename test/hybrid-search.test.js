@@ -23,12 +23,12 @@ describe('HybridSearch', () => {
   let fixtures;
 
   beforeAll(async () => {
-    fixtures = await createTestFixtures({ workerThreads: 1 });
+    fixtures = await createTestFixtures({ workerThreads: 1, verbose: true });
 
     // Ensure we have indexed content
     await clearTestCache(fixtures.config);
     fixtures.cache.setVectorStore([]);
-    fixtures.cache.fileHashes = new Map();
+    fixtures.cache.clearFileHashes();
     await fixtures.indexer.indexAll(true);
   });
 
@@ -97,10 +97,16 @@ describe('HybridSearch', () => {
     it('should return helpful message when index is empty', async () => {
       // Create a search instance with empty cache
       const emptyCache = {
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
         getVectorStore: () => [],
         setVectorStore: () => {},
         getFileHash: () => null,
         setFileHash: () => {},
+        getStoreSize: () => 0,
+        getVector: () => null,
+        getChunk: () => null,
       };
 
       const emptySearch = new HybridSearch(fixtures.embedder, emptyCache, fixtures.config);
@@ -114,7 +120,7 @@ describe('HybridSearch', () => {
   describe('Result Formatting', () => {
     it('should format results as markdown', async () => {
       const { results } = await fixtures.hybridSearch.search('function', 3);
-      const formatted = fixtures.hybridSearch.formatResults(results);
+      const formatted = await fixtures.hybridSearch.formatResults(results);
 
       // Should contain markdown elements
       expect(formatted).toContain('## Result');
@@ -124,15 +130,15 @@ describe('HybridSearch', () => {
       expect(formatted).toContain('Relevance:');
     });
 
-    it('should return no matches message for empty results', () => {
-      const formatted = fixtures.hybridSearch.formatResults([]);
+    it('should return no matches message for empty results', async () => {
+      const formatted = await fixtures.hybridSearch.formatResults([]);
 
       expect(formatted).toContain('No matching code found');
     });
 
     it('should include relative file paths', async () => {
       const { results } = await fixtures.hybridSearch.search('export', 1);
-      const formatted = fixtures.hybridSearch.formatResults(results);
+      const formatted = await fixtures.hybridSearch.formatResults(results);
 
       // Should not contain absolute paths in the output
       expect(formatted).not.toContain(fixtures.config.searchDirectory);
@@ -163,9 +169,15 @@ describe('HybridSearch', () => {
   describe('ANN Candidate Handling', () => {
     it('should honor ANN min/max candidate settings', () => {
       const cache = {
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
         getVectorStore: () => [],
         queryAnn: async () => null,
         getRelatedFiles: async () => new Map(),
+        getStoreSize: () => 0,
+        getVector: () => null,
+        getChunk: () => null,
       };
       const config = {
         annEnabled: true,
@@ -187,9 +199,15 @@ describe('HybridSearch', () => {
 
     it('should use default ANN candidate settings when unset', () => {
       const cache = {
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
         getVectorStore: () => [],
         queryAnn: async () => null,
         getRelatedFiles: async () => new Map(),
+        getStoreSize: () => 0,
+        getVector: () => null,
+        getChunk: () => null,
       };
       const config = {
         annEnabled: true,
@@ -224,9 +242,16 @@ describe('HybridSearch', () => {
         },
       ];
       const cache = {
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
         getVectorStore: () => vectorStore,
         queryAnn: async () => [0, 0, 1],
         getRelatedFiles: async () => new Map(),
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       const config = {
         annEnabled: true,
@@ -268,9 +293,16 @@ describe('HybridSearch', () => {
         },
       ];
       const cache = {
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
         getVectorStore: () => vectorStore,
         queryAnn: async () => [0],
         getRelatedFiles: async () => new Map(),
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       const config = {
         annEnabled: true,
@@ -318,9 +350,16 @@ describe('HybridSearch', () => {
         },
       ];
       const cache = {
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
         getVectorStore: () => vectorStore,
         queryAnn: async () => [0, 0],
         getRelatedFiles: async () => new Map(),
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       const config = {
         annEnabled: true,
@@ -373,9 +412,16 @@ describe('HybridSearch', () => {
         },
       ];
       const cache = {
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
         getVectorStore: () => vectorStore,
         queryAnn: async () => [0], // ANN only finds the first one
         getRelatedFiles: async () => new Map(),
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       const config = {
         annEnabled: true,
@@ -417,9 +463,16 @@ describe('HybridSearch', () => {
         },
       ];
       const cache = {
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
         getVectorStore: () => vectorStore,
         queryAnn: async () => [0],
         getRelatedFiles: async () => new Map(),
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       const config = {
         annEnabled: true,
@@ -466,9 +519,16 @@ describe('HybridSearch', () => {
         },
       ];
       const cache = {
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
         getVectorStore: () => vectorStore,
         queryAnn: async () => [0],
         getRelatedFiles: async () => new Map(),
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       const config = {
         annEnabled: true,
@@ -512,9 +572,16 @@ describe('HybridSearch', () => {
         },
       ];
       const cache = {
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
         getVectorStore: () => vectorStore,
         queryAnn: async () => null,
         getRelatedFiles: async () => new Map(),
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       const config = {
         annEnabled: false,
@@ -546,9 +613,16 @@ describe('HybridSearch', () => {
         },
       ];
       const cache = {
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
         getVectorStore: () => vectorStore,
         queryAnn: async () => null,
         getRelatedFiles: async () => new Map(),
+        getStoreSize: () => vectorStore.length,
+        getVector: (idx) => vectorStore[idx]?.vector,
+        getChunk: (idx) => vectorStore[idx],
+        getChunkContent: (idx) => vectorStore[idx]?.content,
       };
       const config = {
         annEnabled: false,
@@ -653,9 +727,15 @@ describe('Hybrid Search Tool Handler', () => {
 
     it('should return message when no indexed data exists', async () => {
       const emptyCache = {
+        startRead: () => {},
+        endRead: () => {},
+        waitForReaders: async () => {},
         getVectorStore: () => [],
         queryAnn: async () => null,
         getRelatedFiles: async () => new Map(),
+        getStoreSize: () => 0,
+        getVector: () => null,
+        getChunk: () => null,
       };
       const emptySearch = new HybridSearch(fixtures.embedder, emptyCache, fixtures.config);
       const request = createMockRequest('a_semantic_search', {

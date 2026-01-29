@@ -65,10 +65,11 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
       callGraphEnabled: true,
     };
 
-    cache = {
+    const cacheMock = {
       save: vi.fn(),
       getVectorStore: vi.fn().mockReturnValue([]),
-      setVectorStore: vi.fn(), // Added missing mock
+      setVectorStore: vi.fn(),
+      reset: vi.fn(),
       fileHashes: new Map(),
       fileCallData: new Map(),
       getFileHash: vi.fn(),
@@ -76,6 +77,7 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
       removeFileFromStore: vi.fn(),
       addToStore: vi.fn(),
       setFileCallData: vi.fn(),
+      setFileCallDataEntries: vi.fn(),
       clearCallGraphData: vi.fn(),
       pruneCallGraphData: vi.fn().mockReturnValue(5), // Cover line 612 (if > 0)
       rebuildCallGraph: vi.fn(),
@@ -83,7 +85,11 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
       deleteFileHash: vi.fn(),
       setLastIndexDuration: vi.fn(),
       setLastIndexStats: vi.fn(),
+      setFileHashes: vi.fn((map) => { cacheMock.fileHashes = map; }),
+      getFileHashKeys: vi.fn().mockImplementation(() => [...cacheMock.fileHashes.keys()]),
+      getFileCallDataKeys: vi.fn().mockReturnValue([]),
     };
+    cache = cacheMock;
 
     embedder = vi.fn().mockResolvedValue({ data: [] });
 
@@ -144,7 +150,7 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
     const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     // Mock cached files that are NOT in discovered files
-    cache.fileHashes = new Map([['/test/deleted.js', 'hash']]);
+    cache.setFileHashes(new Map([['/test/deleted.js', 'hash']]));
     cache.fileCallData = new Map([['/test/deleted.js', {}]]);
 
     // discoverFiles returns ["/test/file1.js"] (mocked in beforeEach)
@@ -165,7 +171,7 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
     cache.getVectorStore.mockReturnValue([{ file: '/test/file1.js' }]);
     cache.fileCallData = new Map(); // Empty, so file1.js is missing data
     // Use fixed-hash to match mock
-    cache.fileHashes = new Map([['/test/file1.js', 'fixed-hash']]);
+    cache.setFileHashes(new Map([['/test/file1.js', 'fixed-hash']]));
     cache.getFileHash.mockReturnValue('fixed-hash');
 
     // Mock fs for re-indexing check

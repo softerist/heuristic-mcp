@@ -151,7 +151,7 @@ describe('EmbeddingsCache', () => {
           file: filePath,
           startLine: 1,
           endLine: 2,
-          content: 'console.log(\"hi\")',
+          content: 'console.log("hi")',
           vector: new Float32Array([0.1, 0.2]),
         },
       ];
@@ -164,8 +164,11 @@ describe('EmbeddingsCache', () => {
 
       const store = reloaded.getVectorStore();
       expect(store.length).toBe(1);
-      expect(reloaded.getChunkContent(store[0])).toBe('console.log(\"hi\")');
+      await expect(reloaded.getChunkContent(store[0])).resolves.toBe('console.log("hi")');
       expect(reloaded.getChunkVector(store[0])).toBeInstanceOf(Float32Array);
+      
+      await reloaded.close();
+      await cache.close();
     });
   });
 
@@ -207,6 +210,8 @@ describe('EmbeddingsCache', () => {
       await expect(fs.readFile(recordsPath)).resolves.toBeDefined();
       await expect(fs.readFile(contentPath)).resolves.toBeDefined();
       await expect(fs.readFile(filesPath)).resolves.toBeDefined();
+      
+      await cache.close();
     });
   });
 

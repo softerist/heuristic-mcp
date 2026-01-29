@@ -74,7 +74,7 @@ describe('Master Coverage Maximizer', () => {
 
     it('targets getRelatedFiles missing graph logic (line 602)', async () => {
       const cache = new EmbeddingsCache({ callGraphEnabled: true });
-      cache.fileCallData.set('a.js', { definitions: [], calls: [] });
+      cache.setFileCallData('a.js', { definitions: [], calls: [] });
       cache.callGraph = null;
       // Force dynamic import to fail or not set callGraph
       const result = await cache.getRelatedFiles(['test']);

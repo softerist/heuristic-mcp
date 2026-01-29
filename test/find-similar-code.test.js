@@ -131,7 +131,7 @@ describe('FindSimilarCode', () => {
     expect(result.results.length).toBe(2);
   });
 
-  it('formats results with relative paths and code fences', () => {
+  it('formats results with relative paths and code fences', async () => {
     const embedder = makeEmbedder([1, 0]);
     const cache = { getVectorStore: () => [] };
     const config = { searchDirectory: 'C:/repo' };
@@ -146,19 +146,19 @@ describe('FindSimilarCode', () => {
       },
     ];
 
-    const formatted = tool.formatResults(results);
+    const formatted = await tool.formatResults(results);
 
     expect(formatted).toContain(path.normalize('src/example.js'));
     expect(formatted).toContain('```js');
   });
 
-  it('returns a message when formatting empty results', () => {
+  it('returns a message when formatting empty results', async () => {
     const embedder = makeEmbedder([1, 0]);
     const cache = { getVectorStore: () => [] };
     const config = { searchDirectory: 'C:/repo' };
     const tool = new FindSimilarCode(embedder, cache, config);
 
-    expect(tool.formatResults([])).toBe('No similar code patterns found in the codebase.');
+    await expect(tool.formatResults([])).resolves.toBe('No similar code patterns found in the codebase.');
   });
 
   it('handles tool calls with messages', async () => {

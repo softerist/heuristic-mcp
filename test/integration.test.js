@@ -35,7 +35,7 @@ describe('Concurrent Indexing', () => {
     // Clear cache for clean state
     await clearTestCache(fixtures.config);
     fixtures.cache.setVectorStore([]);
-    fixtures.cache.fileHashes = new Map();
+    fixtures.cache.clearFileHashes();
     // Restore mocks
     vi.restoreAllMocks();
   });
