@@ -10,38 +10,25 @@ import { fileURLToPath } from 'url';
 import { smartChunk, hashContent } from '../lib/utils.js';
 import { extractCallData } from '../lib/call-graph.js';
 
+import ignore from 'ignore';
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function globToRegExp(pattern) {
-  let regex = '^';
-  for (let i = 0; i < pattern.length; ) {
-    const char = pattern[i];
-    if (char === '*') {
-      if (pattern[i + 1] === '*') {
-        if (pattern[i + 2] === '/') {
-          regex += '(?:.*/)?';
-          i += 3;
-        } else {
-          regex += '.*';
-          i += 2;
-        }
-      } else {
-        regex += '[^/]*';
-        i += 1;
-      }
-      continue;
-    }
-    if (char === '?') {
-      regex += '[^/]';
-      i += 1;
-      continue;
-    }
-    regex += escapeRegExp(char);
-    i += 1;
+  // Simple glob-to-regex implementation for basic excludes
+  // Support for **/ pattern
+  let regex = pattern
+    .replace(/\*\*\//g, '(?:.*/)?')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  
+  if (!regex.startsWith('(?:.*/)?')) {
+    regex = `^${regex}$`;
+  } else {
+     regex = `^${regex}$`;
   }
-  regex += '$';
   return new RegExp(regex);
 }
 
@@ -55,11 +42,12 @@ function toFloat32Array(vector) {
   return new Float32Array(vector);
 }
 
+// NOTE: We now use 'ignore' package for .gitignore, so we only use this for config.excludePatterns
 function buildExcludeMatchers(patterns) {
-  return [...new Set(patterns)].filter(Boolean).map((pattern) => ({
-    matchBase: !pattern.includes('/'),
-    regex: globToRegExp(pattern),
-  }));
+   return patterns.map(p => {
+       // simple checks to detect if it is a folder or file pattern
+       return p;
+   });
 }
 
 function matchesExcludePatterns(filePath, matchers) {
@@ -93,8 +81,10 @@ export class CodebaseIndexer {
     this.workerReady = [];
     this.isIndexing = false;
     this.processingWatchEvents = false;
+    this.processingWatchEvents = false;
     this.pendingWatchEvents = new Map();
-    this.excludeMatchers = buildExcludeMatchers(this.config.excludePatterns || []);
+    this.excludeMatchers = this.config.excludePatterns || [];
+    this.gitignore = ignore();
     this.workerFailureCount = 0;
     this.workersDisabledUntil = 0;
     this.workerCircuitOpen = false;
@@ -299,8 +289,62 @@ export class CodebaseIndexer {
     this.workerReady = [];
   }
 
+  async loadGitignore() {
+      try {
+          const gitignorePath = path.join(this.config.searchDirectory, '.gitignore');
+          const content = await fs.readFile(gitignorePath, 'utf8');
+          this.gitignore = ignore().add(content);
+          if (this.config.verbose) console.info('[Indexer] Loaded .gitignore rules');
+      } catch (e) {
+          // No .gitignore or error reading it
+          this.gitignore = ignore();
+      }
+  }
+
   isExcluded(filePath) {
-    return matchesExcludePatterns(filePath, this.excludeMatchers);
+      // 1. Check strict config excludes (node_modules, etc)
+      // We use the ignore package for this too, adding them as rules
+      const ig = ignore().add(this.config.excludePatterns);
+      const relative = path.relative(this.config.searchDirectory, filePath);
+      
+      if (ig.ignores(relative)) return true;
+      
+      // 2. Check .gitignore
+      if (this.gitignore.ignores(relative)) return true;
+
+      return false;
+  }
+
+  async replaceDeadWorker(index) {
+     if (this.config.verbose) console.info(`[Indexer] Replacing dead worker at index ${index}...`);
+     const workerPath = path.join(__dirname, '../lib/embedding-worker.js');
+     
+     const newWorker = new Worker(workerPath, {
+          workerData: {
+            workerId: index,
+            embeddingModel: this.config.embeddingModel,
+            verbose: this.config.verbose,
+            numThreads: 1,
+          },
+     });
+
+     // Wait for ready
+     await new Promise((resolve, reject) => {
+         const timeout = setTimeout(() => reject(new Error('Timeout')), 30000);
+         newWorker.once('message', (msg) => {
+            if (msg.type === 'ready') {
+                clearTimeout(timeout);
+                resolve();
+            }
+         });
+         newWorker.once('error', (err) => {
+             clearTimeout(timeout);
+             reject(err);
+         });
+     });
+     
+     this.workers[index] = newWorker;
+     if (this.config.verbose) console.info(`[Indexer] Worker ${index} respawned successfully`);
   }
 
   /**
@@ -406,6 +450,11 @@ export class CodebaseIndexer {
             // ignore terminate errors
           }
           this.workers[workerIndex] = null;
+          
+          // Attempt to replace the dead worker asynchronously
+          this.replaceDeadWorker(workerIndex).catch(err => {
+             console.warn(`[Indexer] Failed to replace worker ${workerIndex}: ${err.message}`);
+          });
         };
 
         const handleTimeout = (label) => {
@@ -760,38 +809,31 @@ export class CodebaseIndexer {
     const extensions = new Set(this.config.fileExtensions.map((ext) => `.${ext}`));
     const allowedFileNames = new Set(this.config.fileNames || []);
 
-    // Extract directory names from glob patterns in config.excludePatterns
-    // Patterns like "**/node_modules/**" -> "node_modules"
-    const excludeDirs = new Set();
-    for (const pattern of this.config.excludePatterns) {
-      // Extract directory names from glob patterns
-      const match = pattern.match(/\*\*\/([^/*]+)\/?\*?\*?$/);
-      if (match) {
-        excludeDirs.add(match[1]);
-      }
-      // Also handle patterns like "**/dirname/**"
-      const match2 = pattern.match(/\*\*\/([^/*]+)\/\*\*$/);
-      if (match2) {
-        excludeDirs.add(match2[1]);
-      }
-    }
+    // Load .gitignore before discovery
+    await this.loadGitignore();
 
+    // Use ignore package for config patterns too
+    const configIgnore = ignore().add(this.config.excludePatterns);
     // Always exclude cache directory
-    excludeDirs.add('.smart-coding-cache');
-
-    if (this.config.verbose) {
-      console.info(`[Indexer] Using ${excludeDirs.size} exclude directories from config`);
-    }
+    configIgnore.add('.smart-coding-cache');
+    configIgnore.add(this.config.cacheDirectory ? path.relative(this.config.searchDirectory, this.config.cacheDirectory) : '');
 
     const api = new fdir()
       .withFullPaths()
-      .exclude((dirName) => excludeDirs.has(dirName))
-      .filter(
-        (filePath) =>
-          (extensions.has(path.extname(filePath)) ||
-            allowedFileNames.has(path.basename(filePath))) &&
-          !this.isExcluded(filePath)
-      )
+      .filter((filePath) => {
+          const relative = path.relative(this.config.searchDirectory, filePath);
+          
+          // Check config excludes
+          if (configIgnore.ignores(relative)) return false;
+
+          // Check .gitignore
+          if (this.gitignore.ignores(relative)) return false;
+
+          // Check extensions/filenames
+          const base = path.basename(filePath);
+          const ext = path.extname(filePath);
+          return (extensions.has(ext) || allowedFileNames.has(base));
+      })
       .crawl(this.config.searchDirectory);
 
     const files = await api.withPromise();
