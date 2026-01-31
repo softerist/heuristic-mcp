@@ -3,6 +3,7 @@
     "heuristic-mcp": {
       "command": "<rest_of_the_path>\\nodejs\\node.exe",
       "args": [
+        "--expose-gc",
         "<rest_of_the_path>\\heuristic-mcp\\index.js",
         "--workspace",
         "<rest_of_the_path>\\heuristic-mcp"
