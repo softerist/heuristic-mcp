@@ -260,3 +260,4 @@ describe('register', () => {
     expect(fsMock.writeFileSync).toHaveBeenCalled();
   });
 });
+

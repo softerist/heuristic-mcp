@@ -91,3 +91,4 @@ describe('CodebaseIndexer RAM Throttling', () => {
     expect(activeWorkers).toBe(1); // 2GB / ~1.5GB = 1 worker
   });
 });
+

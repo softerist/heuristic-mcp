@@ -129,3 +129,4 @@ describe('Hashing', () => {
     expect(hash).not.toBe(hashContent('goodbye'));
   });
 });
+

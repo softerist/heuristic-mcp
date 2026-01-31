@@ -353,3 +353,4 @@ describe('CodebaseIndexer watcher', () => {
     });
   });
 });
+

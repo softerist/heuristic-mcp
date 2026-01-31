@@ -188,3 +188,4 @@ describe('EmbeddingsCache JSON worker parsing', () => {
     expect(Worker).toHaveBeenCalled();
   });
 });
+

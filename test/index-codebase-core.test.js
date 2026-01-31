@@ -1030,3 +1030,4 @@ describe('index-codebase branch coverage focused', () => {
     await indexer.indexAll(false);
   });
 });
+

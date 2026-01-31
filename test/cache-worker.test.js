@@ -100,3 +100,4 @@ describe('Cache Worker Termination', () => {
         expect(terminateCatchCalled).toBe(true);
     });
 });
+

@@ -277,3 +277,4 @@ describe('Tool Handler Response Quality', () => {
     expect(result.content[0].text).toContain('Please wait');
   });
 });
+

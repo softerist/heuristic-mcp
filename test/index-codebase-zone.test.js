@@ -257,3 +257,4 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
       fixtures.indexer.isIndexing = false;
   });
 });
+

@@ -539,3 +539,4 @@ describe('lifecycle', () => {
     expect(fatalError).toBe(false);
   });
 });
+

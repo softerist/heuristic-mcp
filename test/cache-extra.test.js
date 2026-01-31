@@ -298,3 +298,4 @@ describe('EmbeddingsCache additional coverage', () => {
     expect(cache.vectorStore).toEqual({ not: 'an array' });
   });
 });
+

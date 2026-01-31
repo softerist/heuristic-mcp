@@ -423,3 +423,4 @@ describe('Global Cache Directory', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 });
+

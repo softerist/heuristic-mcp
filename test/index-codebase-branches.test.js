@@ -584,3 +584,4 @@ describe('CodebaseIndexer Branch Coverage', () => {
     );
   });
 });
+

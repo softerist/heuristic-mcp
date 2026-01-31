@@ -19,7 +19,7 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   StdioServerTransport: class MockTransport {},
 }));
 
-vi.mock('@xenova/transformers', () => ({
+vi.mock('@huggingface/transformers', () => ({
   pipeline: vi.fn().mockResolvedValue({}),
   env: {
     backends: {
@@ -218,3 +218,4 @@ describe('Index.js Memory Logging', () => {
     // but we can verify the COUNT of calls.
   });
 });
+

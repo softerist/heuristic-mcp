@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@xenova/transformers', () => ({
+vi.mock('@huggingface/transformers', () => ({
   pipeline: vi.fn(),
   env: {
     backends: {
@@ -21,7 +21,7 @@ vi.mock('worker_threads', () => ({
   },
 }));
 
-import { pipeline } from '@xenova/transformers';
+import { pipeline } from '@huggingface/transformers';
 import { parentPort } from 'worker_threads';
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -270,3 +270,4 @@ describe('embedding-worker coverage', () => {
     expect(pipeline).toHaveBeenCalledTimes(1);
   });
 });
+

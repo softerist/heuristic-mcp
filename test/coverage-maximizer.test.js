@@ -234,3 +234,4 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
     expect(result.content[0].text).toContain('Files processed this run: 5');
   });
 });
+

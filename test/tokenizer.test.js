@@ -156,7 +156,7 @@ describe('Chunking Parameters', () => {
 describe('Integration: Token Estimation Accuracy', () => {
   it('should estimate reasonable tokens for typical code chunks', () => {
     const typicalCodeChunk = `
-      import { pipeline } from '@xenova/transformers';
+      import { pipeline } from '@huggingface/transformers';
       
       export class MyClass {
         constructor(config) {
@@ -185,3 +185,4 @@ describe('Integration: Token Estimation Accuracy', () => {
     expect(estimateTokens(safeChunk)).toBeLessThanOrEqual(limit);
   });
 });
+

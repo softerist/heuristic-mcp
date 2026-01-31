@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { pipeline } from '@xenova/transformers';
+import { pipeline } from '@huggingface/transformers';
 import { dotSimilarity } from '../lib/utils.js';
 import { loadConfig } from '../lib/config.js';
 
@@ -298,3 +298,4 @@ describe('Local Embedding Model', () => {
     });
   });
 });
+

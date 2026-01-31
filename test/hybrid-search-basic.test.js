@@ -60,3 +60,4 @@ describe('HybridSearch coverage', () => {
     expect(results.map(r => r.file).sort()).toEqual(['duplicate.js', 'new.js']);
   });
 });
+

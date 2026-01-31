@@ -114,3 +114,4 @@ describe('utils.js extra coverage', () => {
         // instead of breaking via 'else { break }'.
       });
     });
+

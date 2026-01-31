@@ -114,3 +114,4 @@ describe('Ultra Maximizer', () => {
     });
   });
 });
+

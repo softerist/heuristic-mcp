@@ -4,14 +4,14 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('@xenova/transformers', () => ({
+vi.mock('@huggingface/transformers', () => ({
   pipeline: vi.fn(async () => async () => ({
     data: new Float32Array([1, 0, 0]),
   })),
 }));
 
 import fs from 'fs/promises';
-import { pipeline } from '@xenova/transformers';
+import { pipeline } from '@huggingface/transformers';
 import { createTestFixtures, getEmbedder, clearTestCache, waitFor } from './helpers.js';
 
 describe('Test helpers', () => {
@@ -44,3 +44,4 @@ describe('Test helpers', () => {
     expect(result).toBe(false);
   });
 });
+

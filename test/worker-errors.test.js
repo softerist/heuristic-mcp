@@ -94,3 +94,4 @@ maybeDescribe('Worker Error Handling', () => {
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to create worker'));
   });
 });
+

@@ -117,3 +117,4 @@ describe('CodebaseIndexer batch processing presets', () => {
     consoleSpy.mockRestore();
   });
 });
+

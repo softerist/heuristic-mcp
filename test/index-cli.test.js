@@ -50,7 +50,7 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => {
     ListToolsRequestSchema: listSchema,
   };
 });
-vi.mock('@xenova/transformers', () => ({
+vi.mock('@huggingface/transformers', () => ({
   pipeline: (...args) => pipelineMock(...args),
   env: {
     backends: {
@@ -518,3 +518,4 @@ describe('index.js CLI coverage', () => {
     expect(hasCacheSaved).toBe(false);
   });
 });
+

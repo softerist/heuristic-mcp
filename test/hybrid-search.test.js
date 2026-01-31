@@ -654,3 +654,4 @@ describe('Hybrid Search Tool Handler', () => {
     });
   });
 });
+

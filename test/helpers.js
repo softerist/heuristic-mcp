@@ -8,7 +8,7 @@ import { EmbeddingsCache } from '../lib/cache.js';
 import { CodebaseIndexer } from '../features/index-codebase.js';
 import { CacheClearer } from '../features/clear-cache.js';
 import { HybridSearch } from '../features/hybrid-search.js';
-import { pipeline } from '@xenova/transformers';
+import { pipeline } from '@huggingface/transformers';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -264,3 +264,4 @@ export async function measureTime(fn) {
   const duration = Date.now() - start;
   return { result, duration };
 }
+

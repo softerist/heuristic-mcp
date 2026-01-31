@@ -200,3 +200,4 @@ describe('HybridSearch Branch Coverage', () => {
     expect(results[0].file).toBe('match.js');
   });
 });
+
