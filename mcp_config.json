@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "heuristic-mcp": {
+      "command": "node",
+      "args": [
+        "scripts\\mcp-launcher.js"
+      ],
+      "disabled": false
+    }
+  }
+}
