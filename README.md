@@ -111,6 +111,8 @@ Example `config.jsonc`:
   "smartIndexing": true,
   "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
   "workerThreads": 0,
+  "embeddingBatchSize": null,
+  "embeddingProcessNumThreads": 8,
   "enableExplicitGc": false,
   "recencyBoost": 0.1,
   "recencyDecayDays": 30,
@@ -136,10 +138,12 @@ Cache location:
 Selected overrides (prefix `SMART_CODING_`):
 
 - `SMART_CODING_VERBOSE=true|false` — enable detailed logging.
-- `SMART_CODING_WORKER_THREADS=auto|0|N` — worker thread count (`0` disables workers).
+- `SMART_CODING_WORKER_THREADS=auto|N` — worker thread count.
 - `SMART_CODING_BATCH_SIZE=100` — files per indexing batch.
 - `SMART_CODING_CHUNK_SIZE=25` — lines per chunk.
 - `SMART_CODING_MAX_RESULTS=5` — max search results.
+- `SMART_CODING_EMBEDDING_BATCH_SIZE=64` — embedding batch size (1–256, overrides auto).
+- `SMART_CODING_EMBEDDING_THREADS=8` — ONNX threads for the embedding child process.
 - `SMART_CODING_RECENCY_BOOST=0.1` — boost for recently edited files.
 - `SMART_CODING_RECENCY_DECAY_DAYS=30` — days until recency boost decays to 0.
 - `SMART_CODING_ANN_ENABLED=true|false` — enable ANN index.
