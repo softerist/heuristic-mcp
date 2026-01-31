@@ -961,7 +961,7 @@ export class CodebaseIndexer {
       if (this.config.verbose) {
         const msg = chunk.toString().trim();
         if (msg) {
-          console.info(`[Indexer] Persistent embedding stderr pid=${childPid}: ${msg}`);
+          console.info(`[Indexer] Persistent embedding pid=${childPid}: ${msg}`);
         }
       }
     });
