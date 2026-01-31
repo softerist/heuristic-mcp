@@ -120,7 +120,13 @@ export class CodebaseIndexer {
     // Files currently being indexed via watcher (path -> Promise)
     this._watcherInProgress = new Map();
     // Debounce delay in ms (consolidates rapid add/change events)
-    this._watcherDebounceMs = 300;
+    this._watcherDebounceMs = Number.isInteger(this.config.watchDebounceMs)
+      ? this.config.watchDebounceMs
+      : 300;
+    // Wait-for-stable writes (chokidar awaitWriteFinish) to reduce add+change churn
+    this._watcherWriteStabilityMs = Number.isInteger(this.config.watchWriteStabilityMs)
+      ? this.config.watchWriteStabilityMs
+      : 1500;
   }
 
   isPathInsideWorkspace(filePath) {
@@ -2012,11 +2018,20 @@ export class CodebaseIndexer {
       return isIgnored;
     };
 
+    const awaitWriteFinish =
+      this._watcherWriteStabilityMs > 0
+        ? {
+            stabilityThreshold: this._watcherWriteStabilityMs,
+            pollInterval: 100,
+          }
+        : undefined;
+
     this.watcher = chokidar.watch(pattern, {
       cwd: this.config.searchDirectory,
       ignored,
       persistent: true,
       ignoreInitial: true,
+      ...(awaitWriteFinish ? { awaitWriteFinish } : {}),
     });
 
     this.watcher
