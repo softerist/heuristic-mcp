@@ -6,7 +6,7 @@ async function downloadModel() {
   const globalCacheDir = path.join(getGlobalCacheDir(), 'xenova');
 
   try {
-    const transformers = await import('@xenova/transformers');
+    const transformers = await import('@huggingface/transformers');
     const { pipeline, env } = transformers;
 
     // Force cache directory to global location

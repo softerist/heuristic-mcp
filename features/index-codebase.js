@@ -306,12 +306,12 @@ export class CodebaseIndexer {
           : 1;
 
     // Heavy models (e.g., Jina) can consume multiple GB per worker.
-    // Limit to 1 worker in auto mode - workers have better memory isolation than child processes.
+    // Disable workers in auto mode to avoid OOMs on typical desktops.
     if (this.config.workerThreads === 'auto' && this.isHeavyEmbeddingModel()) {
-      if (numWorkers > 1 && this.config.verbose) {
-        console.info('[Indexer] Heavy embedding model detected; limiting auto workers to 1 to reduce RAM spikes');
+      if (numWorkers > 0 && this.config.verbose) {
+        console.info('[Indexer] Heavy embedding model detected; disabling auto workers to avoid OOM');
       }
-      numWorkers = Math.min(numWorkers, 1);
+      numWorkers = 0;
     }
 
     // Resource-aware scaling: check available RAM (skip in test env to avoid mocking issues)

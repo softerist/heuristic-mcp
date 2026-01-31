@@ -194,6 +194,34 @@ Note: On small repos, disk mode may be slightly slower and show noisy RSS deltas
 1. Run `heuristic-mcp --status` to check config and cache status.
 2. Run `heuristic-mcp --logs` to see startup errors.
 
+**Native ONNX backend unavailable (falls back to WASM)**
+
+If you see log lines like:
+
+```
+Native ONNX backend unavailable: The operating system cannot run %1.
+...onnxruntime_binding.node. Falling back to WASM.
+```
+
+The server will automatically disable workers and force `embeddingProcessPerBatch` to reduce memory spikes, but you
+should fix the native binding to restore stable memory usage:
+
+- Ensure you are running **64-bit Node.js** (`node -p "process.arch"` should be `x64`).
+- Install **Microsoft Visual C++ 2015–2022 Redistributable (x64)**.
+- Reinstall dependencies (clears locked native binaries):
+
+```bash
+Remove-Item -Recurse -Force node_modules\\onnxruntime-node, node_modules\\.onnxruntime-node-* -ErrorAction SilentlyContinue
+npm install
+```
+
+If you see a warning about **version mismatch** (e.g. "onnxruntime-node 1.23.x incompatible with transformers.js
+expectation 1.14.x"), install the matching version:
+
+```bash
+npm install onnxruntime-node@1.14.0
+```
+
 **Search returns no results**
 
 - Check `heuristic-mcp --status` for indexing progress.

@@ -2,7 +2,7 @@
 import { loadConfig } from '../../lib/config.js';
 import { EmbeddingsCache } from '../../lib/cache.js';
 import { HybridSearch } from '../../features/hybrid-search.js';
-import { pipeline, env } from '@xenova/transformers';
+import { pipeline, env } from '@huggingface/transformers';
 
 // Force same thread config as server
 env.backends.onnx.numThreads = 2;

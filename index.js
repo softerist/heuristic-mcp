@@ -4,14 +4,8 @@ import { stop, start, status, logs } from './features/lifecycle.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { pipeline, env } from '@xenova/transformers';
+import { configureNativeOnnxBackend, getNativeOnnxStatus } from './lib/onnx-backend.js';
 
-// Limit ONNX threads to prevent CPU saturation (tuned to 2 for balanced load)
-if (env?.backends?.onnx) {
-  env.backends.onnx.numThreads = 2;
-  if (env.backends.onnx.wasm) {
-    env.backends.onnx.wasm.numThreads = 2;
-  }
-}
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -101,6 +95,41 @@ async function initialize(workspaceDir) {
     );
     process.exit(1);
   }
+
+  const onnxThreadLimit = 2;
+  let mainBackendConfigured = false;
+  let nativeOnnxAvailable = null;
+  const ensureMainOnnxBackend = () => {
+    if (mainBackendConfigured) return;
+    nativeOnnxAvailable = configureNativeOnnxBackend({
+      log: config.verbose ? console.info : null,
+      label: '[Server]',
+      threads: {
+        intraOpNumThreads: onnxThreadLimit,
+        interOpNumThreads: 1,
+      },
+    });
+    if (!nativeOnnxAvailable && env?.backends?.onnx?.wasm) {
+      env.backends.onnx.wasm.numThreads = onnxThreadLimit;
+    }
+    mainBackendConfigured = true;
+  };
+
+  ensureMainOnnxBackend();
+  if (nativeOnnxAvailable === false) {
+    const status = getNativeOnnxStatus();
+    const reason = status?.message || 'onnxruntime-node not available';
+    console.warn(`[Server] Native ONNX backend unavailable (${reason}); using WASM backend.`);
+    console.warn(
+      '[Server] Auto-safety: disabling workers and forcing embeddingProcessPerBatch for memory isolation.'
+    );
+    if (config.workerThreads !== 0) {
+      config.workerThreads = 0;
+    }
+    if (!config.embeddingProcessPerBatch) {
+      config.embeddingProcessPerBatch = true;
+    }
+  }
   const lock = await acquireWorkspaceLock({
     cacheDirectory: config.cacheDirectory,
     workspaceDir: config.searchDirectory,
@@ -157,6 +186,7 @@ async function initialize(workspaceDir) {
   let cachedEmbedderPromise = null;
   const lazyEmbedder = async (...args) => {
     if (!cachedEmbedderPromise) {
+      ensureMainOnnxBackend();
       console.info(`[Server] Loading AI embedding model: ${config.embeddingModel}...`);
       const modelLoadStart = Date.now();
       cachedEmbedderPromise = pipeline('feature-extraction', config.embeddingModel, {
