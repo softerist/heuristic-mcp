@@ -54,6 +54,8 @@ describe('CodebaseIndexer watcher', () => {
         searchDirectory: dir,
         excludePatterns: [],
         watchFiles: true,
+        watchDebounceMs: 0,
+        watchWriteStabilityMs: 0,
         enableCache: true,
         callGraphEnabled: false,
         embeddingModel: 'test',
@@ -82,13 +84,22 @@ describe('CodebaseIndexer watcher', () => {
       const relPath = path.join('src', 'file.js');
       indexer.watcher.emit('add', relPath);
       await flushPromises();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const fullPath = path.join(dir, relPath);
+      if (indexer._watcherInProgress?.has(fullPath)) {
+        await indexer._watcherInProgress.get(fullPath);
+      }
 
-      expect(indexer.indexFile).toHaveBeenCalledWith(path.join(dir, relPath));
+      expect(indexer.indexFile).toHaveBeenCalledWith(fullPath);
       expect(cache.save).toHaveBeenCalled();
-      expect(server.hybridSearch.clearFileModTime).toHaveBeenCalledWith(path.join(dir, relPath));
+      expect(server.hybridSearch.clearFileModTime).toHaveBeenCalledWith(fullPath);
 
       indexer.watcher.emit('change', relPath);
       await flushPromises();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (indexer._watcherInProgress?.has(fullPath)) {
+        await indexer._watcherInProgress.get(fullPath);
+      }
       expect(indexer.indexFile).toHaveBeenCalledTimes(2);
 
       indexer.watcher.emit('unlink', relPath);

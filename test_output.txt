@@ -1,0 +1,332 @@
+
+> @softerist/heuristic-mcp@3.0.0 test
+> vitest run
+
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mC:/Users/claud/.gemini/antigravity/scratch/heuristic-mcp[39m
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mloads workspace config and resolves relative cache directory
+[22m[39m[Config] Workspace mode: C:\Users\claud\AppData\Local\Temp\heuristic-config-FR6mvv
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mloads workspace config and resolves relative cache directory
+[22m[39m[Config] Loaded configuration from config.json
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mloads workspace config with absolute cache directory
+[22m[39m[Config] Workspace mode: C:\Users\claud\AppData\Local\Temp\heuristic-config-GxSWPj
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mloads workspace config with absolute cache directory
+[22m[39m[Config] Loaded configuration from config.json
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mloads default config when file missing
+[22m[39m[Config] Workspace mode: C:\Users\claud\AppData\Local\Temp\heuristic-config-X93ezC
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mloads default config when file missing
+[22m[39m[Config] No project markers detected, using default patterns
+[Config] Loaded configuration from defaults
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mloads local config in server mode when server config is missing
+[22m[39m[Config] Loaded configuration from config.json
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mapplies environment overrides with validation and locks ANN metric
+[22m[39m[Config] Workspace mode: C:\Users\claud\AppData\Local\Temp\heuristic-config-H2Ria2
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mapplies environment overrides with validation and locks ANN metric
+[22m[39m[Config] Loaded configuration from config.json
+[Config] Using custom embedding model: custom-model
+
+stderr | test/config.test.js > Configuration Loading > applies environment overrides with validation and locks ANN metric
+[Config] Invalid SMART_CODING_MAX_RESULTS: 0, using default
+[Config] Invalid SMART_CODING_ANN_M: 128, using default
+[Config] ANN metric locked to cosine, overriding "ip"
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mapplies valid environment overrides
+[22m[39m[Config] Workspace mode: C:\Users\claud\AppData\Local\Temp\heuristic-config-Ii1ocN
+
+stderr | test/config.test.js > Configuration Loading > applies valid environment overrides
+[Config] ANN metric locked to cosine, overriding "l2"
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mapplies valid environment overrides
+[22m[39m[Config] Loaded configuration from config.json
+[Config] Using custom embedding model: custom-embedder
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mignores invalid environment overrides
+[22m[39m[Config] Workspace mode: C:\Users\claud\AppData\Local\Temp\heuristic-config-L5pObY
+
+stderr | test/config.test.js > Configuration Loading > ignores invalid environment overrides
+[Config] Invalid SMART_CODING_BATCH_SIZE: -1, using default
+[Config] Invalid SMART_CODING_MAX_FILE_SIZE: 0, using default
+[Config] Invalid SMART_CODING_CHUNK_SIZE: 1000, using default
+[Config] Invalid SMART_CODING_RECENCY_BOOST: 2, using default
+[Config] Invalid SMART_CODING_RECENCY_DECAY_DAYS: 400, using default
+[Config] Invalid SMART_CODING_SEMANTIC_WEIGHT: -1, using default (must be 0-1)
+[Config] Invalid SMART_CODING_EXACT_MATCH_BOOST: nope, using default
+[Config] Invalid SMART_CODING_WORKER_THREADS: 0, using default (must be 'auto' or 1-32)
+[Config] Invalid SMART_CODING_ANN_MIN_CHUNKS: -5, using default
+[Config] Invalid SMART_CODING_ANN_MIN_CANDIDATES: -1, using default
+[Config] Invalid SMART_CODING_ANN_MAX_CANDIDATES: 0, using default
+[Config] Invalid SMART_CODING_ANN_CANDIDATE_MULTIPLIER: 0, using default
+[Config] Invalid SMART_CODING_ANN_EF_CONSTRUCTION: 0, using default
+[Config] Invalid SMART_CODING_ANN_EF_SEARCH: 0, using default
+[Config] Invalid SMART_CODING_ANN_M: 128, using default
+[Config] Invalid SMART_CODING_ANN_METRIC: invalid, using default
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mignores invalid environment overrides
+[22m[39m[Config] Loaded configuration from config.json
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mignores invalid boolean environment overrides and empty strings
+[22m[39m[Config] Workspace mode: C:\Users\claud\AppData\Local\Temp\heuristic-config-rGewB2
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mignores invalid boolean environment overrides and empty strings
+[22m[39m[Config] Loaded configuration from config.json
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mshould configure smart indexing when project detected
+[22m[39m[Config] Workspace mode: C:\Users\claud\AppData\Local\Temp\heuristic-config-kMYhZZ
+
+stderr | test/config.test.js > Configuration Loading > should configure smart indexing when project detected
+[Detector] Detected javascript project (package.json)
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mshould configure smart indexing when project detected
+[22m[39m[Config] Smart indexing: javascript
+[Config] Applied 91 smart ignore patterns
+[Config] Loaded configuration from defaults
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mlogs when no project markers are detected
+[22m[39m[Config] Workspace mode: C:\Users\claud\AppData\Local\Temp\heuristic-config-O7vLCk
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mlogs when no project markers are detected
+[22m[39m[Config] No project markers detected, using default patterns
+[Config] Loaded configuration from config.json
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mshould respect legacy .smart-coding-cache directory
+[22m[39m[Config] Workspace mode: C:\Users\claud\AppData\Local\Temp\heuristic-config-ICkyNu
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mshould respect legacy .smart-coding-cache directory
+[22m[39m[Config] Loaded configuration from config.json
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mlogs legacy cache usage when verbose is enabled
+[22m[39m[Config] Workspace mode: C:\Users\claud\AppData\Local\Temp\heuristic-config-tN9W1a
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mlogs legacy cache usage when verbose is enabled
+[22m[39m[Config] Loaded configuration from config.json
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mignores legacy cache path when it is not a directory
+[22m[39m[Config] Workspace mode: C:\Users\claud\AppData\Local\Temp\heuristic-config-bWkfoA
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mignores legacy cache path when it is not a directory
+[22m[39m[Config] Loaded configuration from config.json
+
+stderr | test/config.test.js > Configuration Loading > uses default configuration when detection fails unexpectedly
+[Config] Using default configuration (config.json/jsonc not found or invalid)
+[Config] Error: boom
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mexposes loaded config via getConfig
+[22m[39m[Config] Workspace mode: C:\Users\claud\AppData\Local\Temp\heuristic-config-MgQ30J
+
+[90mstdout[2m | test/config.test.js[2m > [22m[2mConfiguration Loading[2m > [22m[2mexposes loaded config via getConfig
+[22m[39m[Config] Loaded configuration from config.json
+
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mloads workspace config and resolves relative cache directory[32m 5[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mloads workspace config with absolute cache directory[32m 2[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mloads default config when file missing[32m 2[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mloads local config in server mode when server config is missing[32m 4[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mapplies environment overrides with validation and locks ANN metric[32m 3[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mapplies valid environment overrides[32m 3[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mignores invalid environment overrides[32m 3[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mignores invalid boolean environment overrides and empty strings[32m 3[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mshould configure smart indexing when project detected[32m 2[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mlogs when no project markers are detected[32m 2[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mshould respect legacy .smart-coding-cache directory[32m 2[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mlogs legacy cache usage when verbose is enabled[32m 3[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mignores legacy cache path when it is not a directory[32m 2[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22muses default configuration when detection fails unexpectedly[32m 2[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mConfiguration Loading[2m > [22mexposes loaded config via getConfig[32m 5[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mGlobal Cache Directory[2m > [22muses LOCALAPPDATA on Windows when set[32m 1[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mGlobal Cache Directory[2m > [22mfalls back to default Windows cache path when LOCALAPPDATA is unset[32m 1[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mGlobal Cache Directory[2m > [22muses macOS cache path on darwin[32m 1[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mGlobal Cache Directory[2m > [22muses XDG cache path on linux[32m 1[2mms[22m[39m
+ [32mÔťô[39m test/config.test.js[2m > [22mGlobal Cache Directory[2m > [22mfalls back to default linux cache path when XDG cache is unset[32m 1[2mms[22m[39m
+stderr | test/index-codebase.test.js > CodebaseIndexer
+[Detector] Detected javascript project (package.json)
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer
+[22m[39m[Config] Smart indexing: javascript
+[Config] Applied 91 smart ignore patterns
+[Config] Loaded configuration from config.jsonc
+
+stderr | test/index-codebase.test.js > CodebaseIndexer
+[Cache] Missing cache metadata, ignoring cache
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould index files and create embeddings
+[22m[39m[Indexer] Memory start: rss=88.7MB heap=24.6MB/33.6MB
+[Indexer] Force reindex requested: clearing cache
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould index files and create embeddings
+[22m[39m[Indexer] Starting optimized indexing in C:\Users\claud\AppData\Local\Temp\heuristic-mcp-test-ee011f105370\project...
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould index files and create embeddings
+[22m[39m[Indexer] File discovery: 3 files in 4ms
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould index files and create embeddings
+[22m[39m[Indexer] Pre-filter: 3 changed, 0 unchanged, 0 too large, 0 errors (0ms)
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould index files and create embeddings
+[22m[39m[Indexer] Processing 3 changed files
+[Indexer] Processing 3 files (batch size: 10)
+[Indexer] Workers disabled; using non-worker path (cpu=24, embeddingProcessPerBatch=false, workerThreads=0)
+[Indexer] Embedding pass started: 3 files using jinaai/jina-embeddings-v2-base-code
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould index files and create embeddings
+[22m[39m[Indexer] Progress: 3/3 files (Infinity files/sec, 0.0s elapsed)
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould index files and create embeddings
+[22m[39m[Indexer] Embedding pass complete: 3 chunks from 3 files in 0.0s
+
+ [32mÔťô[39m test/index-codebase.test.js[2m > [22mCodebaseIndexer[2m > [22mBasic Indexing[2m > [22mshould construct the indexer instance[32m 1[2mms[22m[39m
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould index files and create embeddings
+[22m[39m[Indexer] Memory end: rss=90.0MB heap=25.6MB/34.8MB
+
+ [32mÔťô[39m test/index-codebase.test.js[2m > [22mCodebaseIndexer[2m > [22mBasic Indexing[2m > [22mshould index files and create embeddings[32m 294[2mms[22m[39m
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing
+[22m[39m[CallGraph] Built graph: 2 definitions, 1 call targets
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] Memory start: rss=90.1MB heap=25.8MB/34.8MB
+[Indexer] Force reindex requested: clearing cache
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] Starting optimized indexing in C:\Users\claud\AppData\Local\Temp\heuristic-mcp-test-ee011f105370\project...
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] File discovery: 3 files in 0ms
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] Pre-filter: 3 changed, 0 unchanged, 0 too large, 0 errors (1ms)
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] Processing 3 changed files
+[Indexer] Processing 3 files (batch size: 10)
+[Indexer] Workers disabled; using non-worker path (cpu=24, embeddingProcessPerBatch=false, workerThreads=0)
+[Indexer] Embedding pass started: 3 files using jinaai/jina-embeddings-v2-base-code
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] Progress: 3/3 files (Infinity files/sec, 0.0s elapsed)
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] Embedding pass complete: 3 chunks from 3 files in 0.0s
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] Memory end: rss=90.7MB heap=26.4MB/35.6MB
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] Memory start: rss=90.7MB heap=26.4MB/35.6MB
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] Starting optimized indexing in C:\Users\claud\AppData\Local\Temp\heuristic-mcp-test-ee011f105370\project...
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[CallGraph] Built graph: 2 definitions, 1 call targets
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] File discovery: 3 files in 1ms
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] Pre-filter: 0 changed, 3 unchanged, 0 too large, 0 errors (0ms)
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] All files unchanged, nothing to index
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould skip unchanged files on subsequent indexing
+[22m[39m[Indexer] Memory end: rss=93.1MB heap=22.5MB/37.8MB
+
+ [32mÔťô[39m test/index-codebase.test.js[2m > [22mCodebaseIndexer[2m > [22mBasic Indexing[2m > [22mshould skip unchanged files on subsequent indexing[33m 545[2mms[22m[39m
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Memory start: rss=93.1MB heap=22.6MB/37.8MB
+[Indexer] Force reindex requested: clearing cache
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Starting optimized indexing in C:\Users\claud\AppData\Local\Temp\heuristic-mcp-test-ee011f105370\project...
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] File discovery: 3 files in 1ms
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Pre-filter: 3 changed, 0 unchanged, 0 too large, 0 errors (0ms)
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Processing 3 changed files
+[Indexer] Processing 3 files (batch size: 10)
+[Indexer] Workers disabled; using non-worker path (cpu=24, embeddingProcessPerBatch=false, workerThreads=0)
+[Indexer] Embedding pass started: 3 files using jinaai/jina-embeddings-v2-base-code
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Progress: 3/3 files (Infinity files/sec, 0.0s elapsed)
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Embedding pass complete: 3 chunks from 3 files in 0.0s
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Memory end: rss=93.8MB heap=23.3MB/38.1MB
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Memory start: rss=93.8MB heap=23.3MB/38.1MB
+[Indexer] Force reindex requested: clearing cache
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[CallGraph] Built graph: 2 definitions, 1 call targets
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Starting optimized indexing in C:\Users\claud\AppData\Local\Temp\heuristic-mcp-test-ee011f105370\project...
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] File discovery: 3 files in 0ms
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Pre-filter: 3 changed, 0 unchanged, 0 too large, 0 errors (0ms)
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Processing 3 changed files
+[Indexer] Processing 3 files (batch size: 10)
+[Indexer] Workers disabled; using non-worker path (cpu=24, embeddingProcessPerBatch=false, workerThreads=0)
+[Indexer] Embedding pass started: 3 files using jinaai/jina-embeddings-v2-base-code
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Progress: 3/3 files (Infinity files/sec, 0.0s elapsed)
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Embedding pass complete: 3 chunks from 3 files in 0.0s
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing[2m > [22m[2mshould reindex all files when force is true
+[22m[39m[Indexer] Memory end: rss=93.8MB heap=23.9MB/38.1MB
+
+ [32mÔťô[39m test/index-codebase.test.js[2m > [22mCodebaseIndexer[2m > [22mBasic Indexing[2m > [22mshould reindex all files when force is true[33m 568[2mms[22m[39m
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mBasic Indexing
+[22m[39m[CallGraph] Built graph: 2 definitions, 1 call targets
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mConcurrent Indexing Protection[2m > [22m[2mshould prevent concurrent indexing
+[22m[39m[Indexer] Memory start: rss=93.8MB heap=24.0MB/38.1MB
+[Indexer] Force reindex requested: clearing cache
+
+stderr | test/index-codebase.test.js > CodebaseIndexer > Concurrent Indexing Protection > should prevent concurrent indexing
+[Indexer] Indexing already in progress, skipping concurrent request
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mConcurrent Indexing Protection[2m > [22m[2mshould prevent concurrent indexing
+[22m[39m[Indexer] Starting optimized indexing in C:\Users\claud\AppData\Local\Temp\heuristic-mcp-test-ee011f105370\project...
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mConcurrent Indexing Protection[2m > [22m[2mshould prevent concurrent indexing
+[22m[39m[Indexer] File discovery: 3 files in 0ms
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mConcurrent Indexing Protection[2m > [22m[2mshould prevent concurrent indexing
+[22m[39m[Indexer] Pre-filter: 3 changed, 0 unchanged, 0 too large, 0 errors (1ms)
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mConcurrent Indexing Protection[2m > [22m[2mshould prevent concurrent indexing
+[22m[39m[Indexer] Processing 3 changed files
+[Indexer] Processing 3 files (batch size: 10)
+[Indexer] Workers disabled; using non-worker path (cpu=24, embeddingProcessPerBatch=false, workerThreads=0)
+[Indexer] Embedding pass started: 3 files using jinaai/jina-embeddings-v2-base-code
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mConcurrent Indexing Protection[2m > [22m[2mshould prevent concurrent indexing
+[22m[39m[Indexer] Progress: 3/3 files (Infinity files/sec, 0.0s elapsed)
+
+[90mstdout[2m | test/index-codebase.test.js[2m > [22m[2mCodebaseIndexer[2m > [22m[2mConcurrent Indexing Protection[2m > [22m[2mshould prevent concurrent indexing
+[22m[39m[Indexer] Embedding pass complete: 3 chunks from 3 files in 0.0s
+

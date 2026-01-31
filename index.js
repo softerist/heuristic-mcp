@@ -191,6 +191,7 @@ async function initialize(workspaceDir) {
       const modelLoadStart = Date.now();
       cachedEmbedderPromise = pipeline('feature-extraction', config.embeddingModel, {
         quantized: true,
+        dtype: 'fp32',
         session_options: {
           numThreads: 2,
           intraOpNumThreads: 2,

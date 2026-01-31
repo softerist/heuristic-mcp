@@ -146,6 +146,16 @@ export class CodebaseIndexer {
     return Math.min(5000, Math.max(2500, totalMb * 0.30));
   }
 
+  getEmbeddingProcessConfig() {
+    const threads = Number.isInteger(this.config.embeddingProcessNumThreads)
+      ? this.config.embeddingProcessNumThreads
+      : 16; // Aggressive: use 16 threads (user has 24 cores) for max speed
+    const batchSize = Number.isInteger(this.config.embeddingBatchSize) && this.config.embeddingBatchSize > 0
+      ? this.config.embeddingBatchSize
+      : null;
+    return { threads, batchSize };
+  }
+
   isPathInsideWorkspace(filePath) {
     if (!filePath || !this.workspaceRoot) return true;
     const target = path.resolve(filePath);
@@ -525,7 +535,7 @@ export class CodebaseIndexer {
             workerId: index,
             embeddingModel: this.config.embeddingModel,
             verbose: this.config.verbose,
-            numThreads: 1,
+            numThreads: 12, // Use 12 threads (50% of cores) for max throughput
             searchDirectory: this.config.searchDirectory,
             maxFileSize: this.config.maxFileSize,
             callGraphEnabled: this.config.callGraphEnabled,
@@ -951,7 +961,7 @@ export class CodebaseIndexer {
       if (this.config.verbose) {
         const msg = chunk.toString().trim();
         if (msg) {
-          console.warn(`[Indexer] Persistent embedding stderr pid=${childPid}: ${msg}`);
+          console.info(`[Indexer] Persistent embedding stderr pid=${childPid}: ${msg}`);
         }
       }
     });
@@ -1100,10 +1110,12 @@ export class CodebaseIndexer {
     const child = this._embeddingChild;
     const childPid = child?.pid ?? 'unknown';
     const requestId = this._embeddingRequestId++;
+    const { threads, batchSize } = this.getEmbeddingProcessConfig();
     const payload = {
       embeddingModel: this.config.embeddingModel,
       chunks,
-      numThreads: 1,
+      numThreads: threads,
+      batchSize,
       requestId,
     };
     const timeoutMs = Number.isInteger(this.config.workerBatchTimeoutMs)
@@ -1177,10 +1189,12 @@ export class CodebaseIndexer {
     }
     const nodePath = process.execPath || 'node';
     const scriptPath = fileURLToPath(new URL('../lib/embedding-process.js', import.meta.url));
+    const { threads, batchSize } = this.getEmbeddingProcessConfig();
     const payload = {
       embeddingModel: this.config.embeddingModel,
       chunks,
-      numThreads: 1,
+      numThreads: threads,
+      batchSize,
     };
 
     return new Promise((resolve) => {

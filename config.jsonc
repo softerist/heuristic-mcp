@@ -694,6 +694,10 @@
   "embeddingProcessPerBatch": false,
   // Auto-enable child process when no workers + heavy model.
   "autoEmbeddingProcessPerBatch": true,
+  // Override embedding batch size (null = auto).
+  "embeddingBatchSize": null,
+  // ONNX threads used by embedding child process.
+  "embeddingProcessNumThreads": 8,
   // Wait time for active readers before saving cache (ms).
   "saveReaderWaitTimeoutMs": 5000,
   // Enable ANN index for large codebases.

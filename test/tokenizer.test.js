@@ -79,13 +79,13 @@ describe('Model Token Limits', () => {
     });
 
     it('should have limits for Jina models', () => {
-      expect(MODEL_TOKEN_LIMITS['jinaai/jina-embeddings-v2-base-code']).toBe(8192);
+      expect(MODEL_TOKEN_LIMITS['jinaai/jina-embeddings-v2-base-code']).toBe(512);
     });
   });
 
   describe('getModelTokenLimit', () => {
     it('should return correct limit for known models', () => {
-      expect(getModelTokenLimit('jinaai/jina-embeddings-v2-base-code')).toBe(8192);
+      expect(getModelTokenLimit('jinaai/jina-embeddings-v2-base-code')).toBe(512);
     });
 
     it('should return default for unknown models', () => {
@@ -106,7 +106,7 @@ describe('Model Token Limits', () => {
 
     it('should match known models case-insensitively', () => {
       const mixedCase = getModelTokenLimit('JINAAI/JINA-EMBEDDINGS-V2-BASE-CODE');
-      expect(mixedCase).toBe(8192);
+      expect(mixedCase).toBe(512);
     });
   });
 });
@@ -116,17 +116,17 @@ describe('Chunking Parameters', () => {
     it('should return correct params for default model', () => {
       const params = getChunkingParams('jinaai/jina-embeddings-v2-base-code');
 
-      expect(params.maxTokens).toBe(8192);
-      expect(params.targetTokens).toBeLessThan(8192); // 85% of max
-      expect(params.targetTokens).toBeGreaterThan(6000);
+      expect(params.maxTokens).toBe(512);
+      expect(params.targetTokens).toBeLessThan(512); // 85% of max
+      expect(params.targetTokens).toBeGreaterThan(400);
       expect(params.overlapTokens).toBeLessThan(params.targetTokens);
     });
 
     it('should calculate ~85% for target tokens', () => {
-      const params = getChunkingParams('jinaai/jina-embeddings-v2-base-code'); // 8192 limit
+      const params = getChunkingParams('jinaai/jina-embeddings-v2-base-code'); // 512 limit
 
-      // 85% of 8192 = 6963.2 -> floor = 6963
-      expect(params.targetTokens).toBe(Math.floor(8192 * 0.85));
+      // 85% of 512 = 435.2 -> floor = 435
+      expect(params.targetTokens).toBe(Math.floor(512 * 0.85));
     });
 
     it('should calculate ~18% overlap', () => {
