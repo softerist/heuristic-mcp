@@ -127,6 +127,13 @@ export class CodebaseIndexer {
     this._watcherWriteStabilityMs = Number.isInteger(this.config.watchWriteStabilityMs)
       ? this.config.watchWriteStabilityMs
       : 1500;
+    // Persistent embedding child process (used to avoid per-batch model reloads)
+    this._embeddingProcessSessionActive = false;
+    this._embeddingChild = null;
+    this._embeddingChildBuffer = '';
+    this._embeddingChildQueue = [];
+    this._embeddingSessionStats = null;
+    this._embeddingRequestId = 0;
   }
 
   isPathInsideWorkspace(filePath) {
@@ -868,7 +875,246 @@ export class CodebaseIndexer {
     return results;
   }
 
+  async startEmbeddingProcessSession() {
+    if (this._embeddingChild) return;
+
+    const nodePath = process.execPath || 'node';
+    const scriptPath = fileURLToPath(new URL('../lib/embedding-process.js', import.meta.url));
+    const child = spawn(nodePath, [scriptPath], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        EMBEDDING_PROCESS_PERSISTENT: 'true',
+      },
+    });
+
+    this._embeddingChild = child;
+    this._embeddingProcessSessionActive = true;
+    this._embeddingChildBuffer = '';
+    this._embeddingChildQueue = [];
+    this._embeddingSessionStats = {
+      startedAt: Date.now(),
+      requests: 0,
+      chunks: 0,
+      totalRequestMs: 0,
+    };
+
+    const childPid = child?.pid ?? 'unknown';
+    if (this.config.verbose) {
+      console.info(`[Indexer] Persistent embedding process started pid=${childPid}`);
+    }
+
+    child.stdout.on('data', (chunk) => {
+      this._handleEmbeddingChildStdout(chunk);
+    });
+
+    child.stderr.on('data', (chunk) => {
+      if (this.config.verbose) {
+        const msg = chunk.toString().trim();
+        if (msg) {
+          console.warn(`[Indexer] Persistent embedding stderr pid=${childPid}: ${msg}`);
+        }
+      }
+    });
+
+    child.on('error', (err) => {
+      if (this.config.verbose) {
+        console.warn(`[Indexer] Persistent embedding error pid=${childPid}: ${err.message}`);
+      }
+      this._failEmbeddingChildQueue(`child process error (${err.message})`);
+      this._embeddingChild = null;
+      this._embeddingProcessSessionActive = false;
+    });
+
+    child.on('close', (code, signal) => {
+      if (this.config.verbose) {
+        console.info(
+          `[Indexer] Persistent embedding process exit pid=${childPid} code=${code ?? 'null'}${signal ? ` signal=${signal}` : ''}`
+        );
+      }
+      this._failEmbeddingChildQueue(
+        `child process exited (${code ?? 'null'}${signal ? `, signal=${signal}` : ''})`
+      );
+      this._embeddingChild = null;
+      this._embeddingProcessSessionActive = false;
+    });
+  }
+
+  _handleEmbeddingChildStdout(chunk) {
+    this._embeddingChildBuffer += chunk.toString();
+    let newlineIndex = this._embeddingChildBuffer.indexOf('\n');
+    while (newlineIndex !== -1) {
+      const line = this._embeddingChildBuffer.slice(0, newlineIndex).trim();
+      this._embeddingChildBuffer = this._embeddingChildBuffer.slice(newlineIndex + 1);
+      if (line.length > 0) {
+        let parsed = null;
+        try {
+          parsed = JSON.parse(line);
+        } catch (err) {
+          if (this.config.verbose) {
+            console.warn(`[Indexer] Persistent embedding response parse error: ${err.message}`);
+          }
+        }
+        const entry = this._embeddingChildQueue.shift();
+        if (entry) {
+          clearTimeout(entry.timeoutId);
+          entry.done = true;
+          const elapsed = ((Date.now() - entry.startedAt) / 1000).toFixed(1);
+          if (this.config.verbose) {
+            console.info(
+              `[Indexer] Child embedding request done id=${entry.requestId} pid=${entry.pid} chunks=${entry.chunks} elapsed=${elapsed}s`
+            );
+          }
+          if (this._embeddingSessionStats) {
+            this._embeddingSessionStats.totalRequestMs += Date.now() - entry.startedAt;
+          }
+          entry.resolve(parsed?.results || []);
+        } else if (this.config.verbose) {
+          console.warn('[Indexer] Persistent embedding response with no pending request');
+        }
+      }
+      newlineIndex = this._embeddingChildBuffer.indexOf('\n');
+    }
+  }
+
+  _failEmbeddingChildQueue(reason) {
+    while (this._embeddingChildQueue.length > 0) {
+      const entry = this._embeddingChildQueue.shift();
+      clearTimeout(entry.timeoutId);
+      if (entry.done) {
+        continue;
+      }
+      if (this.config.verbose) {
+        console.warn(`[Indexer] Persistent embedding request failed: ${reason}`);
+      }
+      entry.done = true;
+      entry.resolve([]);
+    }
+  }
+
+  async stopEmbeddingProcessSession() {
+    const child = this._embeddingChild;
+    if (!child) return;
+    const childPid = child?.pid ?? 'unknown';
+    if (this.config.verbose) {
+      console.info(`[Indexer] Stopping persistent embedding process pid=${childPid}`);
+    }
+    try {
+      child.stdin.write(`${JSON.stringify({ type: 'shutdown' })}\n`);
+    } catch {
+      // ignore
+    }
+    await new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          // ignore
+        }
+        resolve();
+      }, 5000);
+      child.once('exit', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+    if (this.config.verbose && this._embeddingSessionStats) {
+      const elapsedMs = Date.now() - this._embeddingSessionStats.startedAt;
+      const elapsedSec = (elapsedMs / 1000).toFixed(1);
+      const avgRequestMs = this._embeddingSessionStats.requests
+        ? (this._embeddingSessionStats.totalRequestMs / this._embeddingSessionStats.requests).toFixed(1)
+        : '0.0';
+      const avgChunksPerReq = this._embeddingSessionStats.requests
+        ? (this._embeddingSessionStats.chunks / this._embeddingSessionStats.requests).toFixed(1)
+        : '0.0';
+      console.info(
+        `[Indexer] Persistent embedding summary: requests=${this._embeddingSessionStats.requests} chunks=${this._embeddingSessionStats.chunks} avgChunksPerReq=${avgChunksPerReq} avgReqMs=${avgRequestMs} totalElapsed=${elapsedSec}s`
+      );
+    }
+    this._embeddingChild = null;
+    this._embeddingProcessSessionActive = false;
+    this._embeddingSessionStats = null;
+  }
+
+  async processChunksInPersistentChild(chunks) {
+    if (!this._embeddingChild) {
+      await this.startEmbeddingProcessSession();
+    }
+    if (!this._embeddingChild) {
+      return [];
+    }
+
+    const child = this._embeddingChild;
+    const childPid = child?.pid ?? 'unknown';
+    const requestId = this._embeddingRequestId++;
+    const payload = {
+      embeddingModel: this.config.embeddingModel,
+      chunks,
+      numThreads: 1,
+      requestId,
+    };
+    const timeoutMs = Number.isInteger(this.config.workerBatchTimeoutMs)
+      ? this.config.workerBatchTimeoutMs
+      : 120000;
+
+    return new Promise((resolve) => {
+      const startedAt = Date.now();
+      const entry = {
+        resolve,
+        timeoutId: null,
+        startedAt,
+        chunks: Array.isArray(chunks) ? chunks.length : 0,
+        pid: childPid,
+        requestId,
+        done: false,
+      };
+
+      if (this.config.verbose) {
+        console.info(
+          `[Indexer] Child embedding request started id=${requestId} pid=${childPid} chunks=${entry.chunks} queue=${this._embeddingChildQueue.length}`
+        );
+      }
+      if (this._embeddingSessionStats) {
+        this._embeddingSessionStats.requests += 1;
+        this._embeddingSessionStats.chunks += entry.chunks;
+      }
+
+      entry.timeoutId = setTimeout(() => {
+        if (entry.done) {
+          return;
+        }
+        entry.done = true;
+        this._embeddingChildQueue = this._embeddingChildQueue.filter((item) => item !== entry);
+        if (this.config.verbose) {
+          const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+          console.warn(
+            `[Indexer] Child embedding request timeout id=${requestId} pid=${childPid} elapsed=${elapsed}s limit=${(timeoutMs / 1000).toFixed(1)}s`
+          );
+        }
+        this.recordWorkerFailure('child process timeout');
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          // ignore
+        }
+        resolve([]);
+      }, timeoutMs);
+
+      this._embeddingChildQueue.push(entry);
+      try {
+        child.stdin.write(`${JSON.stringify(payload)}\n`);
+      } catch (err) {
+        clearTimeout(entry.timeoutId);
+        this.recordWorkerFailure(`child process error (${err.message})`);
+        resolve([]);
+      }
+    });
+  }
+
   async processChunksInChildProcess(chunks) {
+    if (this._embeddingProcessSessionActive) {
+      return this.processChunksInPersistentChild(chunks);
+    }
     const nodePath = process.execPath || 'node';
     const scriptPath = fileURLToPath(new URL('../lib/embedding-process.js', import.meta.url));
     const payload = {
@@ -878,12 +1124,20 @@ export class CodebaseIndexer {
     };
 
     return new Promise((resolve) => {
+      const startedAt = Date.now();
       const child = spawn(nodePath, [scriptPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
+      const childPid = child?.pid ?? 'unknown';
+      if (this.config.verbose) {
+        console.info(
+          `[Indexer] Child embedding process started pid=${childPid} chunks=${Array.isArray(chunks) ? chunks.length : 0}`
+        );
+      }
 
       let stdout = '';
       let stderr = '';
+      let closed = false;
       child.stdout.on('data', (chunk) => {
         stdout += chunk.toString();
       });
@@ -900,18 +1154,39 @@ export class CodebaseIndexer {
         } catch {
           // ignore
         }
+        if (this.config.verbose && !closed) {
+          const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+          console.warn(
+            `[Indexer] Child embedding process timeout pid=${childPid} elapsed=${elapsed}s limit=${(timeoutMs / 1000).toFixed(1)}s`
+          );
+        }
         this.recordWorkerFailure('child process timeout');
         resolve([]);
       }, timeoutMs);
 
       child.on('error', (err) => {
         clearTimeout(timeout);
+        if (this.config.verbose && !closed) {
+          console.warn(`[Indexer] Child embedding process error pid=${childPid}: ${err.message}`);
+        }
         this.recordWorkerFailure(`child process error (${err.message})`);
         resolve([]);
       });
 
       child.on('close', (code, signal) => {
         clearTimeout(timeout);
+        closed = true;
+        if (this.config.verbose) {
+          const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+          console.info(
+            `[Indexer] Child embedding process exit pid=${childPid} code=${code ?? 'null'}${signal ? ` signal=${signal}` : ''} elapsed=${elapsed}s`
+          );
+          const { rss, heapUsed, heapTotal } = process.memoryUsage();
+          const toMb = (value) => `${(value / 1024 / 1024).toFixed(1)}MB`;
+          console.info(
+            `[Indexer] Memory after child exit: rss=${toMb(rss)} heap=${toMb(heapUsed)}/${toMb(heapTotal)}`
+          );
+        }
         if (code !== 0) {
           this.recordWorkerFailure(
             `child process exited (${code ?? 'null'}${signal ? `, signal=${signal}` : ''})`
@@ -1498,13 +1773,26 @@ export class CodebaseIndexer {
       const useEmbeddingProcessPerBatch = this.shouldUseEmbeddingProcessPerBatch(useWorkers);
 
       if (!useWorkers && this.config.verbose) {
+        const cpuCount = Array.isArray(os.cpus()) ? os.cpus().length : 0;
+        const baseDetail = `cpu=${cpuCount}, embeddingProcessPerBatch=${useEmbeddingProcessPerBatch}, workerThreads=${this.config.workerThreads}`;
         const until = this.workersDisabledUntil - Date.now();
         if (this.workersDisabledUntil && until > 0) {
           console.info(
-            `[Indexer] Workers disabled for ${Math.round(until / 1000)}s; single-threaded fallback ${allowSingleThreadFallback ? 'enabled' : 'disabled'}`
+            `[Indexer] Workers disabled for ${Math.round(until / 1000)}s; using non-worker path (${baseDetail}); single-threaded fallback ${allowSingleThreadFallback ? 'enabled' : 'disabled'}`
           );
         } else {
-          console.info(`[Indexer] Single-threaded mode (single-core system)`);
+          console.info(`[Indexer] Workers disabled; using non-worker path (${baseDetail})`);
+        }
+      }
+
+      if (useEmbeddingProcessPerBatch) {
+        try {
+          await this.startEmbeddingProcessSession();
+        } catch (err) {
+          this._embeddingProcessSessionActive = false;
+          if (this.config.verbose) {
+            console.warn(`[Indexer] Failed to start persistent embedding process: ${err.message}`);
+          }
         }
       }
 
@@ -1869,6 +2157,9 @@ export class CodebaseIndexer {
     } finally {
       if (memoryTimer) {
         clearInterval(memoryTimer);
+      }
+      if (this._embeddingProcessSessionActive) {
+        await this.stopEmbeddingProcessSession();
       }
       logMemory('end');
       this.isIndexing = false;
