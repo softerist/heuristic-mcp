@@ -268,7 +268,7 @@ describe('CodebaseIndexer', () => {
 
   describe('Indexing Logic', () => {
     it('should skip file if hash matches cache', async () => {
-      const file = '/test/skipped.js';
+      const file = path.join(fixtures.searchDir, 'skipped.js');
       const content =
         'function test() {\n  console.info("hello");\n}\n\nfunction other() {\n  return true;\n}';
       const { hashContent } = await import('../lib/utils.js');
@@ -298,7 +298,7 @@ describe('CodebaseIndexer', () => {
     });
 
     it('should process file if hash mismatch', async () => {
-      const file = '/test/processed.js';
+      const file = path.join(fixtures.searchDir, 'processed.js');
       const content = 'function test() {\n  return "value";\n}\n';
 
       const statSpy = vi.spyOn(fs, 'stat').mockResolvedValue({

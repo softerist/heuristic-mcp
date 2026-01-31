@@ -313,6 +313,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
   it('logs warning when file indexing fails (verbose mode)', async () => {
     indexer.config.verbose = true;
+    indexer.config.workerThreads = 0;
     vi.spyOn(fs, 'stat').mockResolvedValue({ isDirectory: () => false, size: 100, mtimeMs: 123 });
     vi.spyOn(fs, 'readFile').mockResolvedValue('content');
     vi.spyOn(utils, 'hashContent').mockReturnValue('new-hash');
@@ -321,7 +322,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
     vi.spyOn(utils, 'smartChunk').mockReturnValue([{ text: 'chunk1', startLine: 1, endLine: 2 }]);
     mockEmbedder.mockRejectedValue(new Error('fail'));
 
-    await indexer.indexFile('file.js');
+    await indexer.indexFile(path.join(mockConfig.searchDirectory, 'file.js'));
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Skipped hash update'));
   });
 

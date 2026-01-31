@@ -114,6 +114,7 @@ export class CodebaseIndexer {
       : null;
     this.workspaceRootReal = null;
     this._lastIncrementalGcAt = 0;
+    this._autoEmbeddingProcessLogged = false;
   }
 
   isPathInsideWorkspace(filePath) {
@@ -173,6 +174,27 @@ export class CodebaseIndexer {
     }
     if (isTestEnv()) return false;
     return os.cpus().length > 1 && this.config.workerThreads !== 0 && !this.config.embeddingProcessPerBatch;
+  }
+
+  isHeavyEmbeddingModel() {
+    const model = String(this.config.embeddingModel || '').toLowerCase();
+    return model.includes('jina');
+  }
+
+  shouldUseEmbeddingProcessPerBatch(useWorkers = null) {
+    if (this.config.embeddingProcessPerBatch) return true;
+    if (isTestEnv()) return false;
+    if (this.config.autoEmbeddingProcessPerBatch === false) return false;
+    const workersActive = typeof useWorkers === 'boolean' ? useWorkers : this.shouldUseWorkers();
+    if (workersActive) return false;
+    if (!this.isHeavyEmbeddingModel()) return false;
+    if (!this._autoEmbeddingProcessLogged) {
+      console.info(
+        '[Indexer] Auto-enabling embeddingProcessPerBatch for memory isolation (set autoEmbeddingProcessPerBatch=false to disable)'
+      );
+      this._autoEmbeddingProcessLogged = true;
+    }
+    return true;
   }
 
   scheduleRetry() {
@@ -918,19 +940,22 @@ export class CodebaseIndexer {
             pooling: 'mean',
             normalize: true,
           });
+          const vector = toFloat32Array(output.data);
+          // Dispose tensor to release ONNX memory immediately
+          if (typeof output.dispose === 'function') output.dispose();
           results.push({
             file: chunk.file,
             startLine: chunk.startLine,
             endLine: chunk.endLine,
             content: chunk.text,
-            vector: toFloat32Array(output.data),
+            vector,
             success: true,
           });
 
-          // Periodic GC to prevent memory creep (only if flag is present)
+          // Periodic GC to prevent memory creep
           processedSinceGc++;
-          // Removed manual GC call to prevent performance degradation
-          if (processedSinceGc >= 50) { 
+          if (processedSinceGc >= 25 && typeof global.gc === 'function') {
+            global.gc();
             processedSinceGc = 0;
           }
 
@@ -1025,10 +1050,14 @@ export class CodebaseIndexer {
       const newChunks = [];
 
       // Use workers for watcher-triggered embedding to keep main thread responsive
-      const useWorkers = this.shouldUseWorkers();
+      let useWorkers = this.shouldUseWorkers();
       if (useWorkers && this.workers.length === 0) {
         await this.initializeWorkers();
+        if (this.workers.length === 0) {
+          useWorkers = false;
+        }
       }
+      const useEmbeddingProcessPerBatch = this.shouldUseEmbeddingProcessPerBatch(useWorkers);
 
       const chunksToProcess = chunks.map((c) => ({
         file,
@@ -1040,6 +1069,8 @@ export class CodebaseIndexer {
       let results = [];
       if (useWorkers && this.workers.length > 0) {
         results = await this.processChunksWithWorkers(chunksToProcess);
+      } else if (useEmbeddingProcessPerBatch) {
+        results = await this.processChunksInChildProcess(chunksToProcess);
       } else {
         results = await this.processChunksSingleThreaded(chunksToProcess);
       }
@@ -1441,14 +1472,20 @@ export class CodebaseIndexer {
         this.config.allowSingleThreadFallback !== false ||
         this.config.workerThreads === 0 ||
         isTestEnv();
-      const useWorkers = this.shouldUseWorkers();
+      let useWorkers = this.shouldUseWorkers();
 
       if (useWorkers) {
         await this.initializeWorkers();
-        if (this.config.verbose && this.workers.length > 0) {
+        if (this.workers.length === 0) {
+          useWorkers = false;
+        } else if (this.config.verbose) {
           console.info(`[Indexer] Multi-threaded mode: ${this.workers.length} workers active`);
         }
-      } else if (this.config.verbose) {
+      }
+
+      const useEmbeddingProcessPerBatch = this.shouldUseEmbeddingProcessPerBatch(useWorkers);
+
+      if (!useWorkers && this.config.verbose) {
         const until = this.workersDisabledUntil - Date.now();
         if (this.workersDisabledUntil && until > 0) {
           console.info(
@@ -1484,7 +1521,7 @@ export class CodebaseIndexer {
            if (global.gc) global.gc();
         }
 
-        const useWorkersForBatch = useWorkers && this.workers.length > 0 && !this.config.embeddingProcessPerBatch;
+        const useWorkersForBatch = useWorkers && this.workers.length > 0 && !useEmbeddingProcessPerBatch;
 
         for (const item of batch) {
           const { file, force, content: presetContent, hash: presetHash, expectedHash: presetExpectedHash, size: presetSize, mtimeMs: presetMtimeMs } = item;
@@ -1668,7 +1705,7 @@ export class CodebaseIndexer {
         if (allChunks.length > 0) {
           const chunksToProcess = allChunks.slice();
           let results = [];
-          if (this.config.embeddingProcessPerBatch) {
+          if (useEmbeddingProcessPerBatch) {
             results = await this.processChunksInChildProcess(chunksToProcess);
           } else {
             // If we are here, either workers are disabled/full or these are retry chunks
@@ -1780,7 +1817,7 @@ export class CodebaseIndexer {
         lastIndexMode: indexMode,
         lastBatchSize: adaptiveBatchSize,
         lastWorkerThreads: resolvedWorkerThreads,
-        lastEmbeddingProcessPerBatch: this.config.embeddingProcessPerBatch,
+        lastEmbeddingProcessPerBatch: useEmbeddingProcessPerBatch,
       });
       await this.cache.save();
 

@@ -1,5 +1,7 @@
 {
+  // Root directory to index (relative or absolute).
   "searchDirectory": ".",
+  // File extensions to include (without dot).
   "fileExtensions": [
     "js",
     "ts",
@@ -11,7 +13,6 @@
     "cts",
     "mjsx",
     "cjsx",
-
     "css",
     "scss",
     "sass",
@@ -19,7 +20,6 @@
     "styl",
     "stylus",
     "postcss",
-
     "html",
     "htm",
     "xml",
@@ -30,14 +30,12 @@
     "astro",
     "wxml",
     "wxs",
-
     "py",
     "pyw",
     "pyx",
     "pxd",
     "pxi",
     "ipynb",
-
     "java",
     "kt",
     "kts",
@@ -46,7 +44,6 @@
     "gradle",
     "j",
     "class",
-
     "c",
     "cpp",
     "cc",
@@ -61,7 +58,6 @@
     "metal",
     "cu",
     "cuh",
-
     "cs",
     "csx",
     "vb",
@@ -70,25 +66,20 @@
     "fs",
     "fsx",
     "fsi",
-
     "go",
     "rs",
     "rlib",
-
     "rb",
     "erb",
     "rake",
     "gemspec",
-
     "php",
     "phtml",
     "php3",
     "php4",
     "php5",
     "phps",
-
     "swift",
-
     "sh",
     "bash",
     "zsh",
@@ -101,7 +92,6 @@
     "ps1",
     "psm1",
     "psd1",
-
     "json",
     "json5",
     "jsonc",
@@ -117,13 +107,11 @@
     "jsonnet",
     "cue",
     "kdl",
-
     "sql",
     "pgsql",
     "mysql",
     "sqlite",
     "sqlpl",
-
     "md",
     "markdown",
     "mdx",
@@ -134,61 +122,48 @@
     "tex",
     "latex",
     "sty",
-
     "r",
     "rmd",
     "rdata",
     "rds",
     "rda",
     "jl",
-
     "lua",
-
     "pl",
     "pm",
     "t",
     "pl6",
     "pm6",
-
     "clj",
     "cljs",
     "cljc",
     "edn",
-
     "scala",
     "sbt",
-
     "dart",
     "drt",
-
     "el",
     "elc",
     "lisp",
     "lsp",
     "scm",
     "ss",
-
     "erl",
     "hrl",
     "ex",
     "exs",
-
     "hs",
     "lhs",
-
     "ml",
     "mli",
-
     "v",
     "vh",
     "sv",
     "svh",
     "vhd",
     "vhdl",
-
     "coffee",
     "litcoffee",
-
     "pug",
     "jade",
     "handlebars",
@@ -213,38 +188,29 @@
     "blade",
     "webc",
     "marko",
-
     "proto",
     "graphql",
     "gql",
-
     "sol",
     "vy",
-
     "tf",
     "tfvars",
     "hcl",
-
     "nix",
     "nixos",
-
     "wasm",
     "wat",
     "asm",
     "s",
-
     "vim",
     "vimrc",
     "elm",
-
     "pas",
     "pp",
     "p",
-
     "ada",
     "adb",
     "ads",
-
     "f",
     "f77",
     "f90",
@@ -253,63 +219,46 @@
     "f08",
     "for",
     "fortran",
-
     "d",
     "di",
-
     "nim",
     "nimble",
-
     "cr",
     "crystal",
     "ecr",
-
     "zig",
     "odin",
-
     "glsl",
     "hlsl",
     "wgsl",
-
     "prisma",
     "bicep",
     "pkl",
     "ron",
-
     "dockerfile",
     "containerfile",
     "mk",
     "cmake",
     "cmake.in",
-
     "diff",
     "patch",
-
     "dot",
     "gv",
     "graphviz",
-
     "awk",
     "gawk",
-
     "tcl",
     "exp",
-
     "ps",
     "eps",
-
     "mat",
     "mata",
-
     "abap",
     "acds",
     "asa",
-
     "applescript",
     "scpt",
-
     "au3",
-
     "bas",
     "bi",
     "bm",
@@ -318,233 +267,153 @@
     "ctl",
     "blitzbasic",
     "bb",
-
     "chpl",
-
     "cbl",
     "cob",
     "cpy",
     "cobol",
-
     "cfm",
     "cfc",
-
     "cl",
-
     "coq",
-
     "dylan",
     "dyl",
     "intr",
-
     "e",
     "ecl",
     "eclxml",
-
     "eiffel",
-
     "fancy",
     "fy",
-
     "factor",
-
     "forth",
     "fth",
     "4th",
-
     "frege",
     "fr",
-
     "gml",
-
     "gnuplot",
     "gp",
     "gpi",
-
     "gd",
     "tres",
     "tscn",
-
     "golo",
-
     "gosu",
     "gs",
     "gst",
     "gsx",
-
     "hack",
     "hh",
-
     "haxe",
     "hx",
     "hxsl",
-
     "hy",
-
     "idr",
     "lidr",
-
     "io",
-
     "ioke",
     "ik",
-
     "isabelle",
     "thy",
-
     "ijs",
-
     "jflex",
     "flex",
-
     "labview",
     "lvproj",
-
     "lfe",
-
     "livecode",
-
     "livescript",
     "ls",
-
     "llvm",
     "ll",
-
     "logos",
     "xm",
     "xmi",
-
     "logtalk",
     "lgt",
-
     "lookml",
-
     "mako",
     "mao",
-
     "mathematica",
     "nb",
     "cdf",
     "nbp",
     "ma",
-
     "matlab",
-
     "maxscript",
     "ms",
-
     "mercury",
-
     "meson",
     "wrap",
-
     "mirah",
     "druby",
-
     "modelica",
     "mo",
-
     "modula2",
     "mod",
-
     "monkey",
     "monkey2",
-
     "nanomsg",
-
     "nesc",
     "nc",
-
     "nginx",
     "nginxconf",
-
     "nit",
-
     "nu",
-
     "objdump",
-
     "omgrofl",
     "lol",
-
     "ooc",
-
     "opal",
-
     "oxygene",
-
     "oz",
-
     "pan",
-
     "papyrus",
     "psc",
-
     "parrot",
     "pasm",
     "pir",
-
     "pawn",
     "pwn",
     "inc",
-
     "pig",
-
     "pike",
-
     "pogoscript",
     "pogo",
-
     "pony",
-
     "postscript",
-
     "povray",
     "pov",
-
     "powerbuilder",
     "pbl",
     "srw",
-
     "processing",
     "pde",
-
     "prolog",
     "pro",
-
     "propeller",
     "spin",
-
     "puppet",
-
     "purebasic",
     "pb",
     "pbi",
-
     "purescript",
     "purs",
-
     "q",
     "k",
-
     "qmake",
     "pri",
-
     "qml",
-
     "racket",
     "rkt",
     "rktl",
     "rktd",
     "scrbl",
-
     "ragel",
     "rl",
-
     "raml",
-
     "rdoc",
-
     "realbasic",
     "rbbas",
     "rbfrm",
@@ -552,167 +421,109 @@
     "rbres",
     "rbtbar",
     "rbuistate",
-
     "rebol",
     "r2",
     "r3",
-
     "red",
     "reds",
-
     "redcode",
     "cw",
-
     "renpy",
     "rpy",
-
     "rexx",
     "pprx",
     "rex",
-
     "roboconf",
     "graph",
     "instances",
-
     "robot",
-
     "rg",
-
     "sage",
     "sagews",
-
     "saltstack",
     "sls",
-
     "sas",
-
     "scheme",
-
     "scilab",
     "sci",
     "sce",
-
     "self",
-
     "shen",
-
     "slash",
     "sl",
-
     "smalltalk",
     "st",
-
     "smarty",
     "tpl",
-
     "sourcepawn",
     "sp",
-
     "sparql",
     "rq",
-
     "splunk",
     "spl",
-
     "sqf",
-
     "squirrel",
     "nut",
-
     "stan",
-
     "stata",
     "do",
     "ado",
-
     "supercollider",
     "sc",
     "scd",
-
     "systemverilog",
-
     "tea",
-
     "terra",
-
     "textile",
-
     "thrift",
-
     "ti",
-
     "tl",
-
     "turing",
     "tu",
-
     "txl",
-
     "unifiedparallelc",
     "upc",
-
     "unity3d",
     "shader",
-
     "unrealscript",
     "uc",
-
     "vala",
     "vapi",
-
     "vcl",
-
     "volt",
-
     "webidl",
-
     "wisp",
-
     "x10",
-
     "xc",
-
     "xojo_code",
     "xojo_menu",
     "xojo_report",
     "xojo_script",
     "xojo_toolbar",
     "xojo_window",
-
     "xquery",
     "xq",
     "xql",
     "xqm",
     "xqy",
-
     "xs",
-
     "xslt",
     "xsl",
-
     "xtend",
-
     "yacc",
     "y",
-
     "yara",
     "yar",
-
     "zephir",
     "zep",
-
     "zimpl",
-
     "webmanifest",
     "manifest",
-
     "lock",
     "sum",
     "log",
-
     "csv",
     "tsv",
-
     "xls",
     "xlsx",
     "xlsm",
@@ -754,7 +565,7 @@
     "npmrc",
     "yarnrc"
   ],
-
+  // Specific filenames to include regardless of extension.
   "fileNames": [
     "Dockerfile",
     "Containerfile",
@@ -762,7 +573,6 @@
     "Jenkinsfile",
     "Vagrantfile",
     "CMakeLists.txt",
-
     ".gitignore",
     ".gitattributes",
     ".editorconfig",
@@ -772,53 +582,39 @@
     ".dockerignore",
     ".eslintignore",
     ".prettierignore",
-
     ".env",
     ".env.example",
     ".env.local",
     ".env.development",
     ".env.production",
-
     ".babelrc",
     ".eslintrc",
     ".prettierrc",
     ".stylelintrc",
     "browserslistrc",
-
     "tsconfig.json",
     "jsconfig.json",
-
     "package.json",
-
     "composer.json",
-
     "Cargo.toml",
-
     "go.mod",
-
     "pom.xml",
     "build.gradle",
     "build.gradle.kts",
     "settings.gradle",
     "settings.gradle.kts",
-
     "requirements.txt",
     "Pipfile",
     "pyproject.toml",
-
     "Gemfile",
-
     "mix.exs",
-
     "pubspec.yaml",
-
     "docker-compose.yml",
     "docker-compose.yaml",
-
     "makefile.am",
     "makefile.in"
   ],
-
+  // Glob patterns to exclude from indexing.
   "excludePatterns": [
     "**/node_modules/**",
     "**/dist/**",
@@ -830,48 +626,94 @@
     "**/vendor/**",
     "**/.smart-coding-cache/**"
   ],
+  // Enable project-type detection + smart ignore patterns.
   "smartIndexing": true,
+  // Lines per chunk.
   "chunkSize": 16,
+  // Overlapping lines between chunks.
   "chunkOverlap": 4,
+  // Files per indexing batch.
   "batchSize": 50,
+  // Skip files larger than this many bytes.
   "maxFileSize": 1048576,
+  // Maximum number of search results.
   "maxResults": 5,
+  // Persist embeddings between sessions.
   "enableCache": true,
+  // Remove stale caches automatically.
   "autoCleanStaleCaches": true,
+  // Assume vectors are finite (skip validation).
   "cacheVectorAssumeFinite": true,
+  // Decimal precision for cached vectors (null = default).
   "cacheVectorFloatDigits": null,
+  // Write stream highWaterMark for cache files.
   "cacheWriteHighWaterMark": 262144,
+  // Flush threshold (chars) for JSON writer.
   "cacheVectorFlushChars": 262144,
+  // Validate vectors contain only finite numbers.
   "cacheVectorCheckFinite": true,
+  // Avoid mutating vectors during serialization.
   "cacheVectorNoMutation": false,
+  // Join threshold for JSON array chunks.
   "cacheVectorJoinThreshold": 8192,
+  // Chunk size for JSON join optimization.
   "cacheVectorJoinChunkSize": 2048,
+  // Enable file watcher for incremental indexing.
   "watchFiles": true,
+  // Enable verbose logging.
   "verbose": true,
+  // Embedding model identifier.
   "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
+  // Preload the embedding model on startup.
   "preloadEmbeddingModel": true,
+  // Vector store format: json or binary.
   "vectorStoreFormat": "binary",
+  // Content storage: external or inline.
   "vectorStoreContentMode": "external",
+  // In-memory content cache entries (binary store).
   "contentCacheEntries": 256,
+  // Weight for semantic similarity scoring.
   "semanticWeight": 0.7,
+  // Score boost for exact text matches.
   "exactMatchBoost": 1.5,
+  // Number of embedding workers (0 disables).
   "workerThreads": 0,
+  // Worker batch timeout in milliseconds.
   "workerBatchTimeoutMs": 120000,
+  // Failures before worker circuit opens.
   "workerFailureThreshold": 1,
+  // Cooldown before re-enabling workers (ms).
   "workerFailureCooldownMs": 600000,
+  // Max chunks per worker batch.
   "workerMaxChunksPerBatch": 100,
+  // Allow fallback to main-thread embeddings.
   "allowSingleThreadFallback": false,
-  "enableExplicitGc": false,
+  // Enable explicit GC (requires --expose-gc).
+  "enableExplicitGc": true,
+  // Use child process per batch for memory isolation.
   "embeddingProcessPerBatch": false,
+  // Auto-enable child process when no workers + heavy model.
+  "autoEmbeddingProcessPerBatch": true,
+  // Wait time for active readers before saving cache (ms).
+  "saveReaderWaitTimeoutMs": 5000,
+  // Enable ANN index for large codebases.
   "annEnabled": true,
+  // Minimum chunks required to build ANN.
   "annMinChunks": 5000,
+  // Minimum ANN candidates to retrieve.
   "annMinCandidates": 50,
+  // Maximum ANN candidates to retrieve.
   "annMaxCandidates": 200,
+  // Scale ANN candidates by this multiplier.
   "annCandidateMultiplier": 20,
+  // HNSW efConstruction value.
   "annEfConstruction": 200,
+  // HNSW efSearch value.
   "annEfSearch": 64,
+  // HNSW M parameter (graph degree).
   "annM": 16,
+  // Persist ANN index to disk.
   "annIndexCache": true,
+  // ANN distance metric.
   "annMetric": "cosine"
 }
-

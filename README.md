@@ -98,11 +98,11 @@ Clears the cache for the current working directory (or `--workspace` if provided
 
 ---
 
-## Configuration (`config.json`)
+## Configuration (`config.jsonc`)
 
-Configuration is loaded from your workspace root when the server runs with `--workspace` (this is how IDEs launch it). In server mode, it falls back to the package `config.json` and then your current working directory.
+Configuration is loaded from your workspace root when the server runs with `--workspace` (this is how IDEs launch it). In server mode, it falls back to the package `config.jsonc` (or `config.json`) and then your current working directory.
 
-Example `config.json`:
+Example `config.jsonc`:
 
 ```json
 {
@@ -129,7 +129,7 @@ Example `config.json`:
 Cache location:
 
 - By default, the cache is stored in a global OS cache directory under `heuristic-mcp/<hash>`.
-- You can override with `cacheDirectory` in `config.json`.
+- You can override with `cacheDirectory` in your config file.
 
 ### Environment Variables
 

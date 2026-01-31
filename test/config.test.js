@@ -78,8 +78,15 @@ describe('Configuration Loading', () => {
       const originalCwd = process.cwd();
       process.chdir(dir);
 
-      const repoConfig = path.resolve(originalCwd, 'config.json');
-      const repoBackup = path.resolve(originalCwd, 'config.json.bak');
+      const repoConfigJson = path.resolve(originalCwd, 'config.json');
+      const repoConfigJsonc = path.resolve(originalCwd, 'config.jsonc');
+      let repoConfig = repoConfigJson;
+      try {
+        await fs.access(repoConfigJson);
+      } catch {
+        repoConfig = repoConfigJsonc;
+      }
+      const repoBackup = `${repoConfig}.bak`;
       await fs.rename(repoConfig, repoBackup);
       await fs.writeFile(
         path.join(dir, 'config.json'),
@@ -233,7 +240,7 @@ describe('Configuration Loading', () => {
 
   it('ignores invalid boolean environment overrides and empty strings', async () => {
     await withTempDir(async (dir) => {
-      // Set values opposite to defaults in config.json to ensure env var doesn't revert them or mess them up
+      // Set values opposite to defaults in the config file to ensure env var doesn't revert them or mess them up
       await fs.writeFile(
         path.join(dir, 'config.json'),
         JSON.stringify({
