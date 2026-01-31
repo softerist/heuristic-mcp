@@ -135,7 +135,10 @@ describe('index.js CLI coverage', () => {
     vi.resetModules();
     vi.resetAllMocks();
     originalArgv = process.argv;
-    listeners = {};
+    listeners = {
+      SIGINT: () => {},
+      SIGTERM: () => {},
+    };
     lastIndexer = null;
     lastCache = null;
     lastServer = null;

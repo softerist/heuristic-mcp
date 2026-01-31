@@ -82,9 +82,10 @@ describe('CodebaseIndexer watcher', () => {
       await indexer.setupFileWatcher();
 
       const relPath = path.join('src', 'file.js');
+      vi.useFakeTimers();
       indexer.watcher.emit('add', relPath);
-      await flushPromises();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await vi.advanceTimersByTimeAsync(0);
+      
       const fullPath = path.join(dir, relPath);
       if (indexer._watcherInProgress?.has(fullPath)) {
         await indexer._watcherInProgress.get(fullPath);
@@ -95,17 +96,17 @@ describe('CodebaseIndexer watcher', () => {
       expect(server.hybridSearch.clearFileModTime).toHaveBeenCalledWith(fullPath);
 
       indexer.watcher.emit('change', relPath);
-      await flushPromises();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await vi.advanceTimersByTimeAsync(0);
       if (indexer._watcherInProgress?.has(fullPath)) {
         await indexer._watcherInProgress.get(fullPath);
       }
       expect(indexer.indexFile).toHaveBeenCalledTimes(2);
 
       indexer.watcher.emit('unlink', relPath);
-      await flushPromises();
+      await vi.advanceTimersByTimeAsync(0);
       expect(cache.removeFileFromStore).toHaveBeenCalledWith(path.join(dir, relPath));
       expect(cache.deleteFileHash).toHaveBeenCalledWith(path.join(dir, relPath));
+      vi.useRealTimers();
     });
   });
 

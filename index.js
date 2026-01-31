@@ -436,7 +436,7 @@ export async function main(argv = process.argv) {
   }
 
   registerSignalHandlers(gracefulShutdown);
-  if (isServerMode) {
+  if (isServerMode && !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test')) {
     const handleStdinClose = () => requestShutdown('stdin');
     process.stdin?.on('end', handleStdinClose);
     process.stdin?.on('close', handleStdinClose);
@@ -503,12 +503,13 @@ async function gracefulShutdown(signal) {
   setTimeout(() => process.exit(0), 100);
 }
 
-const isMain = process.argv[1] && (
-  path.resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase() ||
-  process.argv[1].endsWith('heuristic-mcp') ||
-  process.argv[1].endsWith('heuristic-mcp.js') ||
-  path.basename(process.argv[1]) === 'index.js'
-);
+const isMain =
+  process.argv[1] &&
+  (path.resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase() ||
+    process.argv[1].endsWith('heuristic-mcp') ||
+    process.argv[1].endsWith('heuristic-mcp.js') ||
+    path.basename(process.argv[1]) === 'index.js') &&
+  !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test');
 
 if (isMain) {
   main().catch(console.error);
