@@ -685,7 +685,7 @@
   // Cooldown before re-enabling workers (ms).
   "workerFailureCooldownMs": 600000,
   // Max chunks per worker batch.
-  "workerMaxChunksPerBatch": 100,
+  "workerMaxChunksPerBatch": 20,
   // Allow fallback to main-thread embeddings.
   "allowSingleThreadFallback": false,
   // Enable explicit GC (requires --expose-gc).

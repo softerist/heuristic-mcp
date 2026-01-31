@@ -134,6 +134,16 @@ export class CodebaseIndexer {
     this._embeddingChildQueue = [];
     this._embeddingSessionStats = null;
     this._embeddingRequestId = 0;
+    this._embeddingChildNeedsRestart = false;
+    this._embeddingChildRestartThresholdMb = this.getEmbeddingChildRestartThresholdMb();
+  }
+
+  getEmbeddingChildRestartThresholdMb() {
+    const totalMb = typeof os.totalmem === 'function' ? os.totalmem() / 1024 / 1024 : 8192;
+    if (this.isHeavyEmbeddingModel()) {
+      return Math.min(8000, Math.max(6000, totalMb * 0.30));
+    }
+    return Math.min(5000, Math.max(2500, totalMb * 0.30));
   }
 
   isPathInsideWorkspace(filePath) {
@@ -296,12 +306,12 @@ export class CodebaseIndexer {
           : 1;
 
     // Heavy models (e.g., Jina) can consume multiple GB per worker.
-    // Be conservative in auto mode to avoid OOMs on typical desktops.
+    // Limit to 1 worker in auto mode - workers have better memory isolation than child processes.
     if (this.config.workerThreads === 'auto' && this.isHeavyEmbeddingModel()) {
-      if (numWorkers > 0 && this.config.verbose) {
-        console.info('[Indexer] Heavy embedding model detected; disabling auto workers to avoid OOM');
+      if (numWorkers > 1 && this.config.verbose) {
+        console.info('[Indexer] Heavy embedding model detected; limiting auto workers to 1 to reduce RAM spikes');
       }
-      numWorkers = 0;
+      numWorkers = Math.min(numWorkers, 1);
     }
 
     // Resource-aware scaling: check available RAM (skip in test env to avoid mocking issues)
@@ -907,7 +917,7 @@ export class CodebaseIndexer {
 
     const nodePath = process.execPath || 'node';
     const scriptPath = fileURLToPath(new URL('../lib/embedding-process.js', import.meta.url));
-    const child = spawn(nodePath, [scriptPath], {
+    const child = spawn(nodePath, ['--expose-gc', scriptPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,
@@ -919,12 +929,14 @@ export class CodebaseIndexer {
     this._embeddingProcessSessionActive = true;
     this._embeddingChildBuffer = '';
     this._embeddingChildQueue = [];
-    this._embeddingSessionStats = {
-      startedAt: Date.now(),
-      requests: 0,
-      chunks: 0,
-      totalRequestMs: 0,
-    };
+    if (!this._embeddingSessionStats) {
+      this._embeddingSessionStats = {
+        startedAt: Date.now(),
+        requests: 0,
+        chunks: 0,
+        totalRequestMs: 0,
+      };
+    }
 
     const childPid = child?.pid ?? 'unknown';
     if (this.config.verbose) {
@@ -995,6 +1007,15 @@ export class CodebaseIndexer {
           if (this._embeddingSessionStats) {
             this._embeddingSessionStats.totalRequestMs += Date.now() - entry.startedAt;
           }
+          const rssMb = Number(parsed?.meta?.rssMb);
+          if (Number.isFinite(rssMb) && rssMb >= this._embeddingChildRestartThresholdMb) {
+            if (this.config.verbose) {
+              console.warn(
+                `[Indexer] Child embedding RSS ${rssMb.toFixed(1)}MB exceeds threshold ${this._embeddingChildRestartThresholdMb.toFixed(1)}MB; will restart child after request`
+              );
+            }
+            this._embeddingChildNeedsRestart = true;
+          }
           entry.resolve(parsed?.results || []);
         } else if (this.config.verbose) {
           console.warn('[Indexer] Persistent embedding response with no pending request');
@@ -1019,7 +1040,7 @@ export class CodebaseIndexer {
     }
   }
 
-  async stopEmbeddingProcessSession() {
+  async stopEmbeddingProcessSession({ preserveStats = false } = {}) {
     const child = this._embeddingChild;
     if (!child) return;
     const childPid = child?.pid ?? 'unknown';
@@ -1045,7 +1066,7 @@ export class CodebaseIndexer {
         resolve();
       });
     });
-    if (this.config.verbose && this._embeddingSessionStats) {
+    if (this.config.verbose && this._embeddingSessionStats && !preserveStats) {
       const elapsedMs = Date.now() - this._embeddingSessionStats.startedAt;
       const elapsedSec = (elapsedMs / 1000).toFixed(1);
       const avgRequestMs = this._embeddingSessionStats.requests
@@ -1063,7 +1084,9 @@ export class CodebaseIndexer {
     }
     this._embeddingChild = null;
     this._embeddingProcessSessionActive = false;
-    this._embeddingSessionStats = null;
+    if (!preserveStats) {
+      this._embeddingSessionStats = null;
+    }
   }
 
   async processChunksInPersistentChild(chunks) {
@@ -1138,6 +1161,13 @@ export class CodebaseIndexer {
         this.recordWorkerFailure(`child process error (${err.message})`);
         resolve([]);
       }
+    }).then(async (results) => {
+      if (this._embeddingChildNeedsRestart && this._embeddingChildQueue.length === 0) {
+        this._embeddingChildNeedsRestart = false;
+        await this.stopEmbeddingProcessSession({ preserveStats: true });
+        await this.startEmbeddingProcessSession();
+      }
+      return results;
     });
   }
 
@@ -1155,7 +1185,7 @@ export class CodebaseIndexer {
 
     return new Promise((resolve) => {
       const startedAt = Date.now();
-      const child = spawn(nodePath, [scriptPath], {
+    const child = spawn(nodePath, ['--expose-gc', scriptPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
       const childPid = child?.pid ?? 'unknown';
