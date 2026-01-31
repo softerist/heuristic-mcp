@@ -847,7 +847,7 @@
   "cacheVectorJoinThreshold": 8192,
   "cacheVectorJoinChunkSize": 2048,
   "watchFiles": true,
-  "verbose": false,
+  "verbose": true,
   "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
   "preloadEmbeddingModel": true,
   "vectorStoreFormat": "binary",

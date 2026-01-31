@@ -9,7 +9,7 @@ import os from 'os';
 
 vi.mock('chokidar', () => {
   const { EventEmitter } = require('events');
-  const watch = vi.fn(() => {
+  const watch = vi.fn((patterns, options) => {
     const emitter = new EventEmitter();
     emitter.close = vi.fn().mockResolvedValue();
     const on = emitter.on.bind(emitter);
@@ -18,6 +18,7 @@ vi.mock('chokidar', () => {
       return emitter;
     };
     globalThis.__heuristicWatcher = emitter;
+    globalThis.__heuristicWatcherOptions = options;
     return emitter;
   });
 
@@ -254,6 +255,101 @@ describe('CodebaseIndexer watcher', () => {
       expect(cache.removeFileFromStore).toHaveBeenCalledWith(unlinkPath);
       expect(cache.deleteFileHash).toHaveBeenCalledWith(unlinkPath);
       expect(cache.save).toHaveBeenCalled();
+    });
+  });
+
+  it('logs watcher ready and error events', async () => {
+    await withTempDir(async (dir) => {
+      const config = {
+        fileExtensions: ['js'],
+        fileNames: [],
+        searchDirectory: dir,
+        excludePatterns: [],
+        watchFiles: true,
+        enableCache: true,
+        callGraphEnabled: false,
+        embeddingModel: 'test',
+        verbose: true,
+      };
+
+      const cache = {
+        save: vi.fn().mockResolvedValue(),
+        removeFileFromStore: vi.fn(),
+        deleteFileHash: vi.fn(),
+      };
+
+      const indexer = new CodebaseIndexer(async () => ({ data: [] }), cache, config, null);
+      indexer.indexFile = vi.fn().mockResolvedValue();
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await indexer.setupFileWatcher();
+
+      globalThis.__heuristicWatcher.emit('ready');
+      globalThis.__heuristicWatcher.emit('error', new Error('watcher failed'));
+      await flushPromises();
+
+      expect(infoSpy).toHaveBeenCalledWith('[Indexer] File watcher ready and monitoring for changes');
+      expect(errorSpy).toHaveBeenCalledWith('[Indexer] File watcher error: watcher failed');
+
+      infoSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+  });
+
+  it('throttles ignored path logging', async () => {
+    await withTempDir(async (dir) => {
+      const config = {
+        fileExtensions: ['js'],
+        fileNames: [],
+        searchDirectory: dir,
+        excludePatterns: [],
+        watchFiles: true,
+        enableCache: true,
+        callGraphEnabled: false,
+        embeddingModel: 'test',
+        verbose: true,
+      };
+
+      const cache = {
+        save: vi.fn().mockResolvedValue(),
+        removeFileFromStore: vi.fn(),
+        deleteFileHash: vi.fn(),
+      };
+
+      const indexer = new CodebaseIndexer(async () => ({ data: [] }), cache, config, null);
+      indexer.indexFile = vi.fn().mockResolvedValue();
+      indexer.isExcluded = vi.fn().mockReturnValue(true);
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+      vi.useFakeTimers();
+      const baseTime = new Date('2026-01-31T00:00:00Z');
+      vi.setSystemTime(baseTime);
+
+      await indexer.setupFileWatcher();
+      const { ignored } = globalThis.__heuristicWatcherOptions;
+
+      for (let i = 0; i < 6; i += 1) {
+        ignored(`src/ignored-${i}.js`);
+      }
+
+      const ignoredLogs = infoSpy.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].startsWith('[Indexer] Watcher ignored:')
+      );
+      expect(ignoredLogs.length).toBe(5);
+
+      vi.setSystemTime(new Date(baseTime.getTime() + 2001));
+      ignored('src/ignored-6.js');
+
+      const ignoredLogsAfter = infoSpy.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].startsWith('[Indexer] Watcher ignored:')
+      );
+      expect(ignoredLogsAfter.length).toBe(6);
+
+      vi.useRealTimers();
+      infoSpy.mockRestore();
     });
   });
 });

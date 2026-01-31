@@ -113,6 +113,7 @@ export class CodebaseIndexer {
       ? path.resolve(this.config.searchDirectory)
       : null;
     this.workspaceRootReal = null;
+    this._lastIncrementalGcAt = 0;
   }
 
   isPathInsideWorkspace(filePath) {
@@ -184,6 +185,27 @@ export class CodebaseIndexer {
         this.indexAll().catch(() => null);
       }
     }, delayMs);
+  }
+
+  maybeRunIncrementalGc(reason) {
+    if (!this.config.enableExplicitGc || typeof global.gc !== 'function') return;
+    const now = Date.now();
+    const minIntervalMs = 60_000;
+    if (this._lastIncrementalGcAt && now - this._lastIncrementalGcAt < minIntervalMs) return;
+    const thresholdMb = Number.isFinite(this.config.incrementalGcThresholdMb)
+      ? this.config.incrementalGcThresholdMb
+      : 2048;
+    if (thresholdMb <= 0) return;
+    const { rss } = process.memoryUsage();
+    if (rss < thresholdMb * 1024 * 1024) return;
+    if (this.config.verbose) {
+      const rssMb = (rss / 1024 / 1024).toFixed(1);
+      console.info(
+        `[Indexer] Incremental GC (${reason}) rss=${rssMb}MB threshold=${thresholdMb}MB`
+      );
+    }
+    this._lastIncrementalGcAt = now;
+    global.gc();
   }
 
   recordWorkerFailure(reason) {
@@ -927,6 +949,9 @@ export class CodebaseIndexer {
   }
 
   async indexFile(file) {
+    if (typeof this.cache.ensureLoaded === 'function') {
+      await this.cache.ensureLoaded();
+    }
     if (!(await this.isPathInsideWorkspaceReal(file))) {
       console.warn(`[Indexer] Skipped ${path.basename(file)} (outside workspace)`);
       return 0;
@@ -1824,6 +1849,10 @@ export class CodebaseIndexer {
 
     this.processingWatchEvents = true;
     try {
+      if (typeof this.cache.ensureLoaded === 'function') {
+        await this.cache.ensureLoaded();
+      }
+
       while (this.pendingWatchEvents.size > 0) {
         const pending = Array.from(this.pendingWatchEvents.entries());
         this.pendingWatchEvents.clear();
@@ -1842,6 +1871,10 @@ export class CodebaseIndexer {
         }
 
         await this.cache.save();
+        if (this.config.clearCacheAfterIndex) {
+          await this.cache.dropInMemoryVectors();
+        }
+        this.maybeRunIncrementalGc('watch batch');
       }
     } finally {
       this.processingWatchEvents = false;
@@ -1868,7 +1901,22 @@ export class CodebaseIndexer {
       const fullPath = path.isAbsolute(filePath)
         ? filePath
         : path.join(this.config.searchDirectory, filePath);
-      return this.isExcluded(fullPath);
+      const isIgnored = this.isExcluded(fullPath);
+      if (isIgnored && this.config.verbose) {
+        if (!this._watcherIgnoredLogCount) {
+          this._watcherIgnoredLogCount = 0;
+          this._watcherIgnoredLastLogAt = 0;
+        }
+        const now = Date.now();
+        const shouldLog =
+          this._watcherIgnoredLogCount < 5 || now - this._watcherIgnoredLastLogAt > 2000;
+        if (shouldLog) {
+          this._watcherIgnoredLogCount += 1;
+          this._watcherIgnoredLastLogAt = now;
+          console.info(`[Indexer] Watcher ignored: ${fullPath}`);
+        }
+      }
+      return isIgnored;
     };
 
     this.watcher = chokidar.watch(pattern, {
@@ -1898,6 +1946,10 @@ export class CodebaseIndexer {
 
         await this.indexFile(fullPath);
         await this.cache.save();
+        if (this.config.clearCacheAfterIndex) {
+          await this.cache.dropInMemoryVectors();
+        }
+        this.maybeRunIncrementalGc('watch add');
       })
       .on('change', async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
@@ -1918,6 +1970,10 @@ export class CodebaseIndexer {
 
         await this.indexFile(fullPath);
         await this.cache.save();
+        if (this.config.clearCacheAfterIndex) {
+          await this.cache.dropInMemoryVectors();
+        }
+        this.maybeRunIncrementalGc('watch change');
       })
       .on('unlink', async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
@@ -1936,12 +1992,36 @@ export class CodebaseIndexer {
           this.server.hybridSearch.clearFileModTime(fullPath);
         }
 
+        if (typeof this.cache.ensureLoaded === 'function') {
+          await this.cache.ensureLoaded();
+        }
         await this.cache.removeFileFromStore(fullPath);
         this.cache.deleteFileHash(fullPath);
         await this.cache.save();
+        if (this.config.clearCacheAfterIndex) {
+          await this.cache.dropInMemoryVectors();
+        }
+        this.maybeRunIncrementalGc('watch unlink');
+      })
+      .on('ready', () => {
+        console.info('[Indexer] File watcher ready and monitoring for changes');
+        if (this.config.verbose) {
+          console.info(`[Indexer] Watch root: ${this.config.searchDirectory || 'unknown'}`);
+          console.info(`[Indexer] Watch patterns: ${pattern.length}`);
+          console.info(`[Indexer] Watching extensions: ${this.config.fileExtensions?.length || 0} types`);
+          console.info(`[Indexer] Watching fileNames: ${(this.config.fileNames || []).join(', ') || 'none'}`);
+          console.info(`[Indexer] Exclude patterns: ${(this.config.excludePatterns || []).length} patterns`);
+          console.info('[Indexer] ignoreInitial: true');
+        }
+      })
+      .on('error', (error) => {
+        console.error(`[Indexer] File watcher error: ${error.message}`);
+        if (this.config.verbose) {
+          console.error(`[Indexer] Watcher error details:`, error);
+        }
       });
 
-    console.info('[Indexer] File watcher enabled for incremental indexing');
+    console.info('[Indexer] File watcher starting...');
   }
 }
 

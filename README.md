@@ -151,6 +151,7 @@ Selected overrides (prefix `SMART_CODING_`):
 - `SMART_CODING_VECTOR_CACHE_ENTRIES=64` — LRU entries for vectors (disk mode).
 - `SMART_CODING_CLEAR_CACHE_AFTER_INDEX=true|false` — drop in-memory vectors after indexing.
 - `SMART_CODING_EXPLICIT_GC=true|false` — opt-in to explicit GC (requires `--expose-gc`).
+- `SMART_CODING_INCREMENTAL_GC_THRESHOLD_MB=2048` — RSS threshold for running incremental GC after watcher updates (requires explicit GC).
 
 See `lib/config.js` for the full list.
 
