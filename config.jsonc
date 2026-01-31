@@ -677,7 +677,7 @@
   // Score boost for exact text matches.
   "exactMatchBoost": 1.5,
   // Number of embedding workers (0 disables).
-  "workerThreads": 0,
+  "workerThreads": "auto",
   // Worker batch timeout in milliseconds.
   "workerBatchTimeoutMs": 120000,
   // Failures before worker circuit opens.

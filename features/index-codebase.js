@@ -295,13 +295,22 @@ export class CodebaseIndexer {
           ? this.config.workerThreads
           : 1;
 
+    // Heavy models (e.g., Jina) can consume multiple GB per worker.
+    // Be conservative in auto mode to avoid OOMs on typical desktops.
+    if (this.config.workerThreads === 'auto' && this.isHeavyEmbeddingModel()) {
+      if (numWorkers > 0 && this.config.verbose) {
+        console.info('[Indexer] Heavy embedding model detected; disabling auto workers to avoid OOM');
+      }
+      numWorkers = 0;
+    }
+
     // Resource-aware scaling: check available RAM (skip in test env to avoid mocking issues)
     // We apply this if we have > 1 worker, regardless of whether it was 'auto' or explicit
     if (numWorkers > 1 && !isTestEnv() && typeof os.freemem === 'function') {
       // Jina model typically requires ~1.5GB - 2GB per worker
       const freeMemGb = os.freemem() / 1024 / 1024 / 1024;
       const isHeavyModel = this.config.embeddingModel.includes('jina');
-      const memPerWorker = isHeavyModel ? 2.0 : 0.8;
+      const memPerWorker = isHeavyModel ? 8.0 : 0.8;
 
       const memCappedWorkers = Math.max(1, Math.floor(freeMemGb / memPerWorker));
       if (memCappedWorkers < numWorkers) {
@@ -311,6 +320,24 @@ export class CodebaseIndexer {
           );
         }
         numWorkers = memCappedWorkers;
+      }
+    }
+
+    // Hard memory ceiling: disable workers if projected RSS risks OOM
+    if (!isTestEnv() && typeof os.totalmem === 'function') {
+      const totalMemGb = os.totalmem() / 1024 / 1024 / 1024;
+      const rssGb = process.memoryUsage().rss / 1024 / 1024 / 1024;
+      const isHeavyModel = this.config.embeddingModel.includes('jina');
+      const memPerWorker = isHeavyModel ? 8.0 : 0.8;
+      const projectedGb = rssGb + numWorkers * memPerWorker + 0.5; // 0.5GB headroom
+      const ceilingGb = totalMemGb * 0.85;
+      if (numWorkers > 0 && projectedGb > ceilingGb) {
+        if (this.config.verbose) {
+          console.info(
+            `[Indexer] Disabling workers to avoid OOM: projected=${projectedGb.toFixed(1)}GB ceiling=${ceilingGb.toFixed(1)}GB rss=${rssGb.toFixed(1)}GB total=${totalMemGb.toFixed(1)}GB`
+          );
+        }
+        numWorkers = 0;
       }
     }
 
@@ -1027,8 +1054,11 @@ export class CodebaseIndexer {
       const avgChunksPerReq = this._embeddingSessionStats.requests
         ? (this._embeddingSessionStats.chunks / this._embeddingSessionStats.requests).toFixed(1)
         : '0.0';
+      const avgMsPerChunk = this._embeddingSessionStats.chunks
+        ? (this._embeddingSessionStats.totalRequestMs / this._embeddingSessionStats.chunks).toFixed(1)
+        : '0.0';
       console.info(
-        `[Indexer] Persistent embedding summary: requests=${this._embeddingSessionStats.requests} chunks=${this._embeddingSessionStats.chunks} avgChunksPerReq=${avgChunksPerReq} avgReqMs=${avgRequestMs} totalElapsed=${elapsedSec}s`
+        `[Indexer] Persistent embedding summary: requests=${this._embeddingSessionStats.requests} chunks=${this._embeddingSessionStats.chunks} avgChunksPerReq=${avgChunksPerReq} avgReqMs=${avgRequestMs} avgMsPerChunk=${avgMsPerChunk} totalElapsed=${elapsedSec}s`
       );
     }
     this._embeddingChild = null;
@@ -1227,9 +1257,10 @@ export class CodebaseIndexer {
             pooling: 'mean',
             normalize: true,
           });
-          const vector = toFloat32Array(output.data);
-          // Dispose tensor to release ONNX memory immediately
-          if (typeof output.dispose === 'function') output.dispose();
+          // CRITICAL: Deep copy to release ONNX tensor memory
+          const vector = new Float32Array(output.data);
+          // Help GC by nullifying the large buffer reference (dispose() doesn't exist in transformers.js)
+          try { output.data = null; } catch { /* frozen tensor */ }
           results.push({
             file: chunk.file,
             startLine: chunk.startLine,
