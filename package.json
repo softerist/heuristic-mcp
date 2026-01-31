@@ -8,8 +8,8 @@
     "heuristic-mcp": "index.js"
   },
   "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js",
+    "start": "node --expose-gc index.js",
+    "dev": "node --expose-gc --watch index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "node scripts/clear-cache.js",

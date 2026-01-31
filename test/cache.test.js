@@ -84,6 +84,8 @@ describe('EmbeddingsCache', () => {
       cache.setFileCallData('a.js', { defs: [], calls: [] });
       cache.removeFileFromStore('a.js');
       expect(cache.getFileCallData('a.js')).toBeUndefined();
+      
+      await cache.close();
     });
   });
 
@@ -112,6 +114,8 @@ describe('EmbeddingsCache', () => {
       expect(cache.getVectorStore()).toHaveLength(1);
       expect(cache.getFileHash(path.join(dir, 'a.js'))).toBe('hash1');
       expect(cache.getFileHash(path.join(dir, 'a.txt'))).toBeUndefined();
+      
+      await cache.close();
     });
   });
 
@@ -134,6 +138,9 @@ describe('EmbeddingsCache', () => {
       expect(reloaded.getFileMeta(filePath)).toEqual(
         expect.objectContaining({ hash: 'hash-meta', mtimeMs: 1234, size: 4567 })
       );
+      
+      await reloaded.close();
+      await cache.close();
     });
   });
 
@@ -262,6 +269,8 @@ describe('EmbeddingsCache', () => {
 
       expect(first).toBeInstanceOf(Float32Array);
       expect(second).toBe(first);
+      
+      await cache.close();
     });
   });
 
@@ -289,6 +298,8 @@ describe('EmbeddingsCache', () => {
       expect(loaded).toBe(true);
       expect(cache.annIndex).toBeTruthy();
       expect(lastHnswInstance.ef).toBe(32);
+      
+      await cache.close();
     });
   });
 
@@ -306,6 +317,8 @@ describe('EmbeddingsCache', () => {
       const metaFile = path.join(dir, 'ann-meta.json');
       const metaExists = await fs.readFile(metaFile, 'utf-8');
       expect(JSON.parse(metaExists).count).toBe(1);
+      
+      await cache.close();
     });
   });
 
@@ -323,6 +336,8 @@ describe('EmbeddingsCache', () => {
       cache.annDirty = true;
       const second = await cache.ensureAnnIndex();
       expect(second).toBeTruthy();
+      
+      await cache.close();
     });
   });
 
@@ -339,6 +354,8 @@ describe('EmbeddingsCache', () => {
 
       const result = await cache.queryAnn([1, 2], 2);
       expect(result).toEqual([]);
+      
+      await cache.close();
     });
   });
 
@@ -354,6 +371,8 @@ describe('EmbeddingsCache', () => {
 
       expect(annStats.enabled).toBe(false);
       expect(callStats.enabled).toBe(false);
+      
+      await cache.close();
     });
   });
 
@@ -372,6 +391,8 @@ describe('EmbeddingsCache', () => {
       );
       expect(called).toBe(true);
       rmSpy.mockRestore();
+      
+      await cache.close();
     });
   });
 
@@ -384,6 +405,8 @@ describe('EmbeddingsCache', () => {
       // embeddings.json and file-hashes.json are missing
       await cache.load();
       expect(cache.getVectorStore()).toEqual([]);
+      
+      await cache.close();
     });
   });
 
@@ -422,6 +445,8 @@ describe('EmbeddingsCache', () => {
       cache.annDirty = true;
       await cache.buildAnnIndex(NoEfIndex, 2);
       expect(cache.annIndex).toBeInstanceOf(NoEfIndex);
+      
+      await cache.close();
     });
   });
 
@@ -438,6 +463,8 @@ describe('EmbeddingsCache', () => {
         expect.stringContaining('Failed to remove call-graph cache')
       );
       rmSpy.mockRestore();
+      
+      await cache.close();
     });
   });
 });

@@ -861,6 +861,7 @@
   "workerFailureCooldownMs": 600000,
   "workerMaxChunksPerBatch": 100,
   "allowSingleThreadFallback": false,
+  "enableExplicitGc": false,
   "embeddingProcessPerBatch": false,
   "annEnabled": true,
   "annMinChunks": 5000,

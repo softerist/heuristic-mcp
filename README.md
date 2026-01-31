@@ -111,6 +111,7 @@ Example `config.json`:
   "smartIndexing": true,
   "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
   "workerThreads": 0,
+  "enableExplicitGc": false,
   "recencyBoost": 0.1,
   "recencyDecayDays": 30,
   "callGraphEnabled": true,
@@ -134,21 +135,22 @@ Cache location:
 
 Selected overrides (prefix `SMART_CODING_`):
 
-- `SMART_CODING_VERBOSE=true|false`
-- `SMART_CODING_WORKER_THREADS=auto|0|N`
-- `SMART_CODING_BATCH_SIZE=100`
-- `SMART_CODING_CHUNK_SIZE=25`
-- `SMART_CODING_MAX_RESULTS=5`
-- `SMART_CODING_RECENCY_BOOST=0.1`
-- `SMART_CODING_RECENCY_DECAY_DAYS=30`
-- `SMART_CODING_ANN_ENABLED=true|false`
-- `SMART_CODING_ANN_EF_SEARCH=64`
-- `SMART_CODING_VECTOR_STORE_FORMAT=json|binary`
-- `SMART_CODING_VECTOR_STORE_CONTENT_MODE=external|inline`
-- `SMART_CODING_VECTOR_STORE_LOAD_MODE=memory|disk`
-- `SMART_CODING_CONTENT_CACHE_ENTRIES=256`
-- `SMART_CODING_VECTOR_CACHE_ENTRIES=64`
-- `SMART_CODING_CLEAR_CACHE_AFTER_INDEX=true|false`
+- `SMART_CODING_VERBOSE=true|false` — enable detailed logging.
+- `SMART_CODING_WORKER_THREADS=auto|0|N` — worker thread count (`0` disables workers).
+- `SMART_CODING_BATCH_SIZE=100` — files per indexing batch.
+- `SMART_CODING_CHUNK_SIZE=25` — lines per chunk.
+- `SMART_CODING_MAX_RESULTS=5` — max search results.
+- `SMART_CODING_RECENCY_BOOST=0.1` — boost for recently edited files.
+- `SMART_CODING_RECENCY_DECAY_DAYS=30` — days until recency boost decays to 0.
+- `SMART_CODING_ANN_ENABLED=true|false` — enable ANN index.
+- `SMART_CODING_ANN_EF_SEARCH=64` — ANN search quality/speed tradeoff.
+- `SMART_CODING_VECTOR_STORE_FORMAT=json|binary` — on-disk vector store format.
+- `SMART_CODING_VECTOR_STORE_CONTENT_MODE=external|inline` — where content is stored for binary format.
+- `SMART_CODING_VECTOR_STORE_LOAD_MODE=memory|disk` — vector loading strategy.
+- `SMART_CODING_CONTENT_CACHE_ENTRIES=256` — LRU entries for decoded content.
+- `SMART_CODING_VECTOR_CACHE_ENTRIES=64` — LRU entries for vectors (disk mode).
+- `SMART_CODING_CLEAR_CACHE_AFTER_INDEX=true|false` — drop in-memory vectors after indexing.
+- `SMART_CODING_EXPLICIT_GC=true|false` — opt-in to explicit GC (requires `--expose-gc`).
 
 See `lib/config.js` for the full list.
 

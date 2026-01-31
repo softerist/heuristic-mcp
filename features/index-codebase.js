@@ -109,6 +109,45 @@ export class CodebaseIndexer {
     this._retryTimer = null;
     this._lastProgress = null;
     this.currentIndexMode = null;
+    this.workspaceRoot = this.config.searchDirectory
+      ? path.resolve(this.config.searchDirectory)
+      : null;
+    this.workspaceRootReal = null;
+  }
+
+  isPathInsideWorkspace(filePath) {
+    if (!filePath || !this.workspaceRoot) return true;
+    const target = path.resolve(filePath);
+    const normalizedBase = process.platform === 'win32' ? this.workspaceRoot.toLowerCase() : this.workspaceRoot;
+    const normalizedTarget = process.platform === 'win32' ? target.toLowerCase() : target;
+    const rel = path.relative(normalizedBase, normalizedTarget);
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  }
+
+  async resolveWorkspaceRealpath() {
+    if (!this.workspaceRoot) return null;
+    if (this.workspaceRootReal) return this.workspaceRootReal;
+    try {
+      this.workspaceRootReal = await fs.realpath(this.workspaceRoot);
+    } catch {
+      this.workspaceRootReal = this.workspaceRoot;
+    }
+    return this.workspaceRootReal;
+  }
+
+  async isPathInsideWorkspaceReal(filePath) {
+    if (!filePath || !this.workspaceRoot) return true;
+    const baseReal = await this.resolveWorkspaceRealpath();
+    try {
+      const targetReal = await fs.realpath(filePath);
+      const normalizedBase = process.platform === 'win32' ? baseReal.toLowerCase() : baseReal;
+      const normalizedTarget = process.platform === 'win32' ? targetReal.toLowerCase() : targetReal;
+      const rel = path.relative(normalizedBase, normalizedTarget);
+      return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+    } catch {
+      // Fall back to lexical check when realpath fails (e.g., deleted files).
+      return this.isPathInsideWorkspace(filePath);
+    }
   }
 
   maybeResetWorkerCircuit() {
@@ -237,6 +276,9 @@ export class CodebaseIndexer {
             embeddingModel: this.config.embeddingModel,
             verbose: this.config.verbose,
             numThreads: threadsPerWorker,
+            searchDirectory: this.config.searchDirectory,
+            maxFileSize: this.config.maxFileSize,
+            callGraphEnabled: this.config.callGraphEnabled,
           },
         });
 
@@ -384,6 +426,9 @@ export class CodebaseIndexer {
             embeddingModel: this.config.embeddingModel,
             verbose: this.config.verbose,
             numThreads: 1,
+            searchDirectory: this.config.searchDirectory,
+            maxFileSize: this.config.maxFileSize,
+            callGraphEnabled: this.config.callGraphEnabled,
           },
      });
 
@@ -461,6 +506,20 @@ export class CodebaseIndexer {
   }
 
   async processFilesWithWorkers(allFiles) {
+    const allowedFiles = [];
+    for (const entry of allFiles) {
+      if (await this.isPathInsideWorkspaceReal(entry.file)) {
+        allowedFiles.push(entry);
+      }
+    }
+    if (allowedFiles.length !== allFiles.length) {
+      console.warn(
+        `[Indexer] Skipping ${allFiles.length - allowedFiles.length} file(s) outside workspace`
+      );
+    }
+    if (allowedFiles.length === 0) {
+      return [];
+    }
     const activeWorkers = this.workers
       .map((worker, index) => ({ worker, index }))
       .filter((entry) => entry.worker);
@@ -472,7 +531,7 @@ export class CodebaseIndexer {
     }
 
     const results = [];
-    const chunkSize = Math.ceil(allFiles.length / activeWorkers.length);
+    const chunkSize = Math.ceil(allowedFiles.length / activeWorkers.length);
     const workerPromises = [];
     const configuredTimeout = Number.isInteger(this.config.workerBatchTimeoutMs)
       ? this.config.workerBatchTimeoutMs
@@ -481,7 +540,7 @@ export class CodebaseIndexer {
 
     for (let i = 0; i < activeWorkers.length; i++) {
       const { worker, index: workerIndex } = activeWorkers[i];
-      const workerFiles = allFiles.slice(i * chunkSize, (i + 1) * chunkSize);
+      const workerFiles = allowedFiles.slice(i * chunkSize, (i + 1) * chunkSize);
       if (workerFiles.length === 0) continue;
 
       if (this.config.verbose) {
@@ -868,6 +927,10 @@ export class CodebaseIndexer {
   }
 
   async indexFile(file) {
+    if (!(await this.isPathInsideWorkspaceReal(file))) {
+      console.warn(`[Indexer] Skipped ${path.basename(file)} (outside workspace)`);
+      return 0;
+    }
     const fileName = path.basename(file);
     if (this.isExcluded(file)) {
       if (this.config.verbose) {

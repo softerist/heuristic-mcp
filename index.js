@@ -29,7 +29,7 @@ import { enableStderrOnlyLogging, setupFileLogging } from './lib/logging.js';
 import { parseArgs, printHelp } from './lib/cli.js';
 import { clearCache } from './lib/cache-ops.js';
 import { logMemory, startMemoryLogger } from './lib/memory-logger.js';
-import { registerSignalHandlers, setupPidFile } from './lib/server-lifecycle.js';
+import { registerSignalHandlers, setupPidFile, acquireWorkspaceLock } from './lib/server-lifecycle.js';
 
 import { EmbeddingsCache } from './lib/cache.js';
 import { CodebaseIndexer } from './features/index-codebase.js';
@@ -91,6 +91,24 @@ async function initialize(workspaceDir) {
   config = await loadConfig(workspaceDir);
   if (config.enableCache && config.autoCleanStaleCaches !== false) {
     await clearStaleCaches();
+  }
+  if (config.enableExplicitGc && typeof global.gc !== 'function') {
+    console.error(
+      '[Server] enableExplicitGc=true but this process was not started with --expose-gc.'
+    );
+    console.error('[Server] Please start with: node --expose-gc index.js');
+    process.exit(1);
+  }
+  const lock = await acquireWorkspaceLock({
+    cacheDirectory: config.cacheDirectory,
+    workspaceDir: config.searchDirectory,
+  });
+  if (!lock.acquired) {
+    console.warn(
+      `[Server] Another heuristic-mcp instance is already running for this workspace (pid ${lock.ownerPid ?? 'unknown'}).`
+    );
+    console.warn('[Server] Exiting to avoid duplicate model loads.');
+    process.exit(0);
   }
   const [pidPath, logPath] = await Promise.all([
     setupPidFile({ pidFileName: PID_FILE_NAME }),
@@ -307,6 +325,14 @@ export async function main(argv = process.argv) {
     unknownFlags,
   } = parsed;
 
+  let shutdownRequested = false;
+  const requestShutdown = (reason) => {
+    if (shutdownRequested) return;
+    shutdownRequested = true;
+    console.info(`[Server] Shutdown requested (${reason}).`);
+    void gracefulShutdown(reason);
+  };
+
   if (isServerMode && !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test')) {
     enableStderrOnlyLogging();
   }
@@ -377,6 +403,12 @@ export async function main(argv = process.argv) {
   }
 
   registerSignalHandlers(gracefulShutdown);
+  if (isServerMode) {
+    const handleStdinClose = () => requestShutdown('stdin');
+    process.stdin?.on('end', handleStdinClose);
+    process.stdin?.on('close', handleStdinClose);
+    process.stdin?.on('error', handleStdinClose);
+  }
   const { startBackgroundTasks } = await initialize(workspaceDir);
 
   // (Blocking init moved below)
