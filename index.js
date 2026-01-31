@@ -94,9 +94,11 @@ async function initialize(workspaceDir) {
   }
   if (config.enableExplicitGc && typeof global.gc !== 'function') {
     console.error(
-      '[Server] enableExplicitGc=true but this process was not started with --expose-gc.'
+      '[Server] FATAL: enableExplicitGc=true but this process was not started with --expose-gc.'
     );
-    console.error('[Server] Please start with: node --expose-gc index.js');
+    console.error(
+      '[Server] Please start the server using "npm start" or add --expose-gc to your node command.'
+    );
     process.exit(1);
   }
   const lock = await acquireWorkspaceLock({
