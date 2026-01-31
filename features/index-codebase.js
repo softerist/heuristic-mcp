@@ -115,6 +115,12 @@ export class CodebaseIndexer {
     this.workspaceRootReal = null;
     this._lastIncrementalGcAt = 0;
     this._autoEmbeddingProcessLogged = false;
+    // Debounce timers for watcher events (path -> timeout ID)
+    this._watcherDebounceTimers = new Map();
+    // Files currently being indexed via watcher (path -> Promise)
+    this._watcherInProgress = new Map();
+    // Debounce delay in ms (consolidates rapid add/change events)
+    this._watcherDebounceMs = 300;
   }
 
   isPathInsideWorkspace(filePath) {
@@ -1918,6 +1924,56 @@ export class CodebaseIndexer {
     }
   }
 
+  /**
+   * Debounced file indexing for watcher events.
+   * Consolidates rapid add/change events and prevents concurrent indexing of the same file.
+   */
+  debouncedWatchIndexFile(fullPath, eventType) {
+    // Cancel any pending debounce timer for this file
+    const existingTimer = this._watcherDebounceTimers.get(fullPath);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // If file is currently being indexed, just schedule a re-index after it completes
+    if (this._watcherInProgress.has(fullPath)) {
+      if (this.config.verbose) {
+        console.info(`[Indexer] Skipping duplicate ${eventType} for ${path.basename(fullPath)} (already indexing)`);
+      }
+      return;
+    }
+
+    // Set a debounce timer to consolidate rapid events
+    const timer = setTimeout(async () => {
+      this._watcherDebounceTimers.delete(fullPath);
+
+      // Mark file as in-progress
+      const indexPromise = (async () => {
+        try {
+          // Invalidate recency cache
+          if (this.server && this.server.hybridSearch) {
+            this.server.hybridSearch.clearFileModTime(fullPath);
+          }
+
+          await this.indexFile(fullPath);
+          await this.cache.save();
+          if (this.config.clearCacheAfterIndex) {
+            await this.cache.dropInMemoryVectors();
+          }
+          this.maybeRunIncrementalGc(`watch ${eventType}`);
+        } catch (err) {
+          console.warn(`[Indexer] Failed to index ${path.basename(fullPath)}: ${err.message}`);
+        } finally {
+          this._watcherInProgress.delete(fullPath);
+        }
+      })();
+
+      this._watcherInProgress.set(fullPath, indexPromise);
+    }, this._watcherDebounceMs);
+
+    this._watcherDebounceTimers.set(fullPath, timer);
+  }
+
   async setupFileWatcher() {
     if (!this.config.watchFiles) return;
 
@@ -1964,7 +2020,7 @@ export class CodebaseIndexer {
     });
 
     this.watcher
-      .on('add', async (filePath) => {
+      .on('add', (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.info(`[Indexer] New file detected: ${filePath}`);
 
@@ -1976,19 +2032,10 @@ export class CodebaseIndexer {
           return;
         }
 
-        // Invalidate recency cache
-        if (this.server && this.server.hybridSearch) {
-          this.server.hybridSearch.clearFileModTime(fullPath);
-        }
-
-        await this.indexFile(fullPath);
-        await this.cache.save();
-        if (this.config.clearCacheAfterIndex) {
-          await this.cache.dropInMemoryVectors();
-        }
-        this.maybeRunIncrementalGc('watch add');
+        // Use debounced indexing to consolidate rapid add/change events
+        this.debouncedWatchIndexFile(fullPath, 'add');
       })
-      .on('change', async (filePath) => {
+      .on('change', (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.info(`[Indexer] File changed: ${filePath}`);
 
@@ -2000,17 +2047,8 @@ export class CodebaseIndexer {
           return;
         }
 
-        // Invalidate recency cache
-        if (this.server && this.server.hybridSearch) {
-          this.server.hybridSearch.clearFileModTime(fullPath);
-        }
-
-        await this.indexFile(fullPath);
-        await this.cache.save();
-        if (this.config.clearCacheAfterIndex) {
-          await this.cache.dropInMemoryVectors();
-        }
-        this.maybeRunIncrementalGc('watch change');
+        // Use debounced indexing to consolidate rapid add/change events
+        this.debouncedWatchIndexFile(fullPath, 'change');
       })
       .on('unlink', async (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
