@@ -1,0 +1,14 @@
+node_modules
+.vitest-coverage
+.agent
+.git
+*.log
+.DS_Store
+Thumbs.db
+test
+tools
+features
+scripts
+GEMINI.md
+ARCHITECTURE.md
+CONTRIBUTING.md
