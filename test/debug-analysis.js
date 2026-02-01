@@ -1,4 +1,3 @@
-
 import { smartChunk } from './lib/utils.js';
 
 const mockConfig = { embeddingModel: 'mock-model' };
@@ -7,9 +6,9 @@ const mockConfig = { embeddingModel: 'mock-model' };
 import { vi } from 'vitest';
 const estimateTokens = (str) => str.length;
 const getChunkingParams = () => ({
-    maxTokens: 50,
-    targetTokens: 30, 
-    overlapTokens: 5
+  maxTokens: 50,
+  targetTokens: 30,
+  overlapTokens: 5,
 });
 
 // Mocking dependencies manually since we are running with node directly
@@ -105,4 +104,3 @@ const getChunkingParams = () => ({
 // Fix: Make the comment content longer!
 
 console.info('Analysis complete: Middle line chunk is dropped because total size is < 20 chars.');
-

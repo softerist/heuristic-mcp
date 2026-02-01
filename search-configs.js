@@ -1,4 +1,3 @@
-
 import { loadConfig } from './lib/config.js';
 import { EmbeddingsCache } from './lib/cache.js';
 import { HybridSearch } from './features/hybrid-search.js';
@@ -18,10 +17,11 @@ async function searchConfigs() {
   await cache.load();
 
   const embedder = async (text) => {
-      const pipe = await pipeline('feature-extraction', config.embeddingModel, {
-        session_options: { numThreads: 2 } 
-      });
-      return pipe(text, { pooling: 'mean', normalize: true });
+    const pipe = await pipeline('feature-extraction', config.embeddingModel, {
+      session_options: { numThreads: 2 },
+      dtype: 'fp32',
+    });
+    return pipe(text, { pooling: 'mean', normalize: true });
   };
 
   const searcher = new HybridSearch(embedder, cache, config);
@@ -30,7 +30,7 @@ async function searchConfigs() {
   console.info(JSON.stringify(results, null, 2));
 }
 
-searchConfigs().catch(err => {
+searchConfigs().catch((err) => {
   console.error(err);
   process.exit(1);
 });

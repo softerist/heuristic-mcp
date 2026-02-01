@@ -79,4 +79,3 @@ describe('HybridSearch extra coverage', () => {
     expect(results).toHaveLength(2);
   });
 });
-

@@ -94,7 +94,9 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
       deleteFileHash: vi.fn(),
       setLastIndexDuration: vi.fn(),
       setLastIndexStats: vi.fn(),
-      setFileHashes: vi.fn((map) => { cacheMock.fileHashes = map; }),
+      setFileHashes: vi.fn((map) => {
+        cacheMock.fileHashes = map;
+      }),
       getFileHashKeys: vi.fn().mockImplementation(() => [...cacheMock.fileHashes.keys()]),
       getFileCallDataKeys: vi.fn().mockImplementation(() => [...cacheMock.fileCallData.keys()]),
       getFileMeta: vi.fn(),
@@ -234,4 +236,3 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
     expect(result.content[0].text).toContain('Files processed this run: 5');
   });
 });
-

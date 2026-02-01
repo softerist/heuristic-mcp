@@ -22,7 +22,9 @@ function detectCurrentIDE() {
     if (existsSync(agPath) || (statSync && statSync(agPath).isDirectory())) {
       return 'Antigravity';
     }
-  } catch (_e) { /* ignore */ }
+  } catch (_e) {
+    /* ignore */
+  }
 
   // Claude Desktop doesn't have a known env var, so we rely on existing config detection
   return null;

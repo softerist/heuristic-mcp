@@ -150,10 +150,9 @@ describe('embedding-worker', () => {
     // Should throw error for unknown message type
     expect(parentPort.postMessage).toHaveBeenCalledTimes(2);
     expect(parentPort.postMessage).toHaveBeenCalledWith({ type: 'ready' });
-    expect(parentPort.postMessage).toHaveBeenCalledWith({ 
-      type: 'error', 
-      error: 'Unknown message type: unknown' 
+    expect(parentPort.postMessage).toHaveBeenCalledWith({
+      type: 'error',
+      error: 'Unknown message type: unknown',
     });
   });
 });
-

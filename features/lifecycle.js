@@ -7,7 +7,11 @@ import fsSync from 'fs';
 import { loadConfig } from '../lib/config.js';
 import { getLogFilePath } from '../lib/logging.js';
 import { clearStaleCaches } from '../lib/cache-utils.js';
-import { findMcpServerEntry, parseJsonc, upsertMcpServerEntryInText } from '../lib/settings-editor.js';
+import {
+  findMcpServerEntry,
+  parseJsonc,
+  upsertMcpServerEntryInText,
+} from '../lib/settings-editor.js';
 
 const execPromise = util.promisify(exec);
 
@@ -71,30 +75,36 @@ export async function stop() {
           .trim()
           .split(/\s+/)
           .filter((p) => p && !isNaN(p) && parseInt(p) !== currentPid);
-        
+
         // Retrieve command lines to filter out workers
         if (listPids.length > 0) {
-           const { stdout: cmdOut } = await execPromise(
+          const { stdout: cmdOut } = await execPromise(
             `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in @(${listPids.join(',')}) } | Select-Object ProcessId, CommandLine"`
           );
           const lines = cmdOut.trim().split(/\r?\n/);
           for (const line of lines) {
-             const trimmed = line.trim();
-             if (!trimmed || trimmed.startsWith('ProcessId')) continue;
-             const match = trimmed.match(/^(\d+)\s+(.*)$/);
-             if (match) {
-               const pid = parseInt(match[1], 10);
-               const cmd = match[2];
-               if (cmd.includes('embedding-worker') || cmd.includes('embedding-process') || cmd.includes('json-worker')) {
-                 continue;
-               }
-               if (pid && !pids.includes(String(pid))) {
-                 pids.push(String(pid));
-               }
-             }
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('ProcessId')) continue;
+            const match = trimmed.match(/^(\d+)\s+(.*)$/);
+            if (match) {
+              const pid = parseInt(match[1], 10);
+              const cmd = match[2];
+              if (
+                cmd.includes('embedding-worker') ||
+                cmd.includes('embedding-process') ||
+                cmd.includes('json-worker')
+              ) {
+                continue;
+              }
+              if (pid && !pids.includes(String(pid))) {
+                pids.push(String(pid));
+              }
+            }
           }
         }
-      } catch (_e) { /* ignore */ }
+      } catch (_e) {
+        /* ignore */
+      }
     } else {
       // Unix: Use pgrep to get all matching PIDs
       try {
@@ -130,7 +140,9 @@ export async function stop() {
               if (!pids.includes(pidValue)) {
                 pids.push(pidValue);
               }
-            } catch (_e) { /* ignore */ }
+            } catch (_e) {
+              /* ignore */
+            }
           }
         }
       } catch (e) {
@@ -383,12 +395,7 @@ function getMcpConfigPaths() {
       'Claude',
       'claude_desktop_config.json'
     );
-    configLocations[2].path = path.join(
-      process.env.APPDATA || '',
-      'Code',
-      'User',
-      'settings.json'
-    );
+    configLocations[2].path = path.join(process.env.APPDATA || '', 'Code', 'User', 'settings.json');
     configLocations[3].path = path.join(
       process.env.APPDATA || '',
       'Cursor',
@@ -532,24 +539,28 @@ export async function status({ fix = false } = {}) {
 
           // Retrieve command lines to filter out workers
           if (winPids.length > 0) {
-             const { stdout: cmdOut } = await execPromise(
+            const { stdout: cmdOut } = await execPromise(
               `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in @(${winPids.join(',')}) } | Select-Object ProcessId, CommandLine"`
             );
             const lines = cmdOut.trim().split(/\r?\n/);
             for (const line of lines) {
-               const trimmed = line.trim();
-               if (!trimmed || trimmed.startsWith('ProcessId')) continue;
-               const match = trimmed.match(/^(\d+)\s+(.*)$/);
-               if (match) {
-                 const pid = parseInt(match[1], 10);
-                 const cmd = match[2];
-                 if (cmd.includes('embedding-worker') || cmd.includes('embedding-process') || cmd.includes('json-worker')) {
-                   continue;
-                 }
-                 if (pid && pid !== myPid) {
-                   if (!pids.includes(pid)) pids.push(pid);
-                 }
-               }
+              const trimmed = line.trim();
+              if (!trimmed || trimmed.startsWith('ProcessId')) continue;
+              const match = trimmed.match(/^(\d+)\s+(.*)$/);
+              if (match) {
+                const pid = parseInt(match[1], 10);
+                const cmd = match[2];
+                if (
+                  cmd.includes('embedding-worker') ||
+                  cmd.includes('embedding-process') ||
+                  cmd.includes('json-worker')
+                ) {
+                  continue;
+                }
+                if (pid && pid !== myPid) {
+                  if (!pids.includes(pid)) pids.push(pid);
+                }
+              }
             }
           }
         } else {
@@ -560,7 +571,11 @@ export async function status({ fix = false } = {}) {
           for (const line of lines) {
             if (line.includes('heuristic-mcp/index.js') || line.includes('heuristic-mcp')) {
               // Exclude workers
-              if (line.includes('embedding-worker') || line.includes('embedding-process') || line.includes('json-worker')) {
+              if (
+                line.includes('embedding-worker') ||
+                line.includes('embedding-process') ||
+                line.includes('json-worker')
+              ) {
                 continue;
               }
               const parts = line.trim().split(/\s+/);
@@ -575,7 +590,9 @@ export async function status({ fix = false } = {}) {
             if (!pids.includes(p)) pids.push(p);
           }
         }
-      } catch (_e) { /* ignore */ }
+      } catch (_e) {
+        /* ignore */
+      }
     }
 
     // STATUS OUTPUT
@@ -653,9 +670,9 @@ export async function status({ fix = false } = {}) {
         const metaFile = path.join(cacheDir, 'meta.json');
         const progressFile = path.join(cacheDir, 'progress.json');
 
-          console.info(`${'─'.repeat(60)}`);
-          console.info(`📁 Cache: ${dir}`);
-          console.info(`   Path: ${cacheDir}`);
+        console.info(`${'─'.repeat(60)}`);
+        console.info(`📁 Cache: ${dir}`);
+        console.info(`   Path: ${cacheDir}`);
 
         let metaData = null;
         try {
@@ -695,14 +712,10 @@ export async function status({ fix = false } = {}) {
             console.info(`   Initial index complete at: ${formatDateTime(saveDate)}`);
           }
           if (metaData.lastIndexStartedAt) {
-            console.info(
-              `   Last index started: ${formatDateTime(metaData.lastIndexStartedAt)}`
-            );
+            console.info(`   Last index started: ${formatDateTime(metaData.lastIndexStartedAt)}`);
           }
           if (metaData.lastIndexEndedAt) {
-            console.info(
-              `   Last index ended: ${formatDateTime(metaData.lastIndexEndedAt)}`
-            );
+            console.info(`   Last index ended: ${formatDateTime(metaData.lastIndexEndedAt)}`);
           }
           if (Number.isFinite(metaData.indexDurationMs)) {
             const duration = formatDurationMs(metaData.indexDurationMs);
@@ -721,9 +734,7 @@ export async function status({ fix = false } = {}) {
           }
           try {
             const dirStats = await fs.stat(cacheDir);
-            console.info(
-              `   Cache dir last write: ${formatDateTime(dirStats.mtime)}`
-            );
+            console.info(`   Cache dir last write: ${formatDateTime(dirStats.mtime)}`);
           } catch {
             // ignore cache dir stat errors
           }
@@ -748,9 +759,7 @@ export async function status({ fix = false } = {}) {
               } else {
                 console.info(`   Status: ⚠️  Incomplete cache (stale)`);
               }
-              console.info(
-                `   Cache dir last write: ${stats.mtime.toLocaleString()}`
-              );
+              console.info(`   Cache dir last write: ${stats.mtime.toLocaleString()}`);
             } catch {
               console.info(`   Status: ❌ Invalid cache directory`);
             }
@@ -803,7 +812,10 @@ export async function status({ fix = false } = {}) {
           if (progressData.indexMode) {
             console.info(`   Current index mode: ${String(progressData.indexMode)}`);
           }
-          if (progressData.workerCircuitOpen && Number.isFinite(progressData.workersDisabledUntil)) {
+          if (
+            progressData.workerCircuitOpen &&
+            Number.isFinite(progressData.workersDisabledUntil)
+          ) {
             const remainingMs = progressData.workersDisabledUntil - Date.now();
             const remainingLabel = formatDurationMs(Math.max(0, remainingMs));
             console.info(`   Workers paused: ${remainingLabel || '0s'} remaining`);
@@ -840,7 +852,9 @@ export async function status({ fix = false } = {}) {
     try {
       const { stdout } = await execPromise('npm config get prefix');
       npmBin = path.join(stdout.trim(), 'bin');
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     console.info(`   📦 Global npm bin: ${npmBin}`);
 
     // Configs
@@ -880,7 +894,9 @@ export async function status({ fix = false } = {}) {
       try {
         await fs.access(loc.path);
         status = '(exists)';
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       console.info(`      - ${loc.name}: ${loc.path} ${status}`);
     }
 

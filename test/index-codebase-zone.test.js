@@ -1,10 +1,5 @@
-
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
-import {
-  createTestFixtures,
-  cleanupFixtures,
-  clearTestCache,
-} from './helpers.js';
+import { createTestFixtures, cleanupFixtures, clearTestCache } from './helpers.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -35,112 +30,113 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
   it('should handle read errors in pre-filter batch processing (lines 553-554)', async () => {
     const subDir = path.join(fixtures.config.searchDirectory, 'p2_read_data');
     await fs.mkdir(subDir, { recursive: true });
-    
+
     const fileGood = path.join(subDir, 'good.js');
     const fileBad = path.join(subDir, 'bad.js');
-    
+
     await fs.writeFile(fileGood, 'good content');
     await fs.writeFile(fileBad, 'bad content');
-    
+
     const realStat = fs.stat;
     const statSpy = vi.spyOn(fs, 'stat').mockImplementation(async (filePath) => {
-        if (filePath.toString().includes('bad.js')) {
-            throw new Error('Simulated stat error');
-        }
-        return realStat.call(fs, filePath);
+      if (filePath.toString().includes('bad.js')) {
+        throw new Error('Simulated stat error');
+      }
+      return realStat.call(fs, filePath);
     });
-    
+
     try {
-        // Call preFilterFiles directly to bypass discovery issues
-        const result = await fixtures.indexer.preFilterFiles([fileGood, fileBad]);
-        
-        console.error('PreFilter Result:', result);
-        
-        // Good file should be included
-        const hasGood = result.some(r => r.file.includes('good.js'));
-        // Bad file should be excluded (due to error)
-        const hasBad = result.some(r => r.file.includes('bad.js'));
-        
-        expect(hasGood).toBe(true);
-        expect(hasBad).toBe(false);
-        
+      // Call preFilterFiles directly to bypass discovery issues
+      const result = await fixtures.indexer.preFilterFiles([fileGood, fileBad]);
+
+      console.error('PreFilter Result:', result);
+
+      // Good file should be included
+      const hasGood = result.some((r) => r.file.includes('good.js'));
+      // Bad file should be excluded (due to error)
+      const hasBad = result.some((r) => r.file.includes('bad.js'));
+
+      expect(hasGood).toBe(true);
+      expect(hasBad).toBe(false);
     } finally {
-        statSpy.mockRestore();
-        await fs.rm(subDir, { recursive: true, force: true });
+      statSpy.mockRestore();
+      await fs.rm(subDir, { recursive: true, force: true });
     }
   });
 
   it('should flush read batch when size limit exceeded (lines 571-573)', async () => {
     const subDir = path.join(fixtures.config.searchDirectory, 'p2_flush_data');
     await fs.mkdir(subDir, { recursive: true });
-    
+
     const file1 = path.join(subDir, 'f1.js');
     const file2 = path.join(subDir, 'f2.js');
     const file3 = path.join(subDir, 'f3.js');
-    
+
     await fs.writeFile(file1, 'c1');
     await fs.writeFile(file2, 'c2');
     await fs.writeFile(file3, 'c3');
-    
+
     const realStat = fs.stat;
     const statSpy = vi.spyOn(fs, 'stat').mockImplementation(async (filePath) => {
-        if (filePath.toString().includes('p2_flush_data')) {
-            const s = await realStat.call(fs, filePath);
-            // Modify directly
-            s.size = 20 * 1024 * 1024; // 20MB
-            return s;
-        }
-        return realStat.call(fs, filePath);
+      if (filePath.toString().includes('p2_flush_data')) {
+        const s = await realStat.call(fs, filePath);
+        // Modify directly
+        s.size = 20 * 1024 * 1024; // 20MB
+        return s;
+      }
+      return realStat.call(fs, filePath);
     });
-    
+
     const oldMax = fixtures.config.maxFileSize;
     fixtures.config.maxFileSize = 100 * 1024 * 1024; // 100MB
-    
-    try {
-        // Pass 3 files. Total 60MB. Batch limit 50MB.
-        // Should trigger intermediate flush.
-        const result = await fixtures.indexer.preFilterFiles([file1, file2, file3]);
-        
-        console.error('Batch flush result:', result);
 
-        expect(result.some(r => r.file.includes('f1.js'))).toBe(true);
-        expect(result.some(r => r.file.includes('f2.js'))).toBe(true);
-        expect(result.some(r => r.file.includes('f3.js'))).toBe(true);
-        
+    try {
+      // Pass 3 files. Total 60MB. Batch limit 50MB.
+      // Should trigger intermediate flush.
+      const result = await fixtures.indexer.preFilterFiles([file1, file2, file3]);
+
+      console.error('Batch flush result:', result);
+
+      expect(result.some((r) => r.file.includes('f1.js'))).toBe(true);
+      expect(result.some((r) => r.file.includes('f2.js'))).toBe(true);
+      expect(result.some((r) => r.file.includes('f3.js'))).toBe(true);
     } finally {
-        statSpy.mockRestore();
-        fixtures.config.maxFileSize = oldMax;
-        await fs.rm(subDir, { recursive: true, force: true });
+      statSpy.mockRestore();
+      fixtures.config.maxFileSize = oldMax;
+      await fs.rm(subDir, { recursive: true, force: true });
     }
   });
 
   it('should handle invalid stats in call graph recovery (line 701)', async () => {
     const subDir = path.join(fixtures.config.searchDirectory, 'p2_recovery_data');
     await fs.mkdir(subDir, { recursive: true });
-    
+
     const fileRecover = path.join(subDir, 'recover.js');
     await fs.writeFile(fileRecover, 'content');
-    
+
     fixtures.cache.addToStore({
-        file: fileRecover,
-        startLine: 1, endLine: 1, content: 'content', vector: []
+      file: fileRecover,
+      startLine: 1,
+      endLine: 1,
+      content: 'content',
+      vector: [],
     });
-    
+
     const realStat = fs.stat;
     const statSpy = vi.spyOn(fs, 'stat').mockImplementation(async (filePath) => {
-        if (filePath.toString().includes('recover.js')) {
-            return { isDirectory: 'not-a-function' };
-        }
-        return realStat.call(fs, filePath);
+      if (filePath.toString().includes('recover.js')) {
+        return { isDirectory: 'not-a-function' };
+      }
+      return realStat.call(fs, filePath);
     });
-    
+
     fixtures.config.callGraphEnabled = true;
-    
+
     try {
-        await fixtures.indexer.indexAll(false);
+      await fixtures.indexer.indexAll(false);
     } finally {
-        statSpy.mockRestore();
-        await fs.rm(subDir, { recursive: true, force: true });
+      statSpy.mockRestore();
+      await fs.rm(subDir, { recursive: true, force: true });
     }
   });
 
@@ -231,30 +227,35 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
   });
 
   it('should queue watcher events during indexing (L1106, L1126, L1146)', async () => {
-      // 1. Setup watcher
-      fixtures.config.watchFiles = true;
-      await fixtures.indexer.setupFileWatcher();
-      
-      // 2. Set indexing flag
-      fixtures.indexer.isIndexing = true;
-      
-      // 3. Emit events
-      const watcher = fixtures.indexer.watcher;
-      if (watcher) {
-          watcher.emit('add', 'new.js');
-          watcher.emit('change', 'changed.js');
-          watcher.emit('unlink', 'deleted.js');
-      }
+    // 1. Setup watcher
+    fixtures.config.watchFiles = true;
+    await fixtures.indexer.setupFileWatcher();
 
-      // Check queue
-      expect(fixtures.indexer.pendingWatchEvents.has(path.join(fixtures.config.searchDirectory, 'new.js'))).toBe(true);
-      expect(fixtures.indexer.pendingWatchEvents.has(path.join(fixtures.config.searchDirectory, 'changed.js'))).toBe(true);
-      // unlink might use absolute path logic
-      const delPath = path.join(fixtures.config.searchDirectory, 'deleted.js');
-      expect(fixtures.indexer.pendingWatchEvents.get(delPath)).toBe('unlink');
+    // 2. Set indexing flag
+    fixtures.indexer.isIndexing = true;
 
-      // Reset
-      fixtures.indexer.isIndexing = false;
+    // 3. Emit events
+    const watcher = fixtures.indexer.watcher;
+    if (watcher) {
+      watcher.emit('add', 'new.js');
+      watcher.emit('change', 'changed.js');
+      watcher.emit('unlink', 'deleted.js');
+    }
+
+    // Check queue
+    expect(
+      fixtures.indexer.pendingWatchEvents.has(path.join(fixtures.config.searchDirectory, 'new.js'))
+    ).toBe(true);
+    expect(
+      fixtures.indexer.pendingWatchEvents.has(
+        path.join(fixtures.config.searchDirectory, 'changed.js')
+      )
+    ).toBe(true);
+    // unlink might use absolute path logic
+    const delPath = path.join(fixtures.config.searchDirectory, 'deleted.js');
+    expect(fixtures.indexer.pendingWatchEvents.get(delPath)).toBe('unlink');
+
+    // Reset
+    fixtures.indexer.isIndexing = false;
   });
 });
-

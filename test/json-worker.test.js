@@ -48,4 +48,3 @@ describe('json-worker', () => {
     expect(postMessage).toHaveBeenCalledWith({ ok: false, error: 'read failed' });
   });
 });
-

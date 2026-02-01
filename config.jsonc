@@ -563,7 +563,7 @@
     "gitattributes",
     "editorconfig",
     "npmrc",
-    "yarnrc"
+    "yarnrc",
   ],
   // Specific filenames to include regardless of extension.
   "fileNames": [
@@ -612,7 +612,7 @@
     "docker-compose.yml",
     "docker-compose.yaml",
     "makefile.am",
-    "makefile.in"
+    "makefile.in",
   ],
   // Glob patterns to exclude from indexing.
   "excludePatterns": [
@@ -624,7 +624,7 @@
     "**/.next/**",
     "**/target/**",
     "**/vendor/**",
-    "**/.smart-coding-cache/**"
+    "**/.smart-coding-cache/**",
   ],
   // Enable project-type detection + smart ignore patterns.
   "smartIndexing": true,
@@ -719,5 +719,5 @@
   // Persist ANN index to disk.
   "annIndexCache": true,
   // ANN distance metric.
-  "annMetric": "cosine"
+  "annMetric": "cosine",
 }

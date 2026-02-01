@@ -45,9 +45,11 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
 vi.mock('@modelcontextprotocol/sdk/types.js', () => {
   callSchema = Symbol('call');
   listSchema = Symbol('list');
+  const listResourcesSchema = Symbol('listResources');
   return {
     CallToolRequestSchema: callSchema,
     ListToolsRequestSchema: listSchema,
+    ListResourcesRequestSchema: listResourcesSchema,
   };
 });
 vi.mock('@huggingface/transformers', () => ({
@@ -304,7 +306,9 @@ describe('index.js CLI coverage', () => {
     try {
       const { main } = await import('../index.js');
       await main();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     expect(stopMock).toHaveBeenCalled();
 
     vi.resetModules();
@@ -313,7 +317,9 @@ describe('index.js CLI coverage', () => {
     try {
       const { main } = await import('../index.js');
       await main();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     expect(startMock).toHaveBeenCalled();
 
     vi.resetModules();
@@ -322,7 +328,9 @@ describe('index.js CLI coverage', () => {
     try {
       const { main } = await import('../index.js');
       await main();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     expect(statusMock).toHaveBeenCalled();
   });
 
@@ -356,7 +364,7 @@ describe('index.js CLI coverage', () => {
 
     const { main } = await import('../index.js');
     await main();
-    
+
     // Trigger the background initialization timeout
     await vi.runAllTimersAsync();
     await Promise.resolve();
@@ -393,7 +401,7 @@ describe('index.js CLI coverage', () => {
 
     const { main } = await import('../index.js');
     await main();
-    
+
     // Trigger the background initialization timeout
     await vi.runAllTimersAsync();
     await Promise.resolve();
@@ -521,4 +529,3 @@ describe('index.js CLI coverage', () => {
     expect(hasCacheSaved).toBe(false);
   });
 });
-

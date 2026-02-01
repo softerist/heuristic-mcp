@@ -239,4 +239,3 @@ describe('Call Graph Extractor', () => {
     });
   });
 });
-

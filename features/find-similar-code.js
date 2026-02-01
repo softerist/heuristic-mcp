@@ -48,7 +48,7 @@ export class FindSimilarCode {
     // Check if input is too large and truncate intelligently
     const estimatedTokens = estimateTokens(code);
     const limit = getModelTokenLimit(this.config.embeddingModel);
-    
+
     // If input is significantly larger than the model limit, we should chunk it
     if (estimatedTokens > limit) {
       // Use smartChunk to get a semantically valid first block
@@ -88,27 +88,27 @@ export class FindSimilarCode {
     }
 
     const normalizedInput = codeToEmbed.trim().replace(/\s+/g, ' ');
-    
+
     /**
      * Batch scoring function to prevent blocking the event loop
      */
     const scoreAndFilter = async (chunks) => {
       const BATCH_SIZE = 500;
       const scored = [];
-      
+
       for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
         const batch = chunks.slice(i, i + BATCH_SIZE);
-        
+
         // Yield to event loop between batches
         if (i > 0) {
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
-        
+
         for (const chunk of batch) {
           const vector = this.getChunkVector(chunk);
           if (!vector) continue;
           const similarity = dotSimilarity(codeVector, vector);
-          
+
           if (similarity >= minSimilarity) {
             // Deduplicate against input
             if (normalizedInput) {
@@ -116,17 +116,17 @@ export class FindSimilarCode {
               const normalizedChunk = content.trim().replace(/\s+/g, ' ');
               if (normalizedChunk === normalizedInput) continue;
             }
-            
+
             scored.push({ ...chunk, similarity });
           }
         }
       }
-      
+
       return scored.sort((a, b) => b.similarity - a.similarity);
     };
 
     let filteredResults = await scoreAndFilter(candidates);
-    
+
     // Fallback to full scan if ANN didn't provide enough results
     // Optimization: Skip full scan on large codebases to avoid long pauses
     const MAX_FULL_SCAN_SIZE = 5000;
@@ -143,12 +143,14 @@ export class FindSimilarCode {
           return { ...chunk, content: await this.getChunkContent(chunk) };
         }
         return chunk;
-      }),
+      })
     );
 
     return {
       results,
-      message: warningMessage || (results.length === 0 ? 'No similar code found above the similarity threshold.' : null),
+      message:
+        warningMessage ||
+        (results.length === 0 ? 'No similar code found above the similarity threshold.' : null),
     };
   }
 
@@ -160,7 +162,7 @@ export class FindSimilarCode {
     const formatted = await Promise.all(
       results.map(async (r, idx) => {
         const relPath = path.relative(this.config.searchDirectory, r.file);
-        const content = r.content ?? await this.getChunkContent(r);
+        const content = r.content ?? (await this.getChunkContent(r));
         return (
           `## Similar Code ${idx + 1} (Similarity: ${(r.similarity * 100).toFixed(1)}%)\n` +
           `**File:** \`${relPath}\`\n` +
@@ -172,7 +174,7 @@ export class FindSimilarCode {
           '\n' +
           '```\n'
         );
-      }),
+      })
     );
 
     return formatted.join('\n');

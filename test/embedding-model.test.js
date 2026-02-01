@@ -31,39 +31,51 @@ describe('Local Embedding Model', () => {
       embedder = async (text, options = {}) => {
         const input = String(text ?? '').toLowerCase();
         const vector = new Float32Array(mockDimensions).fill(0);
-        
+
         // 1. Synonym Mapping (Concept Injection)
         // Map synonyms to specific vector dimensions to simulate "meaning"
         const concepts = {
-          'login': 0, 'auth': 0, 'password': 0, 'credential': 0,
-          'sort': 1, 'order': 1, 'arrange': 1,
-          'database': 2, 'sql': 2, 'query': 2,
-          'import': 3, 'require': 3, 'module': 3,
-          'react': 3, 'vue': 3, // Frameworks grouped
-          'weather': 4, 'sun': 4,
-          'pizza': 5, 'food': 5,
+          login: 0,
+          auth: 0,
+          password: 0,
+          credential: 0,
+          sort: 1,
+          order: 1,
+          arrange: 1,
+          database: 2,
+          sql: 2,
+          query: 2,
+          import: 3,
+          require: 3,
+          module: 3,
+          react: 3,
+          vue: 3, // Frameworks grouped
+          weather: 4,
+          sun: 4,
+          pizza: 5,
+          food: 5,
         };
 
         // 2. Bag-of-Words with ordering noise
         // This ensures "A B" == "B A" (high similarity)
         for (const word of input.split(/\W+/)) {
           if (!word) continue;
-          
+
           // Add concept signal
           if (word in concepts) {
-             const dim = concepts[word];
-             vector[dim] += 1.0; 
+            const dim = concepts[word];
+            vector[dim] += 1.0;
           }
 
           // Add deterministic character signal (hashing)
           // Use Bag-of-Words approach: sum vectors regardless of position
           for (let i = 0; i < word.length; i++) {
-             const charCode = word.charCodeAt(i);
-             // Spread char influence across dimensions to avoid collisions
-             vector[charCode % mockDimensions] += 0.1; 
+            const charCode = word.charCodeAt(i);
+            // Spread char influence across dimensions to avoid collisions
+            vector[charCode % mockDimensions] += 0.1;
           }
         }
-        
+
         if (options.normalize) {
           let sumSquares = 0;
           for (const v of vector) sumSquares += v * v;
@@ -298,4 +310,3 @@ describe('Local Embedding Model', () => {
     });
   });
 });
-

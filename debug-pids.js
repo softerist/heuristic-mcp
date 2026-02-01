@@ -11,9 +11,12 @@ async function check() {
     );
     const processes = JSON.parse(stdout);
     const list = Array.isArray(processes) ? processes : [processes];
-    
+
     for (const p of list) {
-      if (p.CommandLine && (p.CommandLine.includes('heuristic-mcp') || p.CommandLine.includes('index.js'))) {
+      if (
+        p.CommandLine &&
+        (p.CommandLine.includes('heuristic-mcp') || p.CommandLine.includes('index.js'))
+      ) {
         console.info(`PID: ${p.ProcessId}, Parent: ${p.ParentProcessId}`);
         console.info(`CMD: ${p.CommandLine}`);
         console.info('---');

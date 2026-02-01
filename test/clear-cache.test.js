@@ -284,4 +284,3 @@ describe('Clear Cache Tool Handler', () => {
     });
   });
 });
-

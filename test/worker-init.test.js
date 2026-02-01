@@ -100,4 +100,3 @@ describe('CodebaseIndexer Worker Initialization', () => {
     consoleSpy.mockRestore();
   });
 });
-

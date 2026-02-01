@@ -78,11 +78,17 @@ describe('Final Polish Coverage', () => {
       deleteFileHash: vi.fn(),
       setLastIndexDuration: vi.fn(),
       setLastIndexStats: vi.fn(),
-      setFileHashes: vi.fn((map) => { cache.fileHashes = map; }),
+      setFileHashes: vi.fn((map) => {
+        cache.fileHashes = map;
+      }),
       getFileHashKeys: vi.fn().mockImplementation(() => [...cache.fileHashes.keys()]),
       getFileCallDataKeys: vi.fn().mockImplementation(() => [...cache.fileCallData.keys()]),
-      setFileCallDataEntries: vi.fn((map) => { cache.fileCallData = map; }),
-      clearFileCallData: vi.fn(() => { cache.fileCallData = new Map(); }),
+      setFileCallDataEntries: vi.fn((map) => {
+        cache.fileCallData = map;
+      }),
+      clearFileCallData: vi.fn(() => {
+        cache.fileCallData = new Map();
+      }),
       getFileMeta: vi.fn(),
     };
 
@@ -181,4 +187,3 @@ describe('Final Polish Coverage', () => {
     });
   });
 });
-

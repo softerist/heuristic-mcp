@@ -48,4 +48,3 @@ describe('Code Review Workflow', () => {
     expect(content).toContain('regression verification');
   });
 });
-

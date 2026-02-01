@@ -149,4 +149,3 @@ describe('CodebaseIndexer Worker Chunking', () => {
     vi.restoreAllMocks();
   });
 });
-

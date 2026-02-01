@@ -272,7 +272,9 @@ describe('EmbeddingsCache additional coverage', () => {
 
     const fsMock = {
       stat: vi.fn().mockResolvedValue({ size: 10 * 1024 * 1024 }),
-      readFile: vi.fn().mockResolvedValue(JSON.stringify({ version: 1, embeddingModel: 'test-model' })),
+      readFile: vi
+        .fn()
+        .mockResolvedValue(JSON.stringify({ version: 1, embeddingModel: 'test-model' })),
       mkdir: vi.fn().mockResolvedValue(undefined),
     };
 
@@ -281,7 +283,7 @@ describe('EmbeddingsCache additional coverage', () => {
 
     const { EmbeddingsCache } = await import('../lib/cache.js');
     const cache = new EmbeddingsCache(makeConfig('/tmp'));
-    
+
     await cache.load();
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('JSON worker failed'));
@@ -290,12 +292,11 @@ describe('EmbeddingsCache additional coverage', () => {
   it('handles non-array store in setVectorStore (line 320)', async () => {
     const { EmbeddingsCache } = await import('../lib/cache.js');
     const cache = new EmbeddingsCache(makeConfig('/tmp'));
-    
+
     cache.setVectorStore(null);
     expect(cache.vectorStore).toBeNull();
-    
+
     cache.setVectorStore({ not: 'an array' });
     expect(cache.vectorStore).toEqual({ not: 'an array' });
   });
 });
-

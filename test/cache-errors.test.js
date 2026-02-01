@@ -5,10 +5,14 @@ import fs from 'fs/promises';
 vi.mock('fs/promises');
 vi.mock('../lib/json-writer.js', () => ({
   StreamingJsonWriter: class {
-    writeStart() { return Promise.resolve(); }
+    writeStart() {
+      return Promise.resolve();
+    }
     writeItem() {}
-    writeEnd() { return Promise.resolve(); }
-  }
+    writeEnd() {
+      return Promise.resolve();
+    }
+  },
 }));
 
 // Define mocks at top level to ensure stability across module resets
@@ -262,4 +266,3 @@ describe('EmbeddingsCache Error Handling', () => {
     });
   });
 });
-

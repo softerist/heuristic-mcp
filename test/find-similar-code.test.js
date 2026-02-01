@@ -167,7 +167,9 @@ describe('FindSimilarCode', () => {
     const config = { searchDirectory: 'C:/repo' };
     const tool = new FindSimilarCode(embedder, cache, config);
 
-    await expect(tool.formatResults([])).resolves.toBe('No similar code patterns found in the codebase.');
+    await expect(tool.formatResults([])).resolves.toBe(
+      'No similar code patterns found in the codebase.'
+    );
   });
 
   it('handles tool calls with messages', async () => {
@@ -189,4 +191,3 @@ describe('FindSimilarCode', () => {
     expect(definition.inputSchema.required).toContain('code');
   });
 });
-

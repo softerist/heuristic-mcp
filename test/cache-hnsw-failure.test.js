@@ -38,4 +38,3 @@ describe('EmbeddingsCache HNSW Failures', () => {
     // Should also check console.error behavior if desired
   });
 });
-

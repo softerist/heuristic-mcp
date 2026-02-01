@@ -85,7 +85,7 @@ describe('CodebaseIndexer watcher', () => {
       vi.useFakeTimers();
       indexer.watcher.emit('add', relPath);
       await vi.advanceTimersByTimeAsync(0);
-      
+
       const fullPath = path.join(dir, relPath);
       if (indexer._watcherInProgress?.has(fullPath)) {
         await indexer._watcherInProgress.get(fullPath);
@@ -302,7 +302,9 @@ describe('CodebaseIndexer watcher', () => {
       globalThis.__heuristicWatcher.emit('error', new Error('watcher failed'));
       await flushPromises();
 
-      expect(infoSpy).toHaveBeenCalledWith('[Indexer] File watcher ready and monitoring for changes');
+      expect(infoSpy).toHaveBeenCalledWith(
+        '[Indexer] File watcher ready and monitoring for changes'
+      );
       expect(errorSpy).toHaveBeenCalledWith('[Indexer] File watcher error: watcher failed');
 
       infoSpy.mockRestore();
@@ -365,4 +367,3 @@ describe('CodebaseIndexer watcher', () => {
     });
   });
 });
-

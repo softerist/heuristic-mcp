@@ -294,7 +294,9 @@ describe('lifecycle', () => {
     expect(consoleInfo).toHaveBeenCalledWith(
       expect.stringContaining('Expected location: C:\\LocalApp\\heuristic-mcp')
     );
-    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Cursor\\User\\settings.json'));
+    expect(consoleInfo).toHaveBeenCalledWith(
+      expect.stringContaining('Cursor\\User\\settings.json')
+    );
   });
 
   it('uses win32 cache root fallback when LOCALAPPDATA is unset', async () => {
@@ -324,7 +326,9 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Cursor\\User\\settings.json'));
+    expect(consoleInfo).toHaveBeenCalledWith(
+      expect.stringContaining('Cursor\\User\\settings.json')
+    );
   });
 
   it('reports indexing status for empty and incomplete caches on darwin', async () => {
@@ -348,9 +352,7 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleInfo).toHaveBeenCalledWith(
-      expect.stringContaining('Cached index: ⚠️  NO FILES')
-    );
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Cached index: ⚠️  NO FILES'));
     expect(consoleInfo).toHaveBeenCalledWith(
       expect.stringContaining('Cached index: ⚠️  INCOMPLETE')
     );
@@ -539,4 +541,3 @@ describe('lifecycle', () => {
     expect(fatalError).toBe(false);
   });
 });
-

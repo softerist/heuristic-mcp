@@ -177,4 +177,3 @@ describe('AnnConfigTool', () => {
     expect(response.content[0].text).toContain('ANN Index Statistics');
   });
 });
-

@@ -130,4 +130,3 @@ describe('CodebaseIndexer Error Handling', () => {
     expect(indexer.workers.length).toBe(0);
   });
 });
-

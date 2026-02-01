@@ -1,4 +1,3 @@
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mocks
@@ -32,9 +31,9 @@ vi.mock('@huggingface/transformers', () => ({
 }));
 
 vi.mock('../features/lifecycle.js', () => ({
-    stop: vi.fn(),
-    start: vi.fn(),
-    status: vi.fn(),
+  stop: vi.fn(),
+  start: vi.fn(),
+  status: vi.fn(),
 }));
 
 // Mock config to ensure verbose is true
@@ -83,67 +82,70 @@ vi.mock('../lib/cache.js', () => ({
 
 // Mock features
 vi.mock('../features/index-codebase.js', async () => {
-    return {
-        CodebaseIndexer: class MockIndexer {
-            indexAll() { return Promise.resolve({}); }
-            setupFileWatcher() {}
-            terminateWorkers() { return Promise.resolve(); }
-            watcher = { close: vi.fn() }
-        },
-        getToolDefinition: () => ({ name: 'mock_indexer' }),
-        handleToolCall: () => {}
-    };
+  return {
+    CodebaseIndexer: class MockIndexer {
+      indexAll() {
+        return Promise.resolve({});
+      }
+      setupFileWatcher() {}
+      terminateWorkers() {
+        return Promise.resolve();
+      }
+      watcher = { close: vi.fn() };
+    },
+    getToolDefinition: () => ({ name: 'mock_indexer' }),
+    handleToolCall: () => {},
+  };
 });
 
 vi.mock('../features/hybrid-search.js', () => ({
-    HybridSearch: class {},
-    getToolDefinition: () => ({ name: 'hs' }),
-    handleToolCall: () => {}
+  HybridSearch: class {},
+  getToolDefinition: () => ({ name: 'hs' }),
+  handleToolCall: () => {},
 }));
 
 vi.mock('../features/clear-cache.js', () => ({
-    CacheClearer: class {},
-    getToolDefinition: () => ({ name: 'cc' }),
-    handleToolCall: () => {}
+  CacheClearer: class {},
+  getToolDefinition: () => ({ name: 'cc' }),
+  handleToolCall: () => {},
 }));
 
 vi.mock('../features/find-similar-code.js', () => ({
-     FindSimilarCode: class {},
-    getToolDefinition: () => ({ name: 'fsc' }),
-    handleToolCall: () => {}
+  FindSimilarCode: class {},
+  getToolDefinition: () => ({ name: 'fsc' }),
+  handleToolCall: () => {},
 }));
 
 vi.mock('../features/ann-config.js', () => ({
-    AnnConfigTool: class {},
-    getToolDefinition: () => ({ name: 'ac' }),
-    handleToolCall: () => {}
+  AnnConfigTool: class {},
+  getToolDefinition: () => ({ name: 'ac' }),
+  handleToolCall: () => {},
 }));
 
 vi.mock('../features/register.js', () => ({
-    register: vi.fn()
+  register: vi.fn(),
 }));
 
 // Mock fs
 vi.mock('fs/promises', async () => {
-    return {
-        default: {
-            access: vi.fn().mockResolvedValue(),
-            readFile: vi.fn().mockResolvedValue('{}'),
-            stat: vi.fn().mockResolvedValue({ isDirectory: () => false }),
-            constants: { F_OK: 0 }
-        }
-    }
+  return {
+    default: {
+      access: vi.fn().mockResolvedValue(),
+      readFile: vi.fn().mockResolvedValue('{}'),
+      stat: vi.fn().mockResolvedValue({ isDirectory: () => false }),
+      constants: { F_OK: 0 },
+    },
+  };
 });
 
 vi.mock('process', async () => {
-    const actual = await vi.importActual('process');
-    return {
-        ...actual,
-        exit: vi.fn(),
-        memoryUsage: vi.fn()
-    };
+  const actual = await vi.importActual('process');
+  return {
+    ...actual,
+    exit: vi.fn(),
+    memoryUsage: vi.fn(),
+  };
 });
-
 
 describe('Index.js Memory Logging', () => {
   const oldVitest = process.env.VITEST;
@@ -153,10 +155,12 @@ describe('Index.js Memory Logging', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'info').mockImplementation(() => {});
-    
-    // We can't mock process.exit globally easily if not using vitest environment options, 
+
+    // We can't mock process.exit globally easily if not using vitest environment options,
     // but we can spy on it.
-    vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('process.exit called'); });
+    vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called');
+    });
   });
 
   afterEach(() => {
@@ -176,7 +180,7 @@ describe('Index.js Memory Logging', () => {
       heapUsed: 1024 * 1024 * 50,
       heapTotal: 1024 * 1024 * 80,
       external: 0,
-      arrayBuffers: 0
+      arrayBuffers: 0,
     });
 
     // We must ensure arguments don't trigger immediate exit
@@ -192,13 +196,18 @@ describe('Index.js Memory Logging', () => {
     // Import the module and call main
     const { main } = await import('../index.js');
     const importPromise = main();
-    
+
     // Wait for the first memory log to ensure initialize has reached the interval setup
-    await vi.waitFor(() => {
-        const calls = console.info.mock.calls.map(c => c[0]).filter(msg => msg && msg.includes('[Server] Memory (startup)'));
+    await vi.waitFor(
+      () => {
+        const calls = console.info.mock.calls
+          .map((c) => c[0])
+          .filter((msg) => msg && msg.includes('[Server] Memory (startup)'));
         if (calls.length === 0) throw new Error('Not reached yet');
-    }, { timeout: 1000, interval: 10 });
-    
+      },
+      { timeout: 1000, interval: 10 }
+    );
+
     // Advance time to trigger interval (15000ms)
     await vi.advanceTimersByTimeAsync(16000);
     accessResolve();
@@ -207,15 +216,16 @@ describe('Index.js Memory Logging', () => {
     // Check calls
     // It should be called immediately on startup
     // And then periodically
-    const calls = console.info.mock.calls.map(c => c[0]).filter(msg => msg && msg.includes('[Server] Memory'));
+    const calls = console.info.mock.calls
+      .map((c) => c[0])
+      .filter((msg) => msg && msg.includes('[Server] Memory'));
     const startupCalls = calls.filter((msg) => msg.includes('Memory (startup)'));
-    
+
     // Expect at least 2 calls (startup + interval)
     expect(calls.length).toBeGreaterThanOrEqual(2);
     expect(startupCalls.length).toBeGreaterThanOrEqual(2);
-    
-    // We can't guarantee distinct messages if we mocked memoryUsage to static values, 
+
+    // We can't guarantee distinct messages if we mocked memoryUsage to static values,
     // but we can verify the COUNT of calls.
   });
 });
-

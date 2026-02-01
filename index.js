@@ -2,7 +2,11 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { stop, start, status, logs } from './features/lifecycle.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import { pipeline, env } from '@huggingface/transformers';
 import { configureNativeOnnxBackend, getNativeOnnxStatus } from './lib/onnx-backend.js';
 
@@ -16,14 +20,17 @@ import { fileURLToPath } from 'url';
 const require = createRequire(import.meta.url);
 const packageJson = require('./package.json');
 
-
 import { loadConfig, getGlobalCacheDir } from './lib/config.js';
 import { clearStaleCaches } from './lib/cache-utils.js';
 import { enableStderrOnlyLogging, setupFileLogging } from './lib/logging.js';
 import { parseArgs, printHelp } from './lib/cli.js';
 import { clearCache } from './lib/cache-ops.js';
 import { logMemory, startMemoryLogger } from './lib/memory-logger.js';
-import { registerSignalHandlers, setupPidFile, acquireWorkspaceLock } from './lib/server-lifecycle.js';
+import {
+  registerSignalHandlers,
+  setupPidFile,
+  acquireWorkspaceLock,
+} from './lib/server-lifecycle.js';
 
 import { EmbeddingsCache } from './lib/cache.js';
 import { CodebaseIndexer } from './features/index-codebase.js';
@@ -40,8 +47,6 @@ const MEMORY_LOG_INTERVAL_MS = 15000;
 const PID_FILE_NAME = '.heuristic-mcp.pid';
 
 // Arguments parsed in main()
-
-
 
 // Global state
 let embedder = null;
@@ -149,7 +154,7 @@ async function initialize(workspaceDir) {
     console.info(`[Logs] Writing server logs to ${logPath}`);
     console.info(`[Logs] Log viewer: heuristic-mcp --logs --workspace "${config.searchDirectory}"`);
   }
-  
+
   // Log effective configuration for debugging
   console.info(
     `[Server] Config: workerThreads=${config.workerThreads}, embeddingProcessPerBatch=${config.embeddingProcessPerBatch}`
@@ -165,7 +170,9 @@ async function initialize(workspaceDir) {
     const localCache = path.join(process.cwd(), '.heuristic-mcp');
     console.info(`[Server] Cache debug: Global=${globalCache}, Local=${localCache}`);
     console.info(`[Server] Process CWD: ${process.cwd()}`);
-  } catch (_e) { /* ignore */ }
+  } catch (_e) {
+    /* ignore */
+  }
 
   let stopStartupMemory = null;
   if (config.verbose) {
@@ -200,7 +207,7 @@ async function initialize(workspaceDir) {
       }).then((model) => {
         const loadSeconds = ((Date.now() - modelLoadStart) / 1000).toFixed(1);
         console.info(
-          `[Server] Embedding model loaded (${loadSeconds}s). Starting intensive indexing (expect high CPU)...`,
+          `[Server] Embedding model loaded (${loadSeconds}s). Starting intensive indexing (expect high CPU)...`
         );
         console.info(`[Server] Embedding model ready: ${config.embeddingModel}`);
         if (config.verbose) {
@@ -272,7 +279,7 @@ async function initialize(workspaceDir) {
 
     // Start indexing in background (non-blocking)
     console.info('[Server] Starting background indexing (delayed)...');
-    
+
     // Slight delay to allow server to bind and accept first request if immediate
     setTimeout(() => {
       indexer
@@ -301,9 +308,15 @@ const server = new Server(
   {
     capabilities: {
       tools: {},
+      resources: {},
     },
   }
 );
+
+// Handle resources/list (required by some IDEs even if we have no resources)
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  return { resources: [] };
+});
 
 // Register tools from all features
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -453,10 +466,10 @@ export async function main(argv = process.argv) {
   console.info('[Server] Heuristic MCP server started.');
 
   // Load cache and start indexing in background AFTER server is ready
-  startBackgroundTasks().catch(err => {
+  startBackgroundTasks().catch((err) => {
     console.error(`[Server] Background task error: ${err.message}`);
   });
-        
+
   console.info('[Server] Heuristic MCP server started.');
   console.info('[Server] MCP server is now fully ready to accept requests.');
 }
@@ -470,7 +483,8 @@ async function gracefulShutdown(signal) {
   // Stop file watcher
   if (indexer && indexer.watcher) {
     cleanupTasks.push(
-      indexer.watcher.close()
+      indexer.watcher
+        .close()
         .then(() => console.info('[Server] File watcher stopped'))
         .catch(() => console.warn('[Server] Error closing watcher'))
     );
@@ -490,7 +504,8 @@ async function gracefulShutdown(signal) {
   // Save cache
   if (cache) {
     cleanupTasks.push(
-      cache.save()
+      cache
+        .save()
         .then(() => console.info('[Server] Cache saved'))
         .catch((err) => console.error(`[Server] Failed to save cache: ${err.message}`))
     );
@@ -498,7 +513,7 @@ async function gracefulShutdown(signal) {
 
   await Promise.allSettled(cleanupTasks);
   console.info('[Server] Goodbye!');
-  
+
   // Allow stdio buffers to flush
   setTimeout(() => process.exit(0), 100);
 }

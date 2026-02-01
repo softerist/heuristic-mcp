@@ -10,15 +10,15 @@ describe('HybridSearch coverage', () => {
         content: 'exact match',
         startLine: 1,
         endLine: 2,
-        vector: [1, 0]
+        vector: [1, 0],
       },
       {
         file: 'new.js',
         content: 'exact match',
         startLine: 1,
         endLine: 2,
-        vector: [0, 1]
-      }
+        vector: [0, 1],
+      },
     ];
 
     const cache = createHybridSearchCacheStub({
@@ -39,13 +39,13 @@ describe('HybridSearch coverage', () => {
       exactMatchBoost: 1,
       recencyBoost: 0,
       callGraphEnabled: false,
-      searchDirectory: '/test'
+      searchDirectory: '/test',
     };
 
     const embedder = async () => ({ data: new Float32Array([1, 0]) });
-    
+
     const hybridSearch = new HybridSearch(embedder, cache, config);
-    
+
     // Search for "exact match"
     // 1. ANN returns Chunk 0.
     // 2. exactMatchCount = 1 (Chunk 0 has "exact match").
@@ -53,11 +53,10 @@ describe('HybridSearch coverage', () => {
     // 4. Fallback loop starts.
     // 5. Checks Chunk 0. content matches. Key is in seen set. Line 113 -> continue.
     // 6. Checks Chunk 1. content matches. Key not in seen set. Added.
-    
+
     const { results } = await hybridSearch.search('exact match', 5);
-    
+
     expect(results).toHaveLength(2);
-    expect(results.map(r => r.file).sort()).toEqual(['duplicate.js', 'new.js']);
+    expect(results.map((r) => r.file).sort()).toEqual(['duplicate.js', 'new.js']);
   });
 });
-

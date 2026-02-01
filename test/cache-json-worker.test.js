@@ -184,8 +184,7 @@ describe('EmbeddingsCache JSON worker parsing', () => {
     const cache = new EmbeddingsCache(baseConfig);
     // Should not throw or log an error about double-resolution
     await cache.load();
-    
+
     expect(Worker).toHaveBeenCalled();
   });
 });
-

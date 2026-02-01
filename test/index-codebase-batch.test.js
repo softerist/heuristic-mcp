@@ -67,9 +67,7 @@ describe('CodebaseIndexer batch processing presets', () => {
     };
     const indexer = new CodebaseIndexer(vi.fn(), cache, config);
     indexer.discoverFiles = vi.fn().mockResolvedValue(['/root/a.js']);
-    indexer.preFilterFiles = vi
-      .fn()
-      .mockResolvedValue([{ file: '/root/a.js', content: 12345 }]);
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([{ file: '/root/a.js', content: 12345 }]);
 
     hashContent.mockReturnValueOnce('hash');
 
@@ -117,4 +115,3 @@ describe('CodebaseIndexer batch processing presets', () => {
     consoleSpy.mockRestore();
   });
 });
-

@@ -78,7 +78,9 @@ maybeDescribe('Worker Error Handling', () => {
       // The indexer attached a listener via 'once'.
       // Vitest might complain if unhandled, so we wrap.
       workers[0].emit('error', new Error('Worker crash'));
-    } catch (_e) { /* ignore */ }
+    } catch (_e) {
+      /* ignore */
+    }
 
     await promise;
 
@@ -94,4 +96,3 @@ maybeDescribe('Worker Error Handling', () => {
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to create worker'));
   });
 });
-

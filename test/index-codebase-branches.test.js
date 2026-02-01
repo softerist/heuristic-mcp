@@ -97,10 +97,16 @@ describe('CodebaseIndexer Branch Coverage', () => {
       setLastIndexDuration: vi.fn(),
       setLastIndexStats: vi.fn(),
       getFileHashKeys: vi.fn().mockImplementation(() => [...mockCache.fileHashes.keys()]),
-      setFileHashes: vi.fn((map) => { mockCache.fileHashes = map; }),
+      setFileHashes: vi.fn((map) => {
+        mockCache.fileHashes = map;
+      }),
       getFileCallDataKeys: vi.fn().mockImplementation(() => [...mockCache.fileCallData.keys()]),
-      setFileCallDataEntries: vi.fn((map) => { mockCache.fileCallData = map; }),
-      clearFileCallData: vi.fn(() => { mockCache.fileCallData = new Map(); }),
+      setFileCallDataEntries: vi.fn((map) => {
+        mockCache.fileCallData = map;
+      }),
+      clearFileCallData: vi.fn(() => {
+        mockCache.fileCallData = new Map();
+      }),
     };
     mockConfig = {
       searchDirectory: '/test',
@@ -254,9 +260,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     await indexer.processChunksWithWorkers([{ file: 'a.js', text: 'c' }]);
 
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining('postMessage failed')
-    );
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('postMessage failed'));
     expect(fallbackSpy).toHaveBeenCalled();
   });
 
@@ -423,9 +427,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
   it('logs when queued watch events processing fails', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue([]);
-    indexer.processPendingWatchEvents = vi
-      .fn()
-      .mockRejectedValue(new Error('queue boom'));
+    indexer.processPendingWatchEvents = vi.fn().mockRejectedValue(new Error('queue boom'));
 
     await indexer.indexAll();
 
@@ -462,12 +464,12 @@ describe('CodebaseIndexer Branch Coverage', () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['file-large-content.js']);
     // Mock preFilterFiles to return an entry with content that exceeds maxFileSize
     indexer.preFilterFiles = vi.fn().mockResolvedValue([
-      { 
-        file: 'file-large-content.js', 
-        content: 'x'.repeat(mockConfig.maxFileSize + 100), 
+      {
+        file: 'file-large-content.js',
+        content: 'x'.repeat(mockConfig.maxFileSize + 100),
         hash: 'hash1',
-        force: false
-      }
+        force: false,
+      },
     ]);
 
     await indexer.indexAll();
@@ -480,10 +482,8 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
   it('skips files with invalid stat results', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['invalid-stat.js']);
-    indexer.preFilterFiles = vi.fn().mockResolvedValue([
-      { file: 'invalid-stat.js', force: false }
-    ]);
-    
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([{ file: 'invalid-stat.js', force: false }]);
+
     vi.spyOn(fs, 'stat').mockResolvedValue(null);
 
     await indexer.indexAll();
@@ -495,14 +495,12 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
   it('skips files that are too large via stat check', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['large-stat.js']);
-    indexer.preFilterFiles = vi.fn().mockResolvedValue([
-      { file: 'large-stat.js', force: false }
-    ]);
-    
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([{ file: 'large-stat.js', force: false }]);
+
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => false,
       size: mockConfig.maxFileSize + 100,
-      mtimeMs: 123
+      mtimeMs: 123,
     });
 
     await indexer.indexAll();
@@ -514,14 +512,12 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
   it('handles read file failures', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['read-error.js']);
-    indexer.preFilterFiles = vi.fn().mockResolvedValue([
-      { file: 'read-error.js', force: false }
-    ]);
-    
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([{ file: 'read-error.js', force: false }]);
+
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => false,
       size: 50,
-      mtimeMs: 123
+      mtimeMs: 123,
     });
     vi.spyOn(fs, 'readFile').mockRejectedValue(new Error('Read failed'));
 
@@ -534,17 +530,15 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
   it('skips unchanged files when hash matches', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['unchanged.js']);
-    indexer.preFilterFiles = vi.fn().mockResolvedValue([
-      { file: 'unchanged.js', force: false }
-    ]);
-    
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([{ file: 'unchanged.js', force: false }]);
+
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => false,
       size: 50,
-      mtimeMs: 123
+      mtimeMs: 123,
     });
     vi.spyOn(fs, 'readFile').mockResolvedValue('content');
-    
+
     vi.spyOn(utils, 'hashContent').mockReturnValue('same-hash');
     mockCache.getFileHash.mockReturnValue('same-hash');
 
@@ -558,10 +552,10 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
   it('queues watch events when indexing is in progress', async () => {
     await indexer.setupFileWatcher();
-    
+
     // Simulate indexing in progress
     indexer.isIndexing = true;
-    
+
     // Trigger ADD event
     await handlers['add']('added.js');
     expect(indexer.pendingWatchEvents.get(path.join('/test', 'added.js'))).toBe('add');
@@ -584,4 +578,3 @@ describe('CodebaseIndexer Branch Coverage', () => {
     );
   });
 });
-

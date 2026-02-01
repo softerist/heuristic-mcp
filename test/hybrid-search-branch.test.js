@@ -1,4 +1,3 @@
-
 import { describe, it, expect, vi } from 'vitest';
 import { HybridSearch } from '../features/hybrid-search.js';
 import { createHybridSearchCacheStub } from './helpers.js';
@@ -40,14 +39,14 @@ describe('HybridSearch Branch Coverage', () => {
   });
 
   it('should return early from populateFileModTimes if no missing files', async () => {
-      const hybrid = new HybridSearch({}, createHybridSearchCacheStub(), {});
-      hybrid.fileModTimes.set('a.js', 100);
-      
-      const statSpy = vi.spyOn(fs, 'stat');
-      await hybrid.populateFileModTimes(['a.js']);
-      
-      expect(statSpy).not.toHaveBeenCalled();
-      statSpy.mockRestore();
+    const hybrid = new HybridSearch({}, createHybridSearchCacheStub(), {});
+    hybrid.fileModTimes.set('a.js', 100);
+
+    const statSpy = vi.spyOn(fs, 'stat');
+    await hybrid.populateFileModTimes(['a.js']);
+
+    expect(statSpy).not.toHaveBeenCalled();
+    statSpy.mockRestore();
   });
 
   it('should handle null mtime in scoring', async () => {
@@ -76,7 +75,7 @@ describe('HybridSearch Branch Coverage', () => {
     };
     const embedder = async () => ({ data: new Float32Array([1, 0]) });
     const hybrid = new HybridSearch(embedder, cache, config);
-    
+
     // Explicitly set null mtime
     hybrid.fileModTimes.set('null-mtime.js', null);
 
@@ -163,7 +162,7 @@ describe('HybridSearch Branch Coverage', () => {
         vector: [1, 0],
         startLine: 1,
         endLine: 1,
-      }
+      },
     ];
     const cache = createHybridSearchCacheStub({
       vectorStore,
@@ -200,4 +199,3 @@ describe('HybridSearch Branch Coverage', () => {
     expect(results[0].file).toBe('match.js');
   });
 });
-

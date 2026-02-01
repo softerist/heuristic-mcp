@@ -276,15 +276,15 @@ describe('index-codebase branch coverage focused', () => {
     // Create a worker that returns empty results
     let handler;
     const worker = {
-        on: (event, fn) => {
-          if (event === 'message') handler = fn;
-        },
-        once: () => {},
-        off: () => {},
-        postMessage: (msg) => {
-          // Respond with success but empty results, implying nothing needed retry or all done
-          handler({ type: 'results', results: [], batchId: msg.batchId });
-        },
+      on: (event, fn) => {
+        if (event === 'message') handler = fn;
+      },
+      once: () => {},
+      off: () => {},
+      postMessage: (msg) => {
+        // Respond with success but empty results, implying nothing needed retry or all done
+        handler({ type: 'results', results: [], batchId: msg.batchId });
+      },
     };
     indexer.workers = [worker];
 
@@ -484,10 +484,17 @@ describe('index-codebase branch coverage focused', () => {
       .fn()
       .mockResolvedValue([{ file: '/root/a.js', content: 'code', hash: 'h' }]);
     smartChunkMock.mockReturnValueOnce([{ text: 'a', startLine: 1, endLine: 1 }]);
-    
+
     // Return a result for a file that wasn't in the batch ('phantom.js')
     vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue([
-      { file: '/root/phantom.js', startLine: 1, endLine: 1, content: 'a', vector: [1], success: true },
+      {
+        file: '/root/phantom.js',
+        startLine: 1,
+        endLine: 1,
+        content: 'a',
+        vector: [1],
+        success: true,
+      },
     ]);
 
     await indexer.indexAll(false);
@@ -1030,4 +1037,3 @@ describe('index-codebase branch coverage focused', () => {
     await indexer.indexAll(false);
   });
 });
-

@@ -44,4 +44,3 @@ describe('Test helpers', () => {
     expect(result).toBe(false);
   });
 });
-
