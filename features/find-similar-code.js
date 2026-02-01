@@ -66,14 +66,16 @@ export class FindSimilarCode {
       pooling: 'mean',
       normalize: true,
     });
-    const codeVector = codeEmbed.data; // Keep as Float32Array for performance
-    const codeVectorTyped = codeVector;
+
+    // CRITICAL: Deep copy Float32Array to avoid detachment issues with WASM/Workers
+    // accessing a detached buffer from a reusable ONNX tensor can crash the process.
+    const codeVector = new Float32Array(codeEmbed.data);
 
     let candidates = vectorStore;
     let usedAnn = false;
     if (this.config.annEnabled) {
       const candidateCount = this.getAnnCandidateCount(maxResults, vectorStore.length);
-      const annLabels = await this.cache.queryAnn(codeVectorTyped, candidateCount);
+      const annLabels = await this.cache.queryAnn(codeVector, candidateCount);
       if (annLabels && annLabels.length >= maxResults) {
         usedAnn = true;
         const seen = new Set();

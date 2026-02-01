@@ -103,15 +103,15 @@ export class HybridSearch {
         pooling: 'mean',
         normalize: true,
       });
-      const queryVector = queryEmbed.data; // Keep as Float32Array for performance
-      const queryVectorTyped = queryVector;
+
+      const queryVector = new Float32Array(queryEmbed.data);
 
       let candidateIndices = null; // null implies full scan of all chunks
       let usedAnn = false;
 
       if (this.config.annEnabled) {
         const candidateCount = this.getAnnCandidateCount(maxResults, storeSize);
-        const annLabels = await this.cache.queryAnn(queryVectorTyped, candidateCount);
+        const annLabels = await this.cache.queryAnn(queryVector, candidateCount);
         if (annLabels && annLabels.length >= maxResults) {
           usedAnn = true;
           console.info(`[Search] Using ANN index (${annLabels.length} candidates)`);
