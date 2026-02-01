@@ -47,8 +47,9 @@
   "homepage": "https://github.com/softerist/heuristic-mcp#readme",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4",
     "@huggingface/transformers": "^3.8.1",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "better-sqlite3": "^12.6.2",
     "chokidar": "^3.5.3",
     "fdir": "^6.5.0",
     "ignore": "^7.0.5",

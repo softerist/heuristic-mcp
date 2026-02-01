@@ -33,7 +33,17 @@ async function withTempDir(testFn) {
   try {
     await testFn(dir);
   } finally {
-    await fs.rm(dir, { recursive: true, force: true });
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      try {
+        await fs.rm(dir, { recursive: true, force: true });
+        break;
+      } catch (error) {
+        if (error?.code !== 'EBUSY' && error?.code !== 'EPERM') {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
   }
 }
 
@@ -208,6 +218,45 @@ describe('EmbeddingsCache', () => {
       const store = reloaded.getVectorStore();
       expect(store.length).toBe(1);
       expect(store[0].vector).toBeUndefined();
+      expect(reloaded.getChunkVector(store[0])).toBeInstanceOf(Float32Array);
+
+      await reloaded.close();
+      await cache.close();
+    });
+  });
+
+  it('writes and loads sqlite vector store with content lookup', async () => {
+    await withTempDir(async (dir) => {
+      const config = await createConfig(dir);
+      config.vectorStoreFormat = 'sqlite';
+      config.vectorStoreContentMode = 'external';
+      config.vectorStoreLoadMode = 'disk';
+      const cache = new EmbeddingsCache(config);
+      const filePath = path.join(dir, 'sqlite.js');
+
+      cache.vectorStore = [
+        {
+          file: filePath,
+          startLine: 1,
+          endLine: 2,
+          content: 'console.log(\"sqlite\")',
+          vector: new Float32Array([0.9, 0.8]),
+        },
+      ];
+      cache.setFileHash(filePath, 'hash-sqlite', { mtimeMs: 10, size: 20 });
+
+      await cache.save();
+
+      const sqlitePath = path.join(dir, 'vectors.sqlite');
+      await expect(fs.stat(sqlitePath)).resolves.toBeDefined();
+
+      const reloaded = new EmbeddingsCache(config);
+      await reloaded.load();
+
+      const store = reloaded.getVectorStore();
+      expect(store.length).toBe(1);
+      expect(store[0].vector).toBeUndefined();
+      await expect(reloaded.getChunkContent(store[0])).resolves.toBe('console.log(\"sqlite\")');
       expect(reloaded.getChunkVector(store[0])).toBeInstanceOf(Float32Array);
 
       await reloaded.close();

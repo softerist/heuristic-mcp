@@ -172,7 +172,7 @@ Selected overrides (prefix `SMART_CODING_`):
 - `SMART_CODING_RECENCY_DECAY_DAYS=30` — days until recency boost decays to 0.
 - `SMART_CODING_ANN_ENABLED=true|false` — enable ANN index.
 - `SMART_CODING_ANN_EF_SEARCH=64` — ANN search quality/speed tradeoff.
-- `SMART_CODING_VECTOR_STORE_FORMAT=json|binary` — on-disk vector store format.
+- `SMART_CODING_VECTOR_STORE_FORMAT=json|binary|sqlite` — on-disk vector store format.
 - `SMART_CODING_VECTOR_STORE_CONTENT_MODE=external|inline` — where content is stored for binary format.
 - `SMART_CODING_VECTOR_STORE_LOAD_MODE=memory|disk` — vector loading strategy.
 - `SMART_CODING_CONTENT_CACHE_ENTRIES=256` — LRU entries for decoded content.
@@ -195,6 +195,28 @@ and reads on demand. Recommended for large repos.
 - `vectorCacheEntries` controls the small in-memory LRU for vectors when using disk mode.
 - `clearCacheAfterIndex=true` drops in-memory vectors after indexing and reloads lazily on next query.
 - Note: `annEnabled=true` with `vectorStoreLoadMode=disk` can increase disk reads during ANN rebuilds on large indexes.
+
+### SQLite Vector Store
+
+Set `vectorStoreFormat` to `sqlite` to use SQLite for persistence. This provides:
+
+- ACID transactions for reliable writes
+- Simpler concurrent access
+- Standard database format for inspection
+
+```json
+{
+  "vectorStoreFormat": "sqlite"
+}
+```
+
+The vectors and content are stored in `vectors.sqlite` in your cache directory. You can inspect it with any SQLite browser.
+`vectorStoreContentMode` and `vectorStoreLoadMode` are respected for SQLite (use `vectorStoreLoadMode=disk` to avoid loading vectors into memory).
+
+**Tradeoffs vs Binary:**
+- Slightly higher read overhead (SQL queries vs direct memory access)
+- Better write reliability (transactions)
+- Easier debugging (standard SQLite file)
 
 ### Benchmarking Search
 

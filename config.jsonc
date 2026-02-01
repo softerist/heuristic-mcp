@@ -666,7 +666,7 @@
   "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
   // Preload the embedding model on startup.
   "preloadEmbeddingModel": true,
-  // Vector store format: json or binary.
+  // Vector store format: json, binary, or sqlite.
   "vectorStoreFormat": "binary",
   // Content storage: external or inline.
   "vectorStoreContentMode": "external",
