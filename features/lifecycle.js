@@ -498,7 +498,7 @@ function getGlobalCacheDir() {
   return process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
 }
 
-export async function status({ fix = false } = {}) {
+export async function status({ fix = false, cacheOnly = false } = {}) {
   try {
     const home = os.homedir();
     const pids = [];
@@ -595,8 +595,10 @@ export async function status({ fix = false } = {}) {
       }
     }
 
-    // STATUS OUTPUT
-    console.info(''); // spacer
+    // Show server status only for --status command
+    if (!cacheOnly) {
+      // STATUS OUTPUT
+      console.info(''); // spacer
     if (pids.length > 0) {
       console.info(`[Lifecycle] 🟢 Server is RUNNING. PID(s): ${pids.join(', ')}`);
     } else {
@@ -644,7 +646,8 @@ export async function status({ fix = false } = {}) {
         }
       }
     }
-    console.info(''); // spacer
+      console.info(''); // spacer
+    } // End if (!cacheOnly) - server status
 
     // APPEND LOGS INFO (Cache Status)
     const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
@@ -844,8 +847,10 @@ export async function status({ fix = false } = {}) {
       console.info(`${'─'.repeat(60)}`);
     }
 
-    // SHOW PATHS
-    console.info('\n[Paths] Important locations:');
+    // Show paths only for --status command
+    if (!cacheOnly) {
+      // SHOW PATHS
+      console.info('\n[Paths] Important locations:');
 
     // Global npm bin
     let npmBin = 'unknown';
@@ -900,9 +905,10 @@ export async function status({ fix = false } = {}) {
       console.info(`      - ${loc.name}: ${loc.path} ${status}`);
     }
 
-    console.info(`   💾 Cache root: ${globalCacheRoot}`);
-    console.info(`   📁 Current dir: ${process.cwd()}`);
-    console.info('');
+      console.info(`   💾 Cache root: ${globalCacheRoot}`);
+      console.info(`   📁 Current dir: ${process.cwd()}`);
+      console.info('');
+    } // End if (!cacheOnly) - paths
   } catch (error) {
     console.error(`[Lifecycle] Failed to check status: ${error.message}`);
   }

@@ -100,9 +100,19 @@ const features = [
 async function initialize(workspaceDir) {
   // Load configuration with workspace support
   config = await loadConfig(workspaceDir);
-  if (config.enableCache && config.autoCleanStaleCaches !== false) {
-    await clearStaleCaches();
+  
+  // Automatic cache cleanup on startup (Option A)
+  if (config.enableCache && config.cacheCleanup?.autoCleanup) {
+    console.info('[Server] Running automatic cache cleanup...');
+    const results = await clearStaleCaches({
+      ...config.cacheCleanup,
+      logger: console,
+    });
+    if (results.removed > 0) {
+      console.info(`[Server] Removed ${results.removed} stale cache ${results.removed === 1 ? 'directory' : 'directories'}`);
+    }
   }
+  
   if (config.enableExplicitGc && typeof global.gc !== 'function') {
     console.error(
       '[Server] FATAL: enableExplicitGc=true but this process was not started with --expose-gc.'
@@ -386,6 +396,8 @@ export async function main(argv = process.argv) {
     tailLines,
     wantsStop,
     wantsStart,
+    wantsCache,
+    wantsClean,
     wantsStatus,
     wantsClearCache,
     wantsRegister,
@@ -440,6 +452,44 @@ export async function main(argv = process.argv) {
     process.exit(0);
   }
 
+  // --cache command (cache-only, no server status)
+  if (wantsCache) {
+    await status({ fix: wantsClean, cacheOnly: true });
+    process.exit(0);
+  }
+
+  // --clear <cache_id> command (remove specific cache by ID)
+  const clearIndex = parsed.rawArgs.indexOf('--clear');
+  if (clearIndex !== -1) {
+    const cacheId = parsed.rawArgs[clearIndex + 1];
+    if (cacheId && !cacheId.startsWith('--')) {
+      // Remove specific cache by ID
+      const cacheHome = process.platform === 'win32' ? process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local') : process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Caches') : process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'); const globalCacheRoot = path.join(cacheHome, 'heuristic-mcp');
+      const cachePath = path.join(globalCacheRoot, cacheId);
+      
+      try {
+        await fs.access(cachePath);
+        console.info(`[Cache] Removing cache: ${cacheId}`);
+        console.info(`[Cache] Path: ${cachePath}`);
+        await fs.rm(cachePath, { recursive: true, force: true });
+        console.info(`[Cache] ✅ Successfully removed cache ${cacheId}`);
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          console.error(`[Cache] ❌ Cache not found: ${cacheId}`);
+          console.error(`[Cache] Available caches in ${globalCacheRoot}:`);
+          const dirs = await fs.readdir(globalCacheRoot).catch(() => []);
+          dirs.forEach(dir => console.error(`   - ${dir}`));
+          process.exit(1);
+        } else {
+          console.error(`[Cache] ❌ Failed to remove cache: ${error.message}`);
+          process.exit(1);
+        }
+      }
+      process.exit(0);
+    }
+    // If --clear with no arg, fall through to --clear-cache behavior
+  }
+
   if (wantsClearCache) {
     await clearCache(workspaceDir);
     process.exit(0);
@@ -466,7 +516,13 @@ export async function main(argv = process.argv) {
   }
 
   if (wantsFix && !wantsStatus) {
-    console.error('[Error] --fix can only be used with --status');
+    console.error('[Error] --fix can only be used with --status (deprecated, use --cache --clean)');
+    printHelp();
+    process.exit(1);
+  }
+
+  if (wantsClean && !wantsCache) {
+    console.error('[Error] --clean can only be used with --cache');
     printHelp();
     process.exit(1);
   }
