@@ -41,6 +41,8 @@ import * as HybridSearchFeature from './features/hybrid-search.js';
 import * as ClearCacheFeature from './features/clear-cache.js';
 import * as FindSimilarCodeFeature from './features/find-similar-code.js';
 import * as AnnConfigFeature from './features/ann-config.js';
+import * as PackageVersionFeature from './features/package-version.js';
+import * as SetWorkspaceFeature from './features/set-workspace.js';
 import { register } from './features/register.js';
 
 const MEMORY_LOG_INTERVAL_MS = 15000;
@@ -81,6 +83,16 @@ const features = [
     module: AnnConfigFeature,
     instance: null,
     handler: AnnConfigFeature.handleToolCall,
+  },
+  {
+    module: PackageVersionFeature,
+    instance: null,
+    handler: PackageVersionFeature.handleToolCall,
+  },
+  {
+    module: SetWorkspaceFeature,
+    instance: null,
+    handler: null, // Late-bound after initialization
   },
 ];
 
@@ -260,6 +272,17 @@ async function initialize(workspaceDir) {
   features[2].instance = cacheClearer;
   features[3].instance = findSimilarCode;
   features[4].instance = annConfig;
+  // Features 5 (PackageVersion) doesn't need instance
+
+  // Initialize SetWorkspace feature with shared state
+  const setWorkspaceInstance = new SetWorkspaceFeature.SetWorkspaceFeature(
+    config,
+    cache,
+    indexer,
+    getGlobalCacheDir
+  );
+  features[6].instance = setWorkspaceInstance;
+  features[6].handler = SetWorkspaceFeature.createHandleToolCall(setWorkspaceInstance);
 
   // Attach hybridSearch to server for cross-feature access (e.g. cache invalidation)
   server.hybridSearch = hybridSearch;

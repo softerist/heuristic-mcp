@@ -18,6 +18,25 @@ function toFloat32Array(vector) {
   return new Float32Array(vector);
 }
 
+function sliceAndNormalize(vector, targetDim) {
+  if (!targetDim || targetDim >= vector.length) {
+    return vector;
+  }
+
+  const sliced = vector.slice(0, targetDim);
+  let sumSquares = 0;
+  for (let i = 0; i < targetDim; i++) {
+    sumSquares += sliced[i] * sliced[i];
+  }
+  const norm = Math.sqrt(sumSquares);
+  if (norm > 0) {
+    for (let i = 0; i < targetDim; i++) {
+      sliced[i] /= norm;
+    }
+  }
+  return sliced;
+}
+
 function isTestEnv() {
   return process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
 }
@@ -93,15 +112,7 @@ export class CodebaseIndexer {
     this.isIndexing = false;
     this.processingWatchEvents = false;
     this.pendingWatchEvents = new Map();
-    const cacheRelative = this.getCacheRelativePath();
-    const autoExclude = ['.smart-coding-cache'];
-    if (cacheRelative) {
-      autoExclude.push(cacheRelative, `${cacheRelative}/**`);
-    }
-    this.excludeMatchers = buildExcludeMatchers([
-      ...autoExclude,
-      ...(this.config.excludePatterns || []),
-    ]);
+    this.rebuildExcludeMatchers();
     this.gitignore = ignore();
     this.workerFailureCount = 0;
     this.workersDisabledUntil = 0;
@@ -136,6 +147,45 @@ export class CodebaseIndexer {
     this._embeddingRequestId = 0;
     this._embeddingChildNeedsRestart = false;
     this._embeddingChildRestartThresholdMb = this.getEmbeddingChildRestartThresholdMb();
+  }
+
+  rebuildExcludeMatchers() {
+    const cacheRelative = this.getCacheRelativePath();
+    const autoExclude = ['.smart-coding-cache'];
+    if (cacheRelative) {
+      autoExclude.push(cacheRelative, `${cacheRelative}/**`);
+    }
+    this.excludeMatchers = buildExcludeMatchers([
+      ...autoExclude,
+      ...(this.config.excludePatterns || []),
+    ]);
+  }
+
+  async updateWorkspaceState({ restartWatcher = false } = {}) {
+    this.workspaceRoot = this.config.searchDirectory
+      ? path.resolve(this.config.searchDirectory)
+      : null;
+    this.workspaceRootReal = null;
+    this.rebuildExcludeMatchers();
+    this.gitignore = ignore();
+    if (this.pendingWatchEvents) {
+      this.pendingWatchEvents.clear();
+    }
+    if (this._watcherDebounceTimers) {
+      for (const timer of this._watcherDebounceTimers.values()) {
+        clearTimeout(timer);
+      }
+      this._watcherDebounceTimers.clear();
+    }
+    if (this._watcherInProgress) {
+      this._watcherInProgress.clear();
+    }
+
+    if (restartWatcher && this.config.watchFiles) {
+      await this.setupFileWatcher();
+    } else if (this.config.watchFiles) {
+      await this.loadGitignore();
+    }
   }
 
   getEmbeddingChildRestartThresholdMb() {
@@ -396,6 +446,7 @@ export class CodebaseIndexer {
               workerData: {
                 workerId: i,
                 embeddingModel: this.config.embeddingModel,
+                embeddingDimension: this.config.embeddingDimension || null,
                 verbose: this.config.verbose,
                 numThreads: threadsPerWorker,
                 searchDirectory: this.config.searchDirectory,
@@ -546,6 +597,7 @@ export class CodebaseIndexer {
       workerData: {
         workerId: index,
         embeddingModel: this.config.embeddingModel,
+        embeddingDimension: this.config.embeddingDimension || null,
         verbose: this.config.verbose,
         numThreads: 12, // Use 12 threads (50% of cores) for max throughput
         searchDirectory: this.config.searchDirectory,
@@ -1201,8 +1253,21 @@ export class CodebaseIndexer {
         await this.stopEmbeddingProcessSession({ preserveStats: true });
         await this.startEmbeddingProcessSession();
       }
-      return results;
+      return this.applyEmbeddingDimensionToResults(results);
     });
+  }
+
+  applyEmbeddingDimensionToResults(results) {
+    const targetDim = this.config.embeddingDimension;
+    if (!targetDim || !Array.isArray(results)) {
+      return results;
+    }
+    for (const result of results) {
+      if (!result || !result.vector) continue;
+      const floatVector = toFloat32Array(result.vector);
+      result.vector = sliceAndNormalize(floatVector, targetDim);
+    }
+    return results;
   }
 
   async processChunksInChildProcess(chunks) {
@@ -1294,7 +1359,7 @@ export class CodebaseIndexer {
         }
         try {
           const parsed = JSON.parse(stdout);
-          resolve(parsed?.results || []);
+          resolve(this.applyEmbeddingDimensionToResults(parsed?.results || []));
         } catch (err) {
           this.recordWorkerFailure(`child process parse error (${err.message})`);
           resolve([]);
@@ -1324,7 +1389,10 @@ export class CodebaseIndexer {
           normalize: true,
         });
         // CRITICAL: Deep copy to release ONNX tensor memory
-        const vector = new Float32Array(output.data);
+        let vector = toFloat32Array(output.data);
+        if (this.config.embeddingDimension) {
+          vector = sliceAndNormalize(vector, this.config.embeddingDimension);
+        }
         // Help GC by nullifying the large buffer reference (dispose() doesn't exist in transformers.js)
         try {
           output.data = null;

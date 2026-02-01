@@ -10,9 +10,12 @@ An enhanced MCP server for your codebase. It provides intelligent semantic searc
 - Smart indexing: detects project type and applies smart ignore patterns on top of your excludes.
 - Semantic search: find code by meaning, not just keywords.
 - Find similar code: locate near-duplicate or related patterns from a snippet.
+- Package version lookup: check latest versions from npm, PyPI, crates.io, Maven, and more.
+- Workspace switching: change workspace at runtime without restarting the server.
 - Recency ranking and call-graph boosting: surfaces fresh and related code.
 - Optional ANN index: faster candidate retrieval for large codebases.
 - Optional binary vector store: mmap-friendly cache format for large repos.
+- Flexible embedding dimensions: MRL-compatible dimension reduction (64-768d) for speed/quality tradeoffs.
 
 ---
 
@@ -128,6 +131,27 @@ Example `config.jsonc`:
 }
 ```
 
+### Embedding Model & Dimension Options
+
+**Default model:** `jinaai/jina-embeddings-v2-base-code` (768 dimensions)
+
+> **Important:** The default Jina model was **not** trained with Matryoshka Representation Learning (MRL). Dimension reduction (`embeddingDimension`) will significantly degrade search quality with this model. Only use dimension reduction with MRL-trained models.
+
+For faster search with smaller embeddings, switch to an MRL-compatible model:
+
+```json
+{
+  "embeddingModel": "nomic-ai/nomic-embed-text-v1.5",
+  "embeddingDimension": 128
+}
+```
+
+**MRL-compatible models:**
+- `nomic-ai/nomic-embed-text-v1.5` — recommended for 128d/256d
+- Other models explicitly trained with Matryoshka loss
+
+**embeddingDimension values:** `64 | 128 | 256 | 512 | 768 | null` (null = full dimensions)
+
 Cache location:
 
 - By default, the cache is stored in a global OS cache directory under `heuristic-mcp/<hash>`.
@@ -156,6 +180,7 @@ Selected overrides (prefix `SMART_CODING_`):
 - `SMART_CODING_CLEAR_CACHE_AFTER_INDEX=true|false` — drop in-memory vectors after indexing.
 - `SMART_CODING_EXPLICIT_GC=true|false` — opt-in to explicit GC (requires `--expose-gc`).
 - `SMART_CODING_INCREMENTAL_GC_THRESHOLD_MB=2048` — RSS threshold for running incremental GC after watcher updates (requires explicit GC).
+- `SMART_CODING_EMBEDDING_DIMENSION=64|128|256|512|768` — MRL dimension reduction (only for MRL-trained models).
 
 See `lib/config.js` for the full list.
 
@@ -188,6 +213,49 @@ SMART_CODING_VECTOR_STORE_FORMAT=binary SMART_CODING_VECTOR_STORE_LOAD_MODE=disk
 ```
 
 Note: On small repos, disk mode may be slightly slower and show noisy RSS deltas; benefits are clearer on large indexes with a small `vectorCacheEntries`.
+
+---
+
+## MCP Tools Reference
+
+### `a_semantic_search`
+Find code by meaning. Ideal for natural language queries like "authentication logic" or "database queries".
+
+### `b_index_codebase`
+Manually trigger a full reindex. Useful after large code changes.
+
+### `c_clear_cache`
+Clear the embeddings cache and force reindex.
+
+### `d_ann_config`
+Configure the ANN (Approximate Nearest Neighbor) index. Actions: `stats`, `set_ef_search`, `rebuild`.
+
+### `d_find_similar_code`
+Find similar code patterns given a snippet. Useful for finding duplicates or refactoring opportunities.
+
+### `e_check_package_version`
+Fetch the latest version of a package from its official registry.
+
+**Supported registries:**
+- **npm** (default): `lodash`, `@types/node`
+- **PyPI**: `pip:requests`, `pypi:django`
+- **crates.io**: `cargo:serde`, `rust:tokio`
+- **Maven**: `maven:org.springframework:spring-core`
+- **Go**: `go:github.com/gin-gonic/gin`
+- **RubyGems**: `gem:rails`
+- **NuGet**: `nuget:Newtonsoft.Json`
+- **Packagist**: `composer:laravel/framework`
+- **Hex**: `hex:phoenix`
+- **pub.dev**: `pub:flutter`
+- **Homebrew**: `brew:node`
+- **Conda**: `conda:numpy`
+
+### `f_set_workspace`
+Change the workspace directory at runtime. Updates search directory, cache location, and optionally triggers reindex.
+
+**Parameters:**
+- `workspacePath` (required): Absolute path to the new workspace
+- `reindex` (optional, default: `true`): Whether to trigger a full reindex
 
 ---
 

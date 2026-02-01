@@ -496,7 +496,7 @@ describe('index.js CLI coverage', () => {
     const callHandler = lastServer.handlers.get(callSchema);
 
     const listResponse = await listHandler();
-    expect(listResponse.tools).toHaveLength(5);
+    expect(listResponse.tools).toHaveLength(7);
 
     hybridHandleToolCall.mockResolvedValue({ ok: true });
     const callResponse = await callHandler({
