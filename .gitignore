@@ -4,6 +4,7 @@ node_modules/
 *.log
 .cache/
 .smart-coding-cache/
+publish.cmd
 coverage/
 .vitest-coverage/
 install-mpcs.ps1
