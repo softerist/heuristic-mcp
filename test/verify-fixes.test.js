@@ -1,7 +1,6 @@
 import { loadConfig } from '../lib/config.js';
 import { CodebaseIndexer } from '../features/index-codebase.js';
 import os from 'os';
-import path from 'path';
 import fs from 'fs/promises';
 
 async function verify() {

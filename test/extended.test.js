@@ -6,7 +6,7 @@ import fs from 'fs/promises';
 
 vi.mock('fs/promises');
 
-describe('Final Coverage Gaps', () => {
+describe('Coverage Gaps', () => {
   describe('lib/call-graph.js fallback language', () => {
     it('handles unknown extensions by falling back to javascript patterns', () => {
       const content = 'function unknownExt() {}';
