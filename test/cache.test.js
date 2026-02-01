@@ -30,20 +30,28 @@ vi.mock('hnswlib-node', () => ({
 
 async function withTempDir(testFn) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'heuristic-cache-'));
+  let testError;
   try {
     await testFn(dir);
-  } finally {
+  } catch (error) {
+    testError = error;
+  }
+  {
     for (let attempt = 0; attempt < 10; attempt += 1) {
       try {
         await fs.rm(dir, { recursive: true, force: true });
         break;
       } catch (error) {
         if (error?.code !== 'EBUSY' && error?.code !== 'EPERM') {
-          throw error;
+          testError = testError || error;
+          break;
         }
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
     }
+  }
+  if (testError) {
+    throw testError;
   }
 }
 
@@ -239,7 +247,7 @@ describe('EmbeddingsCache', () => {
           file: filePath,
           startLine: 1,
           endLine: 2,
-          content: 'console.log(\"sqlite\")',
+          content: 'console.log("sqlite")',
           vector: new Float32Array([0.9, 0.8]),
         },
       ];
@@ -256,7 +264,7 @@ describe('EmbeddingsCache', () => {
       const store = reloaded.getVectorStore();
       expect(store.length).toBe(1);
       expect(store[0].vector).toBeUndefined();
-      await expect(reloaded.getChunkContent(store[0])).resolves.toBe('console.log(\"sqlite\")');
+      await expect(reloaded.getChunkContent(store[0])).resolves.toBe('console.log("sqlite")');
       expect(reloaded.getChunkVector(store[0])).toBeInstanceOf(Float32Array);
 
       await reloaded.close();

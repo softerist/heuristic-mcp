@@ -89,7 +89,6 @@ const REGISTRIES = {
       // Maven packages are in format group:artifact or group/artifact
       const [group, artifact] = pkg.includes(':') ? pkg.split(':') : pkg.split('/');
       if (!artifact) return null;
-      const groupPath = group.replace(/\./g, '/');
       return `https://search.maven.org/solrsearch/select?q=g:${encodeURIComponent(group)}+AND+a:${encodeURIComponent(artifact)}&rows=1&wt=json`;
     },
     parse: (data) => {
