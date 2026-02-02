@@ -549,8 +549,6 @@ export async function main(argv = process.argv) {
   startBackgroundTasks().catch((err) => {
     console.error(`[Server] Background task error: ${err.message}`);
   });
-
-  console.info('[Server] Heuristic MCP server started.');
   console.info('[Server] MCP server is now fully ready to accept requests.');
 }
 

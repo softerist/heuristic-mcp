@@ -1,0 +1,32 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@huggingface/transformers', () => ({
+  pipeline: vi.fn(),
+}));
+
+vi.mock('../lib/onnx-backend.js', () => ({
+  configureNativeOnnxBackend: vi.fn(),
+}));
+
+describe('embedding-process getEmbedder', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('reloads the embedder when the model changes', async () => {
+    const { pipeline } = await import('@huggingface/transformers');
+    pipeline.mockResolvedValueOnce({}).mockResolvedValueOnce({});
+
+    const { getEmbedder, resetEmbeddingProcessState } = await import(
+      '../lib/embedding-process.js'
+    );
+
+    resetEmbeddingProcessState();
+    await getEmbedder('model-a', 1);
+    await getEmbedder('model-b', 1);
+
+    expect(pipeline).toHaveBeenCalledTimes(2);
+    expect(pipeline.mock.calls[0][1]).toBe('model-a');
+    expect(pipeline.mock.calls[1][1]).toBe('model-b');
+  });
+});

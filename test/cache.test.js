@@ -233,6 +233,88 @@ describe('EmbeddingsCache', () => {
     });
   });
 
+  it('clears in-memory state when cache metadata is missing', async () => {
+    await withTempDir(async (dir) => {
+      const config = await createConfig(dir);
+      const cache = new EmbeddingsCache(config);
+      cache.vectorStore = [{ file: 'stale.js', vector: [1, 2] }];
+      cache.setFileHash('stale.js', 'hash-stale');
+      cache.setFileCallData('stale.js', { definitions: ['x'], calls: [] });
+
+      await cache.load();
+
+      expect(cache.getVectorStore()).toEqual([]);
+      expect(cache.getFileHash('stale.js')).toBeUndefined();
+      expect(cache.getFileCallData('stale.js')).toBeUndefined();
+
+      await cache.close();
+    });
+  });
+
+  it('saves binary cache in disk mode by pulling vectors from store', async () => {
+    await withTempDir(async (dir) => {
+      const config = await createConfig(dir);
+      config.vectorStoreFormat = 'binary';
+      config.vectorStoreContentMode = 'external';
+      config.vectorStoreLoadMode = 'disk';
+      const cache = new EmbeddingsCache(config);
+      const filePath = path.join(dir, 'disk-save.js');
+
+      cache.vectorStore = [
+        {
+          file: filePath,
+          startLine: 1,
+          endLine: 2,
+          content: 'console.log("disk-save")',
+          vector: new Float32Array([0.11, 0.22]),
+        },
+      ];
+      cache.setFileHash(filePath, 'hash-disk-save', { mtimeMs: 10, size: 20 });
+      await cache.save();
+
+      const reloaded = new EmbeddingsCache(config);
+      await reloaded.load();
+      await expect(reloaded.save()).resolves.toBeUndefined();
+
+      await reloaded.close();
+      await cache.close();
+    });
+  });
+
+  it('builds ANN index in disk mode using store dimension', async () => {
+    await withTempDir(async (dir) => {
+      const config = await createConfig(dir);
+      config.vectorStoreFormat = 'binary';
+      config.vectorStoreContentMode = 'external';
+      config.vectorStoreLoadMode = 'disk';
+      config.annEnabled = true;
+      config.annMinChunks = 1;
+      const cache = new EmbeddingsCache(config);
+      const filePath = path.join(dir, 'ann-disk.js');
+
+      cache.vectorStore = [
+        {
+          file: filePath,
+          startLine: 1,
+          endLine: 2,
+          content: 'console.log("ann")',
+          vector: new Float32Array([0.1, 0.2]),
+        },
+      ];
+      cache.setFileHash(filePath, 'hash-ann', { mtimeMs: 10, size: 20 });
+      await cache.save();
+
+      const reloaded = new EmbeddingsCache(config);
+      await reloaded.load();
+
+      const index = await reloaded.ensureAnnIndex();
+      expect(index).toBeTruthy();
+
+      await reloaded.close();
+      await cache.close();
+    });
+  });
+
   it('writes and loads sqlite vector store with content lookup', async () => {
     await withTempDir(async (dir) => {
       const config = await createConfig(dir);

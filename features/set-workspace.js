@@ -8,6 +8,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
+import { acquireWorkspaceLock, releaseWorkspaceLock } from '../lib/server-lifecycle.js';
 
 /**
  * Generate a workspace-specific cache directory path
@@ -121,6 +122,26 @@ export class SetWorkspaceFeature {
         success: false,
         error: `Failed to create cache directory: ${err.message}`,
       };
+    }
+
+    // Acquire new workspace lock before proceeding
+    const lock = await acquireWorkspaceLock({
+      cacheDirectory: newCacheDir,
+      workspaceDir: normalizedPath,
+    });
+    if (!lock.acquired) {
+      // Revert config on failure
+      this.config.searchDirectory = previousWorkspace;
+      this.config.cacheDirectory = previousCache;
+      return {
+        success: false,
+        error: `Workspace is already locked by another server (pid ${lock.ownerPid ?? 'unknown'})`,
+      };
+    }
+
+    // Release old workspace lock after new lock is acquired
+    if (previousCache) {
+      await releaseWorkspaceLock({ cacheDirectory: previousCache });
     }
 
     // Update indexer's workspace root and related state

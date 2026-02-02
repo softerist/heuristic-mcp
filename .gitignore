@@ -10,3 +10,4 @@ coverage/
 install-mpcs.ps1
 node_modules
 GEMINI.md
+.agent

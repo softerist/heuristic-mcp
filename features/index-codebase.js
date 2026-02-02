@@ -593,13 +593,15 @@ export class CodebaseIndexer {
   async replaceDeadWorker(index) {
     if (this.config.verbose) console.info(`[Indexer] Replacing dead worker at index ${index}...`);
 
+    // Use 1 thread per worker to match initializeWorkers and prevent CPU saturation
+    const threadsPerWorker = 1;
     const newWorker = new Worker(new URL('../lib/embedding-worker.js', import.meta.url), {
       workerData: {
         workerId: index,
         embeddingModel: this.config.embeddingModel,
         embeddingDimension: this.config.embeddingDimension || null,
         verbose: this.config.verbose,
-        numThreads: 12, // Use 12 threads (50% of cores) for max throughput
+        numThreads: threadsPerWorker,
         searchDirectory: this.config.searchDirectory,
         maxFileSize: this.config.maxFileSize,
         callGraphEnabled: this.config.callGraphEnabled,
@@ -694,6 +696,12 @@ export class CodebaseIndexer {
     if (allowedFiles.length === 0) {
       return [];
     }
+
+    // Wait for any pending worker replacements to complete before distributing work
+    if (this._workerReplacementPromises && this._workerReplacementPromises.size > 0) {
+      await Promise.all(this._workerReplacementPromises.values());
+    }
+
     const activeWorkers = this.workers
       .map((worker, index) => ({ worker, index }))
       .filter((entry) => entry.worker);
@@ -724,15 +732,32 @@ export class CodebaseIndexer {
       const promise = new Promise((resolve) => {
         const batchId = `file-batch-${i}-${Date.now()}`;
         const batchResults = [];
+        let workerKilled = false; // Atomic guard against duplicate kills
 
         const killWorker = async () => {
+          // Atomic guard: prevent concurrent killWorker calls for same worker
+          if (workerKilled || this.workers[workerIndex] === null) return;
+          workerKilled = true;
+          this.workers[workerIndex] = null; // Mark as dead immediately before async work
           try {
             await worker.terminate?.();
           } catch (_err) {
             // ignore termination errors
           }
-          this.workers[workerIndex] = null;
-          this.replaceDeadWorker(workerIndex).catch(() => {});
+          // Track worker replacement to prevent concurrent replacements for the same slot
+          if (!this._workerReplacementPromises) {
+            this._workerReplacementPromises = new Map();
+          }
+          if (!this._workerReplacementPromises.has(workerIndex)) {
+            const replacement = this.replaceDeadWorker(workerIndex)
+              .catch((err) => {
+                console.warn(`[Indexer] Failed to replace worker ${workerIndex}: ${err.message}`);
+              })
+              .finally(() => {
+                this._workerReplacementPromises.delete(workerIndex);
+              });
+            this._workerReplacementPromises.set(workerIndex, replacement);
+          }
         };
 
         const handleTimeout = () => {
@@ -862,20 +887,34 @@ export class CodebaseIndexer {
       const promise = new Promise((resolve, _reject) => {
         const batchId = `batch-${i}-${Date.now()}`;
         const batchResults = [];
+        let workerKilled = false; // Atomic guard against duplicate kills
 
         // Timeout handler
         const killWorker = async () => {
+          // Atomic guard: prevent concurrent killWorker calls for same worker
+          if (workerKilled || this.workers[workerIndex] === null) return;
+          workerKilled = true;
+          this.workers[workerIndex] = null; // Mark as dead immediately before async work
           try {
             await worker.terminate?.();
           } catch {
             // ignore terminate errors
           }
-          this.workers[workerIndex] = null;
 
-          // Attempt to replace the dead worker asynchronously
-          this.replaceDeadWorker(workerIndex).catch((err) => {
-            console.warn(`[Indexer] Failed to replace worker ${workerIndex}: ${err.message}`);
-          });
+          // Track worker replacement to prevent concurrent replacements for the same slot
+          if (!this._workerReplacementPromises) {
+            this._workerReplacementPromises = new Map();
+          }
+          if (!this._workerReplacementPromises.has(workerIndex)) {
+            const replacement = this.replaceDeadWorker(workerIndex)
+              .catch((err) => {
+                console.warn(`[Indexer] Failed to replace worker ${workerIndex}: ${err.message}`);
+              })
+              .finally(() => {
+                this._workerReplacementPromises.delete(workerIndex);
+              });
+            this._workerReplacementPromises.set(workerIndex, replacement);
+          }
         };
 
         const handleTimeout = (label) => {
@@ -883,6 +922,7 @@ export class CodebaseIndexer {
           void killWorker();
           worker.off('message', handler);
           worker.off('error', errorHandler);
+          if (exitHandler) worker.off('exit', exitHandler);
           console.warn(`[Indexer] Worker ${workerIndex} timed out, ${label}`);
           this.recordWorkerFailure(`timeout (batch ${batchId})`);
           // Return empty and let fallback handle it

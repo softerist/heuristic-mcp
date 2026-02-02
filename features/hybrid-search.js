@@ -9,6 +9,7 @@ export class HybridSearch {
     this.cache = cache;
     this.config = config;
     this.fileModTimes = new Map(); // Cache for file modification times
+    this._lastAccess = new Map(); // Track last access time for LRU eviction
   }
 
   async getChunkContent(chunkOrIndex) {
@@ -38,9 +39,12 @@ export class HybridSearch {
         const meta = this.cache.getFileMeta(file);
         if (meta && typeof meta.mtimeMs === 'number') {
           this.fileModTimes.set(file, meta.mtimeMs);
+          this._lastAccess.set(file, Date.now()); // Track for LRU
         } else {
           missing.push(file);
         }
+      } else {
+        this._lastAccess.set(file, Date.now()); // Track access for LRU
       }
     }
 
@@ -50,12 +54,19 @@ export class HybridSearch {
 
     // Concurrency-limited execution to avoid EMFILE
     const CONCURRENCY = 50;
-    let index = 0;
+    let nextIndex = 0;
+
+    const getNextFile = () => {
+      // Atomic index assignment - grab file and increment in one operation
+      const idx = nextIndex;
+      if (idx >= missing.length) return null;
+      nextIndex = idx + 1;
+      return missing[idx];
+    };
 
     const worker = async () => {
-      while (index < missing.length) {
-        const file = missing[index++];
-        if (!file) break; // Safety check
+      let file;
+      while ((file = getNextFile()) !== null) {
         try {
           const stats = await fs.stat(file);
           this.fileModTimes.set(file, stats.mtimeMs);
@@ -65,13 +76,21 @@ export class HybridSearch {
       }
     };
 
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, missing.length) }, worker));
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, missing.length) }, () => worker()));
 
-    // Prevent unbounded growth (simple eviction)
+    // Prevent unbounded growth (LRU-style eviction based on access time)
     if (this.fileModTimes.size > 5000) {
-      for (const [key] of this.fileModTimes) {
+      // Convert to array with last-access info, sort by oldest access
+      const now = Date.now();
+      const entries = [...this.fileModTimes.keys()].map((k) => ({
+        key: k,
+        lastAccess: this._lastAccess?.get(k) ?? 0,
+      }));
+      entries.sort((a, b) => a.lastAccess - b.lastAccess); // Oldest first
+      const toEvict = entries.slice(0, entries.length - 4000);
+      for (const { key } of toEvict) {
         this.fileModTimes.delete(key);
-        if (this.fileModTimes.size <= 4000) break;
+        this._lastAccess?.delete(key);
       }
     }
   }
@@ -255,8 +274,16 @@ export class HybridSearch {
           // Needs chunk info for result
           const chunkInfo = this.cache.getChunk(idx);
 
+          // Log store inconsistency: vector exists but chunk metadata is missing
+          if (!chunkInfo) {
+            if (this.config.verbose) {
+              console.warn(`[Search] Store inconsistency: vector at index ${idx} has no chunk info`);
+            }
+            continue;
+          }
+
           // Recency boost
-          if (recencyBoostEnabled && chunkInfo) {
+          if (recencyBoostEnabled) {
             const mtime = this.fileModTimes.get(chunkInfo.file);
             if (typeof mtime === 'number') {
               const ageMs = now - mtime;
@@ -265,9 +292,7 @@ export class HybridSearch {
             }
           }
 
-          if (chunkInfo) {
-            scoredChunks.push({ ...chunkInfo, score, content });
-          }
+          scoredChunks.push({ ...chunkInfo, score, content });
         }
       }
 

@@ -977,7 +977,7 @@ const asyncUtils = {
 
   parallel: async (tasks, concurrency = Infinity) => {
     const results = [];
-    const executing = [];
+    const executing = new Set();
 
     for (const [index, task] of tasks.entries()) {
       const promise = Promise.resolve()
@@ -989,15 +989,16 @@ const asyncUtils = {
           (error) => {
             results[index] = { status: 'rejected', reason: error };
           }
-        );
-      executing.push(promise);
+        )
+        .finally(() => {
+          // Remove this promise from executing set when it completes
+          executing.delete(promise);
+        });
+      executing.add(promise);
 
-      if (executing.length >= concurrency) {
+      if (executing.size >= concurrency) {
+        // Wait for any promise to complete (which will remove itself from the set)
         await Promise.race(executing);
-        executing.splice(
-          executing.findIndex((p) => p === promise),
-          1
-        );
       }
     }
 
