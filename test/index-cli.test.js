@@ -54,10 +54,12 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => {
   callSchema = Symbol('call');
   listSchema = Symbol('list');
   const listResourcesSchema = Symbol('listResources');
+  const readResourceSchema = Symbol('readResource');
   return {
     CallToolRequestSchema: callSchema,
     ListToolsRequestSchema: listSchema,
     ListResourcesRequestSchema: listResourcesSchema,
+    ReadResourceRequestSchema: readResourceSchema,
   };
 });
 vi.mock('@huggingface/transformers', () => ({
