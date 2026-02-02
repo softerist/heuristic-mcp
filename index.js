@@ -6,6 +6,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { pipeline, env } from '@huggingface/transformers';
 import { configureNativeOnnxBackend, getNativeOnnxStatus } from './lib/onnx-backend.js';
@@ -44,6 +45,7 @@ import * as FindSimilarCodeFeature from './features/find-similar-code.js';
 import * as AnnConfigFeature from './features/ann-config.js';
 import * as PackageVersionFeature from './features/package-version.js';
 import * as SetWorkspaceFeature from './features/set-workspace.js';
+import { handleListResources, handleReadResource } from './features/resources.js';
 
 import { MEMORY_LOG_INTERVAL_MS, ONNX_THREAD_LIMIT } from './lib/constants.js';
 const PID_FILE_NAME = '.heuristic-mcp.pid';
@@ -400,9 +402,14 @@ const server = new Server(
   }
 );
 
-// Handle resources/list (required by some IDEs even if we have no resources)
+// Handle resources/list
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
-  return { resources: [] };
+  return await handleListResources(config);
+});
+
+// Handle resources/read
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  return await handleReadResource(request.params.uri, config);
 });
 
 // Register tools from all features

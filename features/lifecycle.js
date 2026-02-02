@@ -565,7 +565,6 @@ function getGlobalCacheDir() {
 
 export async function status({ fix = false, cacheOnly = false, workspaceDir = null } = {}) {
   try {
-    const home = os.homedir();
     const pids = [];
     const now = new Date();
     const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
