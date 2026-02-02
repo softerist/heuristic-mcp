@@ -125,6 +125,11 @@ export async function createTestFixtures(options = {}) {
   if (options.verbose !== undefined) config.verbose = options.verbose;
   if (options.workerThreads !== undefined) config.workerThreads = options.workerThreads;
   if (isVitest() && options.forceWorkers !== true) config.workerThreads = 0;
+  if (options.clearCacheAfterIndex !== undefined) {
+    config.clearCacheAfterIndex = options.clearCacheAfterIndex;
+  } else {
+    config.clearCacheAfterIndex = false;
+  }
 
   const useRealEmbedder = options.useRealEmbedder === true;
   const embedder = useRealEmbedder

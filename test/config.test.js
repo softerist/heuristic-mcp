@@ -196,6 +196,18 @@ describe('Configuration Loading', () => {
     });
   });
 
+  it('accepts workerThreads=0 for main-thread-only mode', async () => {
+    await withTempDir(async (dir) => {
+      await fs.writeFile(path.join(dir, 'config.json'), JSON.stringify({ smartIndexing: false }));
+
+      process.env.SMART_CODING_WORKER_THREADS = '0';
+
+      const config = await loadConfig(dir);
+
+      expect(config.workerThreads).toBe(0);
+    });
+  });
+
   it('ignores invalid environment overrides', async () => {
     await withTempDir(async (dir) => {
       await fs.writeFile(path.join(dir, 'config.json'), JSON.stringify({ smartIndexing: false }));
@@ -207,7 +219,6 @@ describe('Configuration Loading', () => {
       process.env.SMART_CODING_RECENCY_DECAY_DAYS = '400';
       process.env.SMART_CODING_SEMANTIC_WEIGHT = '-1';
       process.env.SMART_CODING_EXACT_MATCH_BOOST = 'nope';
-      process.env.SMART_CODING_WORKER_THREADS = '0';
       process.env.SMART_CODING_ANN_MIN_CHUNKS = '-5';
       process.env.SMART_CODING_ANN_MIN_CANDIDATES = '-1';
       process.env.SMART_CODING_ANN_MAX_CANDIDATES = '0';
@@ -226,7 +237,6 @@ describe('Configuration Loading', () => {
       expect(config.recencyDecayDays).toBe(DEFAULT_CONFIG.recencyDecayDays);
       expect(config.semanticWeight).toBe(DEFAULT_CONFIG.semanticWeight);
       expect(config.exactMatchBoost).toBe(DEFAULT_CONFIG.exactMatchBoost);
-      expect(config.workerThreads).toBe(DEFAULT_CONFIG.workerThreads);
       expect(config.annMinChunks).toBe(DEFAULT_CONFIG.annMinChunks);
       expect(config.annMinCandidates).toBe(DEFAULT_CONFIG.annMinCandidates);
       expect(config.annMaxCandidates).toBe(DEFAULT_CONFIG.annMaxCandidates);

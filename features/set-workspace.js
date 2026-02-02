@@ -138,26 +138,63 @@ export class SetWorkspaceFeature {
         error: `Workspace is already locked by another server (pid ${lock.ownerPid ?? 'unknown'})`,
       };
     }
-
-    // Release old workspace lock after new lock is acquired
-    if (previousCache) {
-      await releaseWorkspaceLock({ cacheDirectory: previousCache });
-    }
+    let indexerUpdateError = null;
 
     // Update indexer's workspace root and related state
     if (this.indexer) {
       if (typeof this.indexer.terminateWorkers === 'function') {
-        await this.indexer.terminateWorkers();
-      }
-      if (typeof this.indexer.updateWorkspaceState === 'function') {
-        await this.indexer.updateWorkspaceState({ restartWatcher: true });
-      } else {
-        this.indexer.workspaceRoot = normalizedPath;
-        this.indexer.workspaceRootReal = null; // Reset cached realpath
-        if (this.config.watchFiles && typeof this.indexer.setupFileWatcher === 'function') {
-          await this.indexer.setupFileWatcher();
+        try {
+          await this.indexer.terminateWorkers();
+        } catch (err) {
+          console.warn(`[SetWorkspace] Failed to terminate workers: ${err.message}`);
         }
       }
+      try {
+        if (typeof this.indexer.updateWorkspaceState === 'function') {
+          await this.indexer.updateWorkspaceState({ restartWatcher: true });
+        } else {
+          this.indexer.workspaceRoot = normalizedPath;
+          this.indexer.workspaceRootReal = null; // Reset cached realpath
+          if (this.config.watchFiles && typeof this.indexer.setupFileWatcher === 'function') {
+            await this.indexer.setupFileWatcher();
+          }
+        }
+      } catch (err) {
+        indexerUpdateError = err;
+      }
+    }
+
+    if (indexerUpdateError) {
+      // Roll back config + lock on failure to avoid partial switch
+      this.config.searchDirectory = previousWorkspace;
+      this.config.cacheDirectory = previousCache;
+      await releaseWorkspaceLock({ cacheDirectory: newCacheDir });
+      if (this.indexer) {
+        try {
+          if (typeof this.indexer.updateWorkspaceState === 'function') {
+            await this.indexer.updateWorkspaceState({ restartWatcher: true });
+          } else {
+            this.indexer.workspaceRoot = previousWorkspace;
+            this.indexer.workspaceRootReal = null;
+            if (this.config.watchFiles && typeof this.indexer.setupFileWatcher === 'function') {
+              await this.indexer.setupFileWatcher();
+            }
+          }
+        } catch (rollbackErr) {
+          console.warn(
+            `[SetWorkspace] Failed to rollback indexer state: ${rollbackErr.message}`
+          );
+        }
+      }
+      return {
+        success: false,
+        error: `Failed to update workspace state: ${indexerUpdateError.message}`,
+      };
+    }
+
+    // Release old workspace lock after successful indexer update
+    if (previousCache) {
+      await releaseWorkspaceLock({ cacheDirectory: previousCache });
     }
 
     // Re-initialize cache for new workspace if cache has a load method

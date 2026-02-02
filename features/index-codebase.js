@@ -1192,6 +1192,9 @@ export class CodebaseIndexer {
     }
     this._embeddingChild = null;
     this._embeddingProcessSessionActive = false;
+    // Clear buffers to release memory
+    this._embeddingChildBuffer = '';
+    this._embeddingChildQueue = [];
     if (!preserveStats) {
       this._embeddingSessionStats = null;
     }
@@ -1383,8 +1386,14 @@ export class CodebaseIndexer {
         }
         try {
           const parsed = JSON.parse(stdout);
+          // Clear large JSON buffer immediately after parsing to release memory
+          stdout = '';
+          stderr = '';
           resolve(this.applyEmbeddingDimensionToResults(parsed?.results || []));
         } catch (err) {
+          // Clear buffers on error too
+          stdout = '';
+          stderr = '';
           this.recordWorkerFailure(`child process parse error (${err.message})`);
           resolve([]);
         }
@@ -1417,11 +1426,13 @@ export class CodebaseIndexer {
         if (this.config.embeddingDimension) {
           vector = sliceAndNormalize(vector, this.config.embeddingDimension);
         }
-        // Help GC by nullifying the large buffer reference (dispose() doesn't exist in transformers.js)
-        try {
-          output.data = null;
-        } catch {
-          /* frozen tensor */
+        // Properly dispose tensor to release ONNX runtime memory
+        if (typeof output.dispose === 'function') {
+          try {
+            output.dispose();
+          } catch {
+            /* frozen tensor */
+          }
         }
         results.push({
           file: chunk.file,

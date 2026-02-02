@@ -105,4 +105,41 @@ describe('SetWorkspaceFeature', () => {
       expect(config.cacheDirectory).toBe(oldCache);
     });
   });
+
+  it('rolls back when indexer update fails', async () => {
+    await withTempDir(async (dir) => {
+      const oldWorkspace = path.join(dir, 'old');
+      const newWorkspace = path.join(dir, 'new');
+      const oldCache = path.join(dir, 'old-cache');
+      await fs.mkdir(oldWorkspace, { recursive: true });
+      await fs.mkdir(newWorkspace, { recursive: true });
+
+      acquireWorkspaceLock.mockResolvedValue({ acquired: true, lockPath: 'lock.json' });
+      releaseWorkspaceLock.mockResolvedValue();
+
+      const config = {
+        searchDirectory: oldWorkspace,
+        cacheDirectory: oldCache,
+        watchFiles: false,
+      };
+      const { cache, indexer } = createMocks();
+      indexer.updateWorkspaceState = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('update failed'))
+        .mockResolvedValueOnce(undefined);
+      const feature = new SetWorkspaceFeature(config, cache, indexer, () => dir);
+
+      const result = await feature.execute({ workspacePath: newWorkspace, reindex: false });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Failed to update workspace state');
+      expect(config.searchDirectory).toBe(oldWorkspace);
+      expect(config.cacheDirectory).toBe(oldCache);
+      expect(indexer.updateWorkspaceState).toHaveBeenCalledTimes(2);
+      expect(releaseWorkspaceLock).toHaveBeenCalledWith({
+        cacheDirectory: getWorkspaceCacheDir(newWorkspace, dir),
+      });
+      expect(releaseWorkspaceLock).not.toHaveBeenCalledWith({ cacheDirectory: oldCache });
+    });
+  });
 });

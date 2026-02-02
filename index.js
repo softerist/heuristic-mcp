@@ -23,7 +23,7 @@ const packageJson = require('./package.json');
 
 import { loadConfig, getGlobalCacheDir } from './lib/config.js';
 import { clearStaleCaches } from './lib/cache-utils.js';
-import { enableStderrOnlyLogging, setupFileLogging } from './lib/logging.js';
+import { enableStderrOnlyLogging, setupFileLogging, getLogFilePath } from './lib/logging.js';
 import { parseArgs, printHelp } from './lib/cli.js';
 import { clearCache } from './lib/cache-ops.js';
 import { logMemory, startMemoryLogger } from './lib/memory-logger.js';
@@ -48,6 +48,61 @@ import { register } from './features/register.js';
 
 import { MEMORY_LOG_INTERVAL_MS } from './lib/constants.js';
 const PID_FILE_NAME = '.heuristic-mcp.pid';
+
+async function readLogTail(logPath, maxLines = 2000) {
+  const data = await fs.readFile(logPath, 'utf-8');
+  if (!data) return [];
+  const lines = data.split(/\r?\n/).filter(Boolean);
+  return lines.slice(-maxLines);
+}
+
+async function printMemorySnapshot(workspaceDir) {
+  const activeConfig = await loadConfig(workspaceDir);
+  const logPath = getLogFilePath(activeConfig);
+
+  let lines;
+  try {
+    lines = await readLogTail(logPath);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      console.error(`[Memory] No log file found for workspace.`);
+      console.error(`[Memory] Expected location: ${logPath}`);
+      console.error(
+        '[Memory] Start the server with verbose logging (set "verbose": true), then try again.'
+      );
+      return false;
+    }
+    console.error(`[Memory] Failed to read log file: ${err.message}`);
+    return false;
+  }
+
+  const memoryLines = lines.filter((line) => /Memory\s*\(/.test(line) || /Memory.*rss=/.test(line));
+  if (memoryLines.length === 0) {
+    console.info('[Memory] No memory snapshots found in logs.');
+    console.info('[Memory] Ensure "verbose": true in config and restart the server.');
+    return true;
+  }
+
+  const idleLine =
+    [...memoryLines].reverse().find((line) => line.includes('after cache load')) ??
+    memoryLines[memoryLines.length - 1];
+
+  const logLine = (line) => {
+    console.info(line);
+    if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
+      console.error(line);
+    }
+  };
+
+  logLine(`[Memory] Idle snapshot: ${idleLine}`);
+
+  const latestLine = memoryLines[memoryLines.length - 1];
+  if (latestLine !== idleLine) {
+    logLine(`[Memory] Latest snapshot: ${latestLine}`);
+  }
+
+  return true;
+}
 
 // Arguments parsed in main()
 
@@ -391,6 +446,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         text: `Unknown tool: ${request.params.name}`,
       },
     ],
+    isError: true,
   };
 });
 
@@ -403,6 +459,7 @@ export async function main(argv = process.argv) {
     wantsVersion,
     wantsHelp,
     wantsLogs,
+    wantsMem,
     wantsNoFollow,
     tailLines,
     wantsStop,
@@ -442,11 +499,6 @@ export async function main(argv = process.argv) {
     console.info(`[Server] Workspace mode: ${workspaceDir}`);
   }
 
-  if (wantsLogs) {
-    process.env.SMART_CODING_LOGS = 'true';
-    process.env.SMART_CODING_VERBOSE = 'true';
-    console.info('[Server] Starting server with verbose logging enabled');
-  }
 
   if (wantsStop) {
     await stop();
@@ -485,7 +537,19 @@ export async function main(argv = process.argv) {
         cacheHome = process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
       }
       const globalCacheRoot = path.join(cacheHome, 'heuristic-mcp');
-      const cachePath = path.join(globalCacheRoot, cacheId);
+      const trimmedId = String(cacheId).trim();
+      const hasSeparators = trimmedId.includes('/') || trimmedId.includes('\\');
+      const resolvedCachePath = path.resolve(globalCacheRoot, trimmedId);
+      const relPath = path.relative(globalCacheRoot, resolvedCachePath);
+      const isWithinRoot = relPath && !relPath.startsWith('..') && !path.isAbsolute(relPath);
+
+      if (!trimmedId || hasSeparators || !isWithinRoot) {
+        console.error(`[Cache] ❌ Invalid cache id: ${cacheId}`);
+        console.error('[Cache] Cache id must be a direct child of the cache root.');
+        process.exit(1);
+      }
+
+      const cachePath = resolvedCachePath;
       
       try {
         await fs.access(cachePath);
@@ -521,12 +585,19 @@ export async function main(argv = process.argv) {
   }
 
   if (wantsLogs) {
+    process.env.SMART_CODING_LOGS = 'true';
+    process.env.SMART_CODING_VERBOSE = 'true';
     await logs({
       workspaceDir,
       tailLines,
       follow: !wantsNoFollow,
     });
     process.exit(0);
+  }
+
+  if (wantsMem) {
+    const ok = await printMemorySnapshot(workspaceDir);
+    process.exit(ok ? 0 : 1);
   }
 
   if (unknownFlags.length > 0) {
@@ -547,7 +618,7 @@ export async function main(argv = process.argv) {
     process.exit(1);
   }
 
-  registerSignalHandlers(gracefulShutdown);
+  registerSignalHandlers(requestShutdown);
   if (isServerMode && !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test')) {
     const handleStdinClose = () => requestShutdown('stdin');
     process.stdin?.on('end', handleStdinClose);

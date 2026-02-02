@@ -20,6 +20,9 @@ const configMock = {
 };
 const fsMock = {
   access: vi.fn(),
+  rm: vi.fn(),
+  readdir: vi.fn(),
+  readFile: vi.fn(),
 };
 const pipelineMock = vi.fn();
 const registerMock = vi.fn();
@@ -160,6 +163,9 @@ describe('index.js CLI coverage', () => {
     configMock.loadConfig.mockReset();
     configMock.getGlobalCacheDir.mockReset();
     fsMock.access.mockReset();
+    fsMock.readFile.mockReset();
+    fsMock.rm.mockReset();
+    fsMock.readdir.mockReset();
     onSpy = vi.spyOn(process, 'on').mockImplementation((event, handler) => {
       listeners[event] = handler;
       return process;
@@ -250,6 +256,62 @@ describe('index.js CLI coverage', () => {
 
     expect(process.env.SMART_CODING_VERBOSE).toBe('true');
     expect(logsMock).toHaveBeenCalled();
+  });
+
+  it('prints last memory snapshot with --mem', async () => {
+    process.argv = ['node', 'index.js', '--mem'];
+    configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
+    configMock.loadConfig.mockResolvedValue(baseConfig);
+    fsMock.readFile.mockResolvedValue(
+      [
+        '2026-02-02T00:00:00.000Z [INFO] [Server] Memory (startup) rss=100.0MB heap=10.0MB/20.0MB',
+        '2026-02-02T00:00:05.000Z [INFO] [Server] Memory (after cache load) rss=150.0MB heap=15.0MB/25.0MB',
+      ].join('\n')
+    );
+    const exitError = new Error('exit');
+    exitSpy.mockImplementation(() => {
+      throw exitError;
+    });
+
+    try {
+      const { main } = await import('../index.js');
+      await main();
+    } catch (err) {
+      expect(err).toBe(exitError);
+    }
+
+    const messages = [...infoSpy.mock.calls, ...errorSpy.mock.calls].map((call) => call[0]);
+    const hasIdle = messages.some(
+      (message) => typeof message === 'string' && message.includes('Idle snapshot')
+    );
+    const hasFallback = messages.some(
+      (message) => typeof message === 'string' && message.includes('No memory snapshots found')
+    );
+    expect(hasIdle || hasFallback).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('rejects --clear with invalid cache id', async () => {
+    process.argv = ['node', 'index.js', '--clear', '..\\..'];
+    const exitError = new Error('exit');
+    exitSpy.mockImplementation(() => {
+      throw exitError;
+    });
+
+    try {
+      const { main } = await import('../index.js');
+      await main();
+    } catch (err) {
+      expect(err).toBe(exitError);
+    }
+
+    const errors = errorSpy.mock.calls.map((call) => call[0]);
+    const hasInvalid = errors.some(
+      (message) => typeof message === 'string' && message.includes('Invalid cache id')
+    );
+    expect(hasInvalid).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(fsMock.access).not.toHaveBeenCalled();
   });
 
   it('logs memory stats when verbose is enabled', async () => {
