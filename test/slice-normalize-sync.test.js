@@ -84,5 +84,6 @@ describe('sliceAndNormalize synchronization', () => {
     const vector = new Float32Array([0, 0, 0, 0]);
     const result = sliceAndNormalize(vector, 2);
     expect(result.every(v => !Number.isNaN(v))).toBe(true);
+    expect(result.every(v => v === 0)).toBe(true);
   });
 });
