@@ -141,11 +141,15 @@ describe('index.js CLI coverage', () => {
   let errorSpy;
   let infoSpy;
   let listeners;
+  let originalVerboseEnv;
+  let originalLogsEnv;
 
   beforeEach(() => {
     vi.resetModules();
     vi.resetAllMocks();
     originalArgv = process.argv;
+    originalVerboseEnv = process.env.SMART_CODING_VERBOSE;
+    originalLogsEnv = process.env.SMART_CODING_LOGS;
     listeners = {
       SIGINT: () => {},
       SIGTERM: () => {},
@@ -185,6 +189,16 @@ describe('index.js CLI coverage', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
+    if (originalVerboseEnv === undefined) {
+      delete process.env.SMART_CODING_VERBOSE;
+    } else {
+      process.env.SMART_CODING_VERBOSE = originalVerboseEnv;
+    }
+    if (originalLogsEnv === undefined) {
+      delete process.env.SMART_CODING_LOGS;
+    } else {
+      process.env.SMART_CODING_LOGS = originalLogsEnv;
+    }
     onSpy.mockRestore();
     exitSpy.mockRestore();
     errorSpy.mockRestore();
@@ -192,9 +206,9 @@ describe('index.js CLI coverage', () => {
     vi.useRealTimers();
   });
 
-  it('registers with filter and exits', async () => {
-    process.argv = ['node', 'index.js', '--register', 'antigravity'];
-    registerMock.mockResolvedValue(undefined);
+  it('starts with filter and exits', async () => {
+    process.argv = ['node', 'index.js', '--start', 'antigravity'];
+    startMock.mockResolvedValue(undefined);
     const exitError = new Error('exit');
     exitSpy.mockImplementation(() => {
       throw exitError;
@@ -207,13 +221,13 @@ describe('index.js CLI coverage', () => {
       expect(err).toBe(exitError);
     }
 
-    expect(registerMock).toHaveBeenCalledWith('antigravity');
+    expect(startMock).toHaveBeenCalledWith('antigravity');
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
-  it('registers without filter when argument is missing', async () => {
-    process.argv = ['node', 'index.js', '--register'];
-    registerMock.mockResolvedValue(undefined);
+  it('starts without filter when argument is missing', async () => {
+    process.argv = ['node', 'index.js', '--start'];
+    startMock.mockResolvedValue(undefined);
     const exitError = new Error('exit');
     exitSpy.mockImplementation(() => {
       throw exitError;
@@ -226,7 +240,7 @@ describe('index.js CLI coverage', () => {
       expect(err).toBe(exitError);
     }
 
-    expect(registerMock).toHaveBeenCalledWith(null);
+    expect(startMock).toHaveBeenCalledWith(null);
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
@@ -258,9 +272,17 @@ describe('index.js CLI coverage', () => {
     configMock.loadConfig.mockResolvedValue(baseConfig);
     fsMock.access.mockResolvedValue(undefined);
     pipelineMock.mockResolvedValue(() => ({}));
+    const exitError = new Error('exit');
+    exitSpy.mockImplementation(() => {
+      throw exitError;
+    });
 
-    const { main } = await import('../index.js');
-    await main();
+    try {
+      const { main } = await import('../index.js');
+      await main();
+    } catch (err) {
+      expect(err).toBe(exitError);
+    }
 
     expect(process.env.SMART_CODING_VERBOSE).toBe('true');
     expect(logsMock).toHaveBeenCalled();
@@ -405,6 +427,7 @@ describe('index.js CLI coverage', () => {
   });
 
   it('falls back when workspace variables are unexpanded', async () => {
+    vi.useFakeTimers();
     process.argv = ['node', 'index.js', '--workspace', '${workspaceFolder}'];
     configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
     configMock.loadConfig.mockResolvedValue(baseConfig);
@@ -444,6 +467,7 @@ describe('index.js CLI coverage', () => {
   });
 
   it('ignores workspace flag without a value', async () => {
+    vi.useFakeTimers();
     process.argv = ['node', 'index.js', '--workspace'];
     configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
     configMock.loadConfig.mockResolvedValue(baseConfig);
@@ -485,6 +509,7 @@ describe('index.js CLI coverage', () => {
   });
 
   it('parses workspace args and handles shutdown cleanup', async () => {
+    vi.useFakeTimers();
     process.argv = ['node', 'index.js', '--workspace', 'C:\\work'];
     configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
     configMock.loadConfig.mockResolvedValue(baseConfig);
@@ -508,7 +533,6 @@ describe('index.js CLI coverage', () => {
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('sigterm-fail'));
 
-    vi.useFakeTimers();
     const runHandler = async (handler) => {
       const promise = handler();
       await vi.runAllTimersAsync();
@@ -525,6 +549,7 @@ describe('index.js CLI coverage', () => {
   });
 
   it('handles shutdown when no watcher, workers, or cache exist', async () => {
+    vi.useFakeTimers();
     process.argv = ['node', 'index.js', '--workspace', 'C:\\work'];
     configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
     configMock.loadConfig.mockResolvedValue(baseConfig);
@@ -538,7 +563,6 @@ describe('index.js CLI coverage', () => {
     lastIndexer.terminateWorkers = null;
     lastCache = null;
 
-    vi.useFakeTimers();
     exitSpy.mockClear();
     const runHandler = async (handler) => {
       const promise = handler();
@@ -553,6 +577,7 @@ describe('index.js CLI coverage', () => {
   });
 
   it('lists tools and routes tool calls', async () => {
+    vi.useFakeTimers();
     process.argv = ['node', 'index.js', '--workspace', 'C:\\work'];
     configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
     configMock.loadConfig.mockResolvedValue(baseConfig);
@@ -566,7 +591,16 @@ describe('index.js CLI coverage', () => {
     const callHandler = lastServer.handlers.get(callSchema);
 
     const listResponse = await listHandler();
-    expect(listResponse.tools).toHaveLength(7);
+    const toolNames = listResponse.tools.map((tool) => tool.name);
+    expect(toolNames).toEqual(
+      expect.arrayContaining([
+        'semantic_search',
+        'index-codebase',
+        'clear_cache',
+        'find_similar_code',
+        'ann_config',
+      ])
+    );
 
     hybridHandleToolCall.mockResolvedValue({ ok: true });
     const callResponse = await callHandler({

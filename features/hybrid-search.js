@@ -2,6 +2,11 @@ import path from 'path';
 import fs from 'fs/promises';
 import { dotSimilarity } from '../lib/utils.js';
 import { extractSymbolsFromContent } from '../lib/call-graph.js';
+import {
+  STAT_CONCURRENCY_LIMIT,
+  SEARCH_BATCH_SIZE,
+  PARTIAL_MATCH_BOOST,
+} from '../lib/constants.js';
 
 export class HybridSearch {
   constructor(embedder, cache, config) {
@@ -54,8 +59,7 @@ export class HybridSearch {
 
     // Concurrency-limited execution to avoid EMFILE
     // Pre-distribute files to workers (no shared mutable state - avoids race condition)
-    const CONCURRENCY_LIMIT = 50;
-    const workerCount = Math.min(CONCURRENCY_LIMIT, missing.length);
+    const workerCount = Math.min(STAT_CONCURRENCY_LIMIT, missing.length);
 
     const worker = async (startIdx) => {
       for (let i = startIdx; i < missing.length; i += workerCount) {
@@ -95,6 +99,15 @@ export class HybridSearch {
     this.fileModTimes.delete(file);
   }
 
+  /**
+   * Search the indexed codebase for relevant code snippets.
+   * Uses a hybrid approach combining semantic similarity (via embeddings) with
+   * keyword matching for optimal results.
+   * @param {string} query - Natural language or keyword search query
+   * @param {number} maxResults - Maximum number of results to return (default: 15)
+   * @returns {Promise<{results: Array<{file: string, startLine: number, endLine: number, content: string, score: number}>, message?: string}>}
+   * @throws {Error} If embedder is not initialized
+   */
   async search(query, maxResults) {
     try {
       if (typeof this.cache.ensureLoaded === 'function') {
@@ -262,7 +275,6 @@ export class HybridSearch {
       }
 
       // Score all chunks (batched to prevent blocking event loop)
-      const BATCH_SIZE = 500;
       const scoredChunks = [];
 
       // Process in batches
@@ -274,13 +286,13 @@ export class HybridSearch {
       const shouldApplyTextMatch = lowerQuery.length > 1;
       const deferTextMatch = shouldApplyTextMatch && totalCandidates > textMatchMaxCandidates;
 
-      for (let i = 0; i < totalCandidates; i += BATCH_SIZE) {
+      for (let i = 0; i < totalCandidates; i += SEARCH_BATCH_SIZE) {
         // Allow event loop to tick between batches
         if (i > 0) {
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
 
-        const limit = Math.min(totalCandidates, i + BATCH_SIZE);
+        const limit = Math.min(totalCandidates, i + SEARCH_BATCH_SIZE);
 
         for (let j = i; j < limit; j++) {
           const idx = candidateIndices ? candidateIndices[j] : j;
@@ -323,7 +335,7 @@ export class HybridSearch {
               for (let k = 0; k < queryWordCount; k++) {
                 if (lowerContent.includes(queryWords[k])) matchedWords++;
               }
-              score += (matchedWords / queryWordCount) * 0.3;
+              score += (matchedWords / queryWordCount) * PARTIAL_MATCH_BOOST;
             }
           }
 

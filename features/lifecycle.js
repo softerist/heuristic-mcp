@@ -315,12 +315,12 @@ export async function stop() {
   }
 }
 
-export async function start() {
+export async function start(filter = null) {
   console.info('[Lifecycle] Ensuring server is configured...');
   // Re-use the registration logic to ensure the config is present and correct
   try {
     const { register } = await import('./register.js');
-    await register();
+    await register(filter);
     await setMcpServerEnabled(true);
     console.info('[Lifecycle] ✅ Configuration checked.');
     console.info(

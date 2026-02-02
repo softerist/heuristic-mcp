@@ -44,9 +44,8 @@ import * as FindSimilarCodeFeature from './features/find-similar-code.js';
 import * as AnnConfigFeature from './features/ann-config.js';
 import * as PackageVersionFeature from './features/package-version.js';
 import * as SetWorkspaceFeature from './features/set-workspace.js';
-import { register } from './features/register.js';
 
-import { MEMORY_LOG_INTERVAL_MS } from './lib/constants.js';
+import { MEMORY_LOG_INTERVAL_MS, ONNX_THREAD_LIMIT } from './lib/constants.js';
 const PID_FILE_NAME = '.heuristic-mcp.pid';
 
 async function readLogTail(logPath, maxLines = 2000) {
@@ -179,7 +178,6 @@ async function initialize(workspaceDir) {
     process.exit(1);
   }
 
-  const onnxThreadLimit = 2;
   let mainBackendConfigured = false;
   let nativeOnnxAvailable = null;
   const ensureMainOnnxBackend = () => {
@@ -188,12 +186,12 @@ async function initialize(workspaceDir) {
       log: config.verbose ? console.info : null,
       label: '[Server]',
       threads: {
-        intraOpNumThreads: onnxThreadLimit,
+        intraOpNumThreads: ONNX_THREAD_LIMIT,
         interOpNumThreads: 1,
       },
     });
     if (!nativeOnnxAvailable && env?.backends?.onnx?.wasm) {
-      env.backends.onnx.wasm.numThreads = onnxThreadLimit;
+      env.backends.onnx.wasm.numThreads = ONNX_THREAD_LIMIT;
     }
     mainBackendConfigured = true;
   };
@@ -468,8 +466,7 @@ export async function main(argv = process.argv) {
     wantsClean,
     wantsStatus,
     wantsClearCache,
-    wantsRegister,
-    registerFilter,
+    startFilter,
     wantsFix,
     unknownFlags,
   } = parsed;
@@ -506,7 +503,7 @@ export async function main(argv = process.argv) {
   }
 
   if (wantsStart) {
-    await start();
+    await start(startFilter);
     process.exit(0);
   }
 
@@ -576,11 +573,6 @@ export async function main(argv = process.argv) {
 
   if (wantsClearCache) {
     await clearCache(workspaceDir);
-    process.exit(0);
-  }
-
-  if (wantsRegister) {
-    await register(registerFilter);
     process.exit(0);
   }
 

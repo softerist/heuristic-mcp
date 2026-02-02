@@ -35,7 +35,7 @@ What happens during install:
 If auto-registration did not update your IDE config, run:
 
 ```bash
-heuristic-mcp --register
+heuristic-mcp --start
 ```
 
 ---
@@ -73,23 +73,17 @@ heuristic-mcp --logs --no-follow
 heuristic-mcp --version
 ```
 
-### Register (manual)
-
-```bash
-heuristic-mcp --register
-heuristic-mcp --register antigravity
-heuristic-mcp --register cursor
-heuristic-mcp --register "Claude Desktop"
-```
-
 ### Start/Stop
 
 ```bash
 heuristic-mcp --start
+heuristic-mcp --start antigravity
+heuristic-mcp --start cursor
+heuristic-mcp --start "Claude Desktop"
 heuristic-mcp --stop
 ```
 
-`--stop` also disables the MCP server entry in supported IDE configs so the IDE won't immediately respawn it. `--start` re-enables it (restart/reload the IDE to launch).
+`--start` registers (if needed) and enables the MCP server entry. `--stop` disables it so the IDE won't immediately respawn it. Restart/reload the IDE after `--start` to launch.
 
 ### Clear Cache
 

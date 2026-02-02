@@ -13,6 +13,10 @@ import { extractCallData } from '../lib/call-graph.js';
 import ignore from 'ignore';
 
 import { sliceAndNormalize, toFloat32Array } from '../lib/slice-normalize.js';
+import {
+  MAX_PENDING_WATCH_EVENTS,
+  PENDING_WATCH_EVENTS_TRIM_SIZE,
+} from '../lib/constants.js';
 
 function isTestEnv() {
   return process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
@@ -2413,6 +2417,21 @@ export class CodebaseIndexer {
   }
 
   enqueueWatchEvent(type, filePath) {
+    // Prevent unbounded memory growth during rapid file churn (e.g., build processes)
+    if (this.pendingWatchEvents.size >= MAX_PENDING_WATCH_EVENTS) {
+      console.warn(
+        `[Indexer] pendingWatchEvents limit reached (${MAX_PENDING_WATCH_EVENTS}), ` +
+        `trimming oldest ${this.pendingWatchEvents.size - PENDING_WATCH_EVENTS_TRIM_SIZE} events`
+      );
+      // Drop oldest events (Map iterates in insertion order)
+      const toRemove = this.pendingWatchEvents.size - PENDING_WATCH_EVENTS_TRIM_SIZE;
+      let count = 0;
+      for (const key of this.pendingWatchEvents.keys()) {
+        if (count++ >= toRemove) break;
+        this.pendingWatchEvents.delete(key);
+      }
+    }
+
     // If it's a delete, it always wins
     if (type === 'unlink') {
       this.pendingWatchEvents.set(filePath, 'unlink');
