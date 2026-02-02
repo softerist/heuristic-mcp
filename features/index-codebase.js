@@ -385,9 +385,8 @@ export class CodebaseIndexer {
         // Resource-aware scaling: check available RAM (skip in test env to avoid mocking issues)
         // We apply this if we have > 1 worker, regardless of whether it was 'auto' or explicit
         if (numWorkers > 1 && !isTestEnv() && typeof os.freemem === 'function') {
-          // Jina model typically requires ~1.5GB - 2GB per worker
           const freeMemGb = os.freemem() / 1024 / 1024 / 1024;
-          const isHeavyModel = this.config.embeddingModel.includes('jina');
+          const isHeavyModel = this.isHeavyEmbeddingModel();
           const memPerWorker = isHeavyModel ? 8.0 : 0.8;
 
           const memCappedWorkers = Math.max(1, Math.floor(freeMemGb / memPerWorker));
@@ -405,7 +404,7 @@ export class CodebaseIndexer {
         if (!isTestEnv() && typeof os.totalmem === 'function') {
           const totalMemGb = os.totalmem() / 1024 / 1024 / 1024;
           const rssGb = process.memoryUsage().rss / 1024 / 1024 / 1024;
-          const isHeavyModel = this.config.embeddingModel.includes('jina');
+          const isHeavyModel = this.isHeavyEmbeddingModel();
           const memPerWorker = isHeavyModel ? 8.0 : 0.8;
           const projectedGb = rssGb + numWorkers * memPerWorker + 0.5; // 0.5GB headroom
           const ceilingGb = totalMemGb * 0.85;
@@ -1705,6 +1704,9 @@ export class CodebaseIndexer {
       let currentReadBatch = [];
       let currentReadBytes = 0;
 
+      const mtimeSafeWindowMs = Number.isInteger(this.config.mtimeSafeWindowMs)
+        ? this.config.mtimeSafeWindowMs
+        : 2000;
       const processReadBatch = async (batch) => {
         const results = await Promise.all(
           batch.map(async ({ file, size, mtimeMs }) => {
@@ -1713,17 +1715,22 @@ export class CodebaseIndexer {
               typeof this.cache.getFileHash === 'function' ? this.cache.getFileHash(file) : null;
             const cachedMeta = this.cache.getFileMeta ? this.cache.getFileMeta(file) : null;
 
-            if (
+            const metaMatches =
               cachedHash &&
               cachedMeta &&
               Number.isFinite(cachedMeta.mtimeMs) &&
               cachedMeta.mtimeMs === mtimeMs &&
               Number.isFinite(cachedMeta.size) &&
-              cachedMeta.size === size
-            ) {
-              // Metadata matches exactly, skip reading/hashing
-              skippedCount.unchanged++;
-              return null;
+              cachedMeta.size === size;
+            if (metaMatches) {
+              // Avoid missing rapid edits on coarse timestamp filesystems.
+              const now = Date.now();
+              const isRecent = Math.abs(now - mtimeMs) <= mtimeSafeWindowMs;
+              if (!isRecent) {
+                // Metadata matches exactly, skip reading/hashing
+                skippedCount.unchanged++;
+                return null;
+              }
             }
 
             // Suspect file: Either new, or metadata changed.
@@ -2123,7 +2130,7 @@ export class CodebaseIndexer {
           }
 
           if (useWorkersForBatch) {
-            filesForWorkers.push({ file, content, force, expectedHash: liveHash });
+            filesForWorkers.push({ file, content, force, expectedHash });
             // Initialize stats placeholder (will be updated with worker results)
             fileStats.set(file, {
               hash: liveHash,
@@ -2563,6 +2570,11 @@ export class CodebaseIndexer {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.info(`[Indexer] New file detected: ${filePath}`);
 
+        // Invalidate recency cache for consistency
+        if (this.server && this.server.hybridSearch) {
+          this.server.hybridSearch.clearFileModTime(fullPath);
+        }
+
         if (this.isIndexing || this.processingWatchEvents) {
           if (this.config.verbose) {
             console.info(`[Indexer] Queued add event during indexing: ${filePath}`);
@@ -2577,6 +2589,11 @@ export class CodebaseIndexer {
       .on('change', (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.info(`[Indexer] File changed: ${filePath}`);
+
+        // Invalidate recency cache for consistency
+        if (this.server && this.server.hybridSearch) {
+          this.server.hybridSearch.clearFileModTime(fullPath);
+        }
 
         if (this.isIndexing || this.processingWatchEvents) {
           if (this.config.verbose) {

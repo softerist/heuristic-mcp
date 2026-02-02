@@ -53,35 +53,28 @@ export class HybridSearch {
     }
 
     // Concurrency-limited execution to avoid EMFILE
+    // Pre-distribute files to workers (no shared mutable state - avoids race condition)
     const CONCURRENCY = 50;
-    let nextIndex = 0;
+    const workerCount = Math.min(CONCURRENCY, missing.length);
 
-    const getNextFile = () => {
-      // Atomic index assignment - grab file and increment in one operation
-      const idx = nextIndex;
-      if (idx >= missing.length) return null;
-      nextIndex = idx + 1;
-      return missing[idx];
-    };
-
-    const worker = async () => {
-      let file;
-      while ((file = getNextFile()) !== null) {
+    const worker = async (startIdx) => {
+      for (let i = startIdx; i < missing.length; i += workerCount) {
+        const file = missing[i];
         try {
           const stats = await fs.stat(file);
           this.fileModTimes.set(file, stats.mtimeMs);
+          this._lastAccess.set(file, Date.now());
         } catch {
           this.fileModTimes.set(file, null);
         }
       }
     };
 
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, missing.length) }, () => worker()));
+    await Promise.all(Array.from({ length: workerCount }, (_, i) => worker(i)));
 
     // Prevent unbounded growth (LRU-style eviction based on access time)
     if (this.fileModTimes.size > 5000) {
       // Convert to array with last-access info, sort by oldest access
-      const now = Date.now();
       const entries = [...this.fileModTimes.keys()].map((k) => ({
         key: k,
         lastAccess: this._lastAccess?.get(k) ?? 0,
@@ -168,7 +161,7 @@ export class HybridSearch {
           // Fallback to full scan if keyword constraint isn't met in candidates
           // Note: This is expensive as it iterates everything.
           // Optimization: Only do this for small-ish codebases to avoid UI freeze
-          const MAX_FULL_SCAN_SIZE = 2000;
+          const MAX_FULL_SCAN_SIZE = this.config.fullScanThreshold ?? 2000;
 
           if (storeSize <= MAX_FULL_SCAN_SIZE) {
             const seen = new Set(candidateIndices);
@@ -276,9 +269,8 @@ export class HybridSearch {
 
           // Log store inconsistency: vector exists but chunk metadata is missing
           if (!chunkInfo) {
-            if (this.config.verbose) {
-              console.warn(`[Search] Store inconsistency: vector at index ${idx} has no chunk info`);
-            }
+            // Always log store inconsistencies - indicates cache corruption or indexing issue
+            console.warn(`[Search] Store inconsistency: vector at index ${idx} has no chunk info`);
             continue;
           }
 
@@ -359,6 +351,9 @@ export class HybridSearch {
 
     const formatted = await Promise.all(
       results.map(async (r, idx) => {
+        if (!r.file) {
+          return `## Result ${idx + 1} (Relevance: ${(r.score * 100).toFixed(1)}%)\n**Error:** Missing file path\n`;
+        }
         const relPath = path.relative(this.config.searchDirectory, r.file);
         const content = r.content ?? (await this.getChunkContent(r));
         return (
