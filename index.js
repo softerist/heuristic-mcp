@@ -170,7 +170,7 @@ async function initialize(workspaceDir) {
     process.exit(0);
   }
   const [pidPath, logPath] = await Promise.all([
-    setupPidFile({ pidFileName: PID_FILE_NAME }),
+    setupPidFile({ pidFileName: PID_FILE_NAME, cacheDirectory: config.cacheDirectory }),
     setupFileLogging(config),
   ]);
   if (logPath) {
@@ -370,6 +370,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const toolDef = feature.module.getToolDefinition(config);
 
     if (request.params.name === toolDef.name) {
+      // Safety check: handler may be null if initialization is incomplete
+      if (typeof feature.handler !== 'function') {
+        return {
+          content: [{
+            type: 'text',
+            text: `Tool "${toolDef.name}" is not ready. Server may still be initializing.`,
+          }],
+          isError: true,
+        };
+      }
       return await feature.handler(request, feature.instance);
     }
   }
@@ -465,7 +475,16 @@ export async function main(argv = process.argv) {
     const cacheId = parsed.rawArgs[clearIndex + 1];
     if (cacheId && !cacheId.startsWith('--')) {
       // Remove specific cache by ID
-      const cacheHome = process.platform === 'win32' ? process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local') : process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Caches') : process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'); const globalCacheRoot = path.join(cacheHome, 'heuristic-mcp');
+      // Determine platform-appropriate cache directory
+      let cacheHome;
+      if (process.platform === 'win32') {
+        cacheHome = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+      } else if (process.platform === 'darwin') {
+        cacheHome = path.join(os.homedir(), 'Library', 'Caches');
+      } else {
+        cacheHome = process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
+      }
+      const globalCacheRoot = path.join(cacheHome, 'heuristic-mcp');
       const cachePath = path.join(globalCacheRoot, cacheId);
       
       try {
@@ -546,7 +565,7 @@ export async function main(argv = process.argv) {
   console.info('[Server] Heuristic MCP server started.');
 
   // Load cache and start indexing in background AFTER server is ready
-  startBackgroundTasks().catch((err) => {
+  void startBackgroundTasks().catch((err) => {
     console.error(`[Server] Background task error: ${err.message}`);
   });
   console.info('[Server] MCP server is now fully ready to accept requests.');

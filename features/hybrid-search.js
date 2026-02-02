@@ -54,8 +54,8 @@ export class HybridSearch {
 
     // Concurrency-limited execution to avoid EMFILE
     // Pre-distribute files to workers (no shared mutable state - avoids race condition)
-    const CONCURRENCY = 50;
-    const workerCount = Math.min(CONCURRENCY, missing.length);
+    const CONCURRENCY_LIMIT = 50;
+    const workerCount = Math.min(CONCURRENCY_LIMIT, missing.length);
 
     const worker = async (startIdx) => {
       for (let i = startIdx; i < missing.length; i += workerCount) {
@@ -112,13 +112,26 @@ export class HybridSearch {
       }
 
       // Generate query embedding
-      console.info(`[Search] Query: "${query}"`);
+      if (this.config.verbose) {
+        console.info(`[Search] Query: "${query}"`);
+      }
       const queryEmbed = await this.embedder(query, {
         pooling: 'mean',
         normalize: true,
       });
 
-      const queryVector = new Float32Array(queryEmbed.data);
+      let queryVector;
+      try {
+        queryVector = new Float32Array(queryEmbed.data);
+      } finally {
+        if (typeof queryEmbed.dispose === 'function') {
+          try {
+            queryEmbed.dispose();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
 
       let candidateIndices = null; // null implies full scan of all chunks
       let usedAnn = false;
@@ -128,19 +141,25 @@ export class HybridSearch {
         const annLabels = await this.cache.queryAnn(queryVector, candidateCount);
         if (annLabels && annLabels.length >= maxResults) {
           usedAnn = true;
-          console.info(`[Search] Using ANN index (${annLabels.length} candidates)`);
+          if (this.config.verbose) {
+            console.info(`[Search] Using ANN index (${annLabels.length} candidates)`);
+          }
           candidateIndices = Array.from(new Set(annLabels)); // dedupe
         }
       }
 
       if (!usedAnn) {
-        console.info(`[Search] Using full scan (${storeSize} chunks)`);
+        if (this.config.verbose) {
+          console.info(`[Search] Using full scan (${storeSize} chunks)`);
+        }
       }
 
       if (usedAnn && candidateIndices && candidateIndices.length < maxResults) {
-        console.info(
-          `[Search] ANN returned fewer results (${candidateIndices.length}) than requested (${maxResults}), augmenting with full scan...`
-        );
+        if (this.config.verbose) {
+          console.info(
+            `[Search] ANN returned fewer results (${candidateIndices.length}) than requested (${maxResults}), augmenting with full scan...`
+          );
+        }
         candidateIndices = null; // Fallback to full scan to ensure we don't miss anything relevant
         usedAnn = false;
       }
@@ -171,6 +190,10 @@ export class HybridSearch {
             // Full scan logic for keyword augmentation
             // Iterate by index with yielding
             const FALLBACK_BATCH = 100;
+            let additionalMatches = 0;
+            const targetMatches = maxResults - exactMatchCount;
+            
+            outerLoop:
             for (let i = 0; i < storeSize; i += FALLBACK_BATCH) {
               if (i > 0) await new Promise((r) => setTimeout(r, 0)); // Yield
 
@@ -184,6 +207,9 @@ export class HybridSearch {
                 if (content && content.toLowerCase().includes(lowerQuery)) {
                   seen.add(j);
                   candidateIndices.push(j);
+                  additionalMatches++;
+                  // Early exit once we have enough additional matches
+                  if (additionalMatches >= targetMatches) break outerLoop;
                 }
               }
             }
@@ -418,7 +444,16 @@ export function getToolDefinition(config) {
 
 // Tool handler
 export async function handleToolCall(request, hybridSearch) {
-  const query = request.params.arguments.query;
+  const query = request.params?.arguments?.query;
+  
+  // Input validation
+  if (typeof query !== 'string' || query.trim().length === 0) {
+    return {
+      content: [{ type: 'text', text: 'Error: A non-empty query string is required.' }],
+      isError: true,
+    };
+  }
+  
   const maxResults = request.params.arguments.maxResults || hybridSearch.config.maxResults;
 
   const { results, message } = await hybridSearch.search(query, maxResults);

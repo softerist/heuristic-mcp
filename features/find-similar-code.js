@@ -33,135 +33,156 @@ export class FindSimilarCode {
     if (typeof this.cache.ensureLoaded === 'function') {
       await this.cache.ensureLoaded();
     }
-    const vectorStore = this.cache.getVectorStore();
-
-    if (vectorStore.length === 0) {
-      return {
-        results: [],
-        message: 'No code has been indexed yet. Please wait for initial indexing to complete.',
-      };
+    if (typeof this.cache.startRead === 'function') {
+      this.cache.startRead();
     }
 
-    let codeToEmbed = code;
-    let warningMessage = null;
+    try {
+      const vectorStore = this.cache.getVectorStore();
 
-    // Check if input is too large and truncate intelligently
-    const estimatedTokens = estimateTokens(code);
-    const limit = getModelTokenLimit(this.config.embeddingModel);
-
-    // If input is significantly larger than the model limit, we should chunk it
-    if (estimatedTokens > limit) {
-      // Use smartChunk to get a semantically valid first block
-      // We pass a dummy file name to trigger language detection if possible, or default to .txt
-      // Since we don't know the language, we'll try to guess or just use generic chunking
-      const chunks = smartChunk(code, 'input.txt', this.config);
-      if (chunks.length > 0) {
-        codeToEmbed = chunks[0].text;
-        warningMessage = `Note: Input code was too long (${estimatedTokens} tokens). Searching using the first chunk (${chunks[0].tokenCount} tokens).`;
+      if (vectorStore.length === 0) {
+        return {
+          results: [],
+          message: 'No code has been indexed yet. Please wait for initial indexing to complete.',
+        };
       }
-    }
 
-    // Generate embedding for the input code
-    const codeEmbed = await this.embedder(codeToEmbed, {
-      pooling: 'mean',
-      normalize: true,
-    });
+      let codeToEmbed = code;
+      let warningMessage = null;
 
-    // CRITICAL: Deep copy Float32Array to avoid detachment issues with WASM/Workers
-    // accessing a detached buffer from a reusable ONNX tensor can crash the process.
-    const codeVector = new Float32Array(codeEmbed.data);
+      // Check if input is too large and truncate intelligently
+      const estimatedTokens = estimateTokens(code);
+      const limit = getModelTokenLimit(this.config.embeddingModel);
 
-    let candidates = vectorStore;
-    let usedAnn = false;
-    if (this.config.annEnabled) {
-      const candidateCount = this.getAnnCandidateCount(maxResults, vectorStore.length);
-      const annLabels = await this.cache.queryAnn(codeVector, candidateCount);
-      if (annLabels && annLabels.length >= maxResults) {
-        usedAnn = true;
-        const seen = new Set();
-        candidates = annLabels
-          .map((index) => {
-            if (seen.has(index)) return null;
-            seen.add(index);
-            return vectorStore[index];
-          })
-          .filter(Boolean);
-      }
-    }
-
-    const normalizedInput = codeToEmbed.trim().replace(/\s+/g, ' ');
-
-    /**
-     * Batch scoring function to prevent blocking the event loop
-     */
-    const scoreAndFilter = async (chunks) => {
-      const BATCH_SIZE = 500;
-      const scored = [];
-
-      for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-        const batch = chunks.slice(i, i + BATCH_SIZE);
-
-        // Yield to event loop between batches
-        if (i > 0) {
-          await new Promise((resolve) => setTimeout(resolve, 0));
+      // If input is significantly larger than the model limit, we should chunk it
+      if (estimatedTokens > limit) {
+        // Use smartChunk to get a semantically valid first block
+        // We pass a dummy file name to trigger language detection if possible, or default to .txt
+        // Since we don't know the language, we'll try to guess or just use generic chunking
+        const chunks = smartChunk(code, 'input.txt', this.config);
+        if (chunks.length > 0) {
+          codeToEmbed = chunks[0].text;
+          warningMessage = `Note: Input code was too long (${estimatedTokens} tokens). Searching using the first chunk (${chunks[0].tokenCount} tokens).`;
         }
+      }
 
-        for (const chunk of batch) {
-          const vector = this.getChunkVector(chunk);
-          if (!vector) continue;
-          let similarity;
+      // Generate embedding for the input code
+      const codeEmbed = await this.embedder(codeToEmbed, {
+        pooling: 'mean',
+        normalize: true,
+      });
+
+      // CRITICAL: Deep copy Float32Array to avoid detachment issues with WASM/Workers
+      // accessing a detached buffer from a reusable ONNX tensor can crash the process.
+      let codeVector;
+      try {
+        codeVector = new Float32Array(codeEmbed.data);
+      } finally {
+        if (typeof codeEmbed.dispose === 'function') {
           try {
-            similarity = dotSimilarity(codeVector, vector);
-          } catch (err) {
-            if (!warningMessage) {
-              warningMessage = err?.message || 'Vector dimension mismatch.';
-            }
-            continue;
-          }
-
-          if (similarity >= minSimilarity) {
-            // Deduplicate against input
-            if (normalizedInput) {
-              const content = await this.getChunkContent(chunk);
-              const normalizedChunk = content.trim().replace(/\s+/g, ' ');
-              if (normalizedChunk === normalizedInput) continue;
-            }
-
-            scored.push({ ...chunk, similarity });
+            codeEmbed.dispose();
+          } catch {
+            /* ignore */
           }
         }
       }
 
-      return scored.sort((a, b) => b.similarity - a.similarity);
-    };
+      let candidates = vectorStore;
+      let usedAnn = false;
+      if (this.config.annEnabled) {
+        const candidateCount = this.getAnnCandidateCount(maxResults, vectorStore.length);
+        const annLabels = await this.cache.queryAnn(codeVector, candidateCount);
+        if (annLabels && annLabels.length >= maxResults) {
+          usedAnn = true;
+          const seen = new Set();
+          candidates = annLabels
+            .map((index) => {
+              if (seen.has(index)) return null;
+              seen.add(index);
+              return vectorStore[index];
+            })
+            .filter(Boolean);
+        }
+      }
 
-    let filteredResults = await scoreAndFilter(candidates);
+      const normalizedInput = codeToEmbed.trim().replace(/\s+/g, ' ');
 
-    // Fallback to full scan if ANN didn't provide enough results
-    // Optimization: Skip full scan on large codebases to avoid long pauses
-    const MAX_FULL_SCAN_SIZE = 5000;
-    if (usedAnn && filteredResults.length < maxResults) {
-      if (vectorStore.length <= MAX_FULL_SCAN_SIZE) {
-        filteredResults = await scoreAndFilter(vectorStore);
-      } else {
-        // Just return what we found via ANN
+      /**
+       * Batch scoring function to prevent blocking the event loop
+       */
+      const scoreAndFilter = async (chunks) => {
+        const BATCH_SIZE = 500;
+        const scored = [];
+
+        for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+          const batch = chunks.slice(i, i + BATCH_SIZE);
+
+          // Yield to event loop between batches
+          if (i > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+
+          for (const chunk of batch) {
+            const vector = this.getChunkVector(chunk);
+            if (!vector) continue;
+            let similarity;
+            try {
+              similarity = dotSimilarity(codeVector, vector);
+            } catch (err) {
+              if (!warningMessage) {
+                warningMessage = err?.message || 'Vector dimension mismatch.';
+              }
+              continue;
+            }
+
+            if (similarity >= minSimilarity) {
+              // Deduplicate against input
+              if (normalizedInput) {
+                const content = await this.getChunkContent(chunk);
+                const normalizedChunk = content.trim().replace(/\s+/g, ' ');
+                if (normalizedChunk === normalizedInput) continue;
+              }
+
+              scored.push({ ...chunk, similarity });
+            }
+          }
+        }
+
+        return scored.sort((a, b) => b.similarity - a.similarity);
+      };
+
+      let filteredResults = await scoreAndFilter(candidates);
+
+      // Fallback to full scan if ANN didn't provide enough results
+      // Optimization: Skip full scan on large codebases to avoid long pauses
+      const MAX_FULL_SCAN_SIZE = 5000;
+      if (usedAnn && filteredResults.length < maxResults) {
+        if (vectorStore.length <= MAX_FULL_SCAN_SIZE) {
+          filteredResults = await scoreAndFilter(vectorStore);
+        } else {
+          // Just return what we found via ANN
+        }
+      }
+      const results = await Promise.all(
+        filteredResults.slice(0, maxResults).map(async (chunk) => {
+          if (chunk.content === undefined || chunk.content === null) {
+            return { ...chunk, content: await this.getChunkContent(chunk) };
+          }
+          return chunk;
+        })
+      );
+
+      return {
+        results,
+        message:
+          warningMessage ||
+          (results.length === 0 ? 'No similar code found above the similarity threshold.' : null),
+      };
+    } finally {
+      if (typeof this.cache.endRead === 'function') {
+        this.cache.endRead();
       }
     }
-    const results = await Promise.all(
-      filteredResults.slice(0, maxResults).map(async (chunk) => {
-        if (chunk.content === undefined || chunk.content === null) {
-          return { ...chunk, content: await this.getChunkContent(chunk) };
-        }
-        return chunk;
-      })
-    );
-
-    return {
-      results,
-      message:
-        warningMessage ||
-        (results.length === 0 ? 'No similar code found above the similarity threshold.' : null),
-    };
   }
 
   async formatResults(results) {

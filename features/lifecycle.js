@@ -14,6 +14,48 @@ import {
 } from '../lib/settings-editor.js';
 
 const execPromise = util.promisify(exec);
+const PID_FILE_NAME = '.heuristic-mcp.pid';
+
+async function listPidFilePaths() {
+  const pidFiles = new Set();
+  pidFiles.add(path.join(os.homedir(), PID_FILE_NAME));
+  const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
+  let cacheDirs = [];
+  try {
+    cacheDirs = await fs.readdir(globalCacheRoot);
+  } catch {
+    cacheDirs = [];
+  }
+  if (!Array.isArray(cacheDirs)) {
+    cacheDirs = [];
+  }
+  for (const dir of cacheDirs) {
+    pidFiles.add(path.join(globalCacheRoot, dir, PID_FILE_NAME));
+  }
+  return Array.from(pidFiles);
+}
+
+async function readPidFromFile(filePath) {
+  try {
+    const raw = await fs.readFile(filePath, 'utf-8');
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        const pid = Number(parsed?.pid);
+        if (Number.isInteger(pid)) return pid;
+      } catch {
+        // fall through
+      }
+    }
+    const pid = parseInt(trimmed, 10);
+    if (!Number.isNaN(pid)) return pid;
+  } catch {
+    // ignore missing/invalid pid file
+  }
+  return null;
+}
 
 export async function stop() {
   console.info('[Lifecycle] Stopping Heuristic MCP servers...');
@@ -25,31 +67,28 @@ export async function stop() {
     const manualPid = process.env.HEURISTIC_MCP_PID;
 
     if (platform === 'win32') {
-      // 1. Try PID file first for reliability
-      const home = os.homedir();
-      const pidFile = path.join(home, '.heuristic-mcp.pid');
-      try {
-        const content = await fs.readFile(pidFile, 'utf-8');
-        const p = content.trim();
-        if (p && !isNaN(p)) {
-          const pid = parseInt(p, 10);
-          if (pid !== currentPid) {
-            try {
-              process.kill(pid, 0);
-              pids.push(p);
-            } catch (e) {
-              // If we lack permission, still attempt to stop by PID.
-              if (e.code === 'EPERM') {
-                pids.push(p);
-              } else {
-                // Stale PID file
-                await fs.unlink(pidFile).catch(() => {});
-              }
-            }
+      // 1. Try PID files first for reliability (per-workspace)
+      const pidFiles = await listPidFilePaths();
+      for (const pidFile of pidFiles) {
+        const pid = await readPidFromFile(pidFile);
+        if (!Number.isInteger(pid) || pid === currentPid) continue;
+        try {
+          process.kill(pid, 0);
+          const pidValue = String(pid);
+          if (!pids.includes(pidValue)) pids.push(pidValue);
+        } catch (e) {
+          // If we lack permission, still attempt to stop by PID.
+          if (e.code === 'EPERM') {
+            const pidValue = String(pid);
+            if (!pids.includes(pidValue)) pids.push(pidValue);
+          } else {
+            await fs.unlink(pidFile).catch(() => {});
           }
         }
-      } catch (_e) {
-        // Fallback to WMIC when CIM access is denied
+      }
+
+      // 2. Fallback to WMIC when CIM access is denied
+      if (pids.length === 0) {
         try {
           const { stdout } = await execPromise(
             `wmic process where "CommandLine like '%heuristic-mcp%'" get ProcessId /FORMAT:LIST`
@@ -66,7 +105,7 @@ export async function stop() {
         }
       }
 
-      // 2. Fallback to process list with fuzzier matching (kill all heuristic-mcp instances)
+      // 3. Fallback to process list with fuzzier matching (kill all heuristic-mcp instances)
       try {
         const { stdout } = await execPromise(
           `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and ($_.CommandLine -like '*heuristic-mcp*' -or $_.CommandLine -like '*heuristic-mcp\\\\index.js*' -or $_.CommandLine -like '*heuristic-mcp/index.js*') } | Select-Object -ExpandProperty ProcessId"`
@@ -536,24 +575,19 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
     let config = null;
     let configLogs = [];
 
-    // 1. Check PID file first
-    const pidFile = path.join(home, '.heuristic-mcp.pid');
-
-    try {
-      const content = await fs.readFile(pidFile, 'utf-8');
-      const pid = parseInt(content.trim(), 10);
-      if (pid && !isNaN(pid)) {
-        // Check if running
-        try {
-          process.kill(pid, 0);
-          pids.push(pid);
-        } catch (_e) {
-          // Stale PID file
-          await fs.unlink(pidFile).catch(() => {});
-        }
+    // 1. Check PID files first (per-workspace)
+    const pidFiles = await listPidFilePaths();
+    for (const pidFile of pidFiles) {
+      const pid = await readPidFromFile(pidFile);
+      if (!Number.isInteger(pid)) continue;
+      // Check if running
+      try {
+        process.kill(pid, 0);
+        pids.push(pid);
+      } catch (_e) {
+        // Stale PID file
+        await fs.unlink(pidFile).catch(() => {});
       }
-    } catch (_e) {
-      // No pid file, ignore
     }
 
     // 2. Fallback to process list if no PID file found or process dead

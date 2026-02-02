@@ -1600,7 +1600,9 @@ export class CodebaseIndexer {
     const startTime = Date.now();
 
     // Build extension filter from config
-    const extensions = new Set(this.config.fileExtensions.map((ext) => `.${ext}`));
+    const extensions = new Set(
+      this.config.fileExtensions.map((ext) => `.${String(ext).toLowerCase()}`)
+    );
     const allowedFileNames = new Set(this.config.fileNames || []);
 
     // Load .gitignore before discovery
@@ -1626,7 +1628,7 @@ export class CodebaseIndexer {
 
         // Check extensions/filenames
         const base = path.basename(filePath);
-        const ext = path.extname(filePath);
+        const ext = path.extname(filePath).toLowerCase();
         return extensions.has(ext) || allowedFileNames.has(base);
       })
       .crawl(this.config.searchDirectory);
@@ -2338,6 +2340,10 @@ export class CodebaseIndexer {
       });
       await this.cache.save();
 
+      const vectorStoreSnapshot = this.cache.getVectorStore();
+      const totalFiles = new Set(vectorStoreSnapshot.map((v) => v.file)).size;
+      const totalChunksCount = vectorStoreSnapshot.length;
+
       if (this.config.clearCacheAfterIndex) {
         console.info(
           '[Indexer] clearCacheAfterIndex enabled; in-memory vectors will be reloaded on next query'
@@ -2361,13 +2367,12 @@ export class CodebaseIndexer {
         });
       }
 
-      const vectorStore = this.cache.getVectorStore();
       return {
         skipped: false,
         filesProcessed: filesToProcess.length,
         chunksCreated: totalChunks,
-        totalFiles: new Set(vectorStore.map((v) => v.file)).size,
-        totalChunks: vectorStore.length,
+        totalFiles,
+        totalChunks: totalChunksCount,
         duration: totalTime,
         message: `Indexed ${filesToProcess.length} files (${totalChunks} chunks) in ${totalTime}s`,
       };
