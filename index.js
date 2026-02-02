@@ -8,7 +8,13 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { pipeline, env } from '@huggingface/transformers';
+let transformersModule = null;
+async function getTransformers() {
+  if (!transformersModule) {
+    transformersModule = await import('@huggingface/transformers');
+  }
+  return transformersModule;
+}
 import { configureNativeOnnxBackend, getNativeOnnxStatus } from './lib/onnx-backend.js';
 
 import fs from 'fs/promises';
@@ -277,6 +283,7 @@ async function initialize(workspaceDir) {
       ensureMainOnnxBackend();
       console.info(`[Server] Loading AI embedding model: ${config.embeddingModel}...`);
       const modelLoadStart = Date.now();
+      const { pipeline } = await getTransformers();
       cachedEmbedderPromise = pipeline('feature-extraction', config.embeddingModel, {
         quantized: true,
         dtype: 'fp32',
