@@ -24,6 +24,11 @@ const fsMock = {
   readdir: vi.fn(),
   readFile: vi.fn(),
 };
+const loggingMock = {
+  enableStderrOnlyLogging: vi.fn(),
+  setupFileLogging: vi.fn(),
+  getLogFilePath: vi.fn(() => 'C:\\cache\\logs\\server.log'),
+};
 const pipelineMock = vi.fn();
 const registerMock = vi.fn();
 const stopMock = vi.fn();
@@ -66,7 +71,8 @@ vi.mock('@huggingface/transformers', () => ({
     },
   },
 }));
-vi.mock('fs/promises', () => fsMock);
+vi.mock('fs/promises', () => ({ default: fsMock, ...fsMock }));
+vi.mock('../lib/logging.js', () => loggingMock);
 vi.mock('../lib/config.js', () => configMock);
 vi.mock('../lib/cache.js', () => ({
   EmbeddingsCache: class {
@@ -166,6 +172,8 @@ describe('index.js CLI coverage', () => {
     fsMock.readFile.mockReset();
     fsMock.rm.mockReset();
     fsMock.readdir.mockReset();
+    loggingMock.getLogFilePath.mockReset();
+    loggingMock.getLogFilePath.mockReturnValue('C:\\cache\\logs\\server.log');
     onSpy = vi.spyOn(process, 'on').mockImplementation((event, handler) => {
       listeners[event] = handler;
       return process;
