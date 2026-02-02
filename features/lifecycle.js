@@ -460,6 +460,32 @@ function formatDateTime(value) {
   return `${date.toLocaleString()} (${date.toISOString()})`;
 }
 
+async function captureConsoleOutput(fn) {
+  const original = {
+    info: console.info,
+    warn: console.warn,
+    error: console.error,
+  };
+  const lines = [];
+  const collect = (...args) => {
+    const message = util.format(...args);
+    if (message && message.trim()) {
+      lines.push(message);
+    }
+  };
+  console.info = collect;
+  console.warn = collect;
+  console.error = collect;
+  try {
+    const result = await fn();
+    return { result, lines };
+  } finally {
+    console.info = original.info;
+    console.warn = original.warn;
+    console.error = original.error;
+  }
+}
+
 export async function logs({ workspaceDir = null, tailLines = 200, follow = true } = {}) {
   const config = await loadConfig(workspaceDir);
   const logPath = getLogFilePath(config);
@@ -498,11 +524,17 @@ function getGlobalCacheDir() {
   return process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
 }
 
-export async function status({ fix = false, cacheOnly = false } = {}) {
+export async function status({ fix = false, cacheOnly = false, workspaceDir = null } = {}) {
   try {
     const home = os.homedir();
     const pids = [];
     const now = new Date();
+    const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
+    let logPath = 'unknown';
+    let logStatus = '';
+    let cacheSummary = null;
+    let config = null;
+    let configLogs = [];
 
     // 1. Check PID file first
     const pidFile = path.join(home, '.heuristic-mcp.pid');
@@ -595,256 +627,342 @@ export async function status({ fix = false, cacheOnly = false } = {}) {
       }
     }
 
-    // Show server status only for --status command
     if (!cacheOnly) {
       // STATUS OUTPUT
       console.info(''); // spacer
-    if (pids.length > 0) {
-      console.info(`[Lifecycle] 🟢 Server is RUNNING. PID(s): ${pids.join(', ')}`);
-    } else {
-      console.info('[Lifecycle] ⚪ Server is STOPPED.');
-    }
-    if (pids.length > 1) {
-      console.info('[Lifecycle] ⚠️  Multiple servers detected; progress may be inconsistent.');
-    }
-    if (pids.length > 0) {
-      const cmdByPid = new Map();
-      try {
-        if (process.platform === 'win32') {
-          const { stdout } = await execPromise(
-            `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in @(${pids.join(',')}) } | Select-Object ProcessId, CommandLine"`
-          );
-          const lines = stdout.trim().split(/\r?\n/);
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith('ProcessId')) continue;
-            const match = trimmed.match(/^(\d+)\s+(.*)$/);
-            if (match) {
-              cmdByPid.set(parseInt(match[1], 10), match[2]);
-            }
-          }
-        } else {
-          const { stdout } = await execPromise(`ps -o pid=,command= -p ${pids.join(',')}`);
-          const lines = stdout.trim().split(/\r?\n/);
-          for (const line of lines) {
-            const match = line.trim().match(/^(\d+)\s+(.*)$/);
-            if (match) {
-              cmdByPid.set(parseInt(match[1], 10), match[2]);
-            }
-          }
-        }
-      } catch (_e) {
-        // ignore command line lookup failures
+      if (pids.length > 0) {
+        console.info(`[Lifecycle] 🟢 Server is RUNNING. PID(s): ${pids.join(', ')}`);
+      } else {
+        console.info('[Lifecycle] ⚪ Server is STOPPED.');
       }
+      if (pids.length > 1) {
+        console.info('[Lifecycle] ⚠️  Multiple servers detected; progress may be inconsistent.');
+      }
+      if (pids.length > 0) {
+        const cmdByPid = new Map();
+        try {
+          if (process.platform === 'win32') {
+            const { stdout } = await execPromise(
+              `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in @(${pids.join(',')}) } | Select-Object ProcessId, CommandLine"`
+            );
+            const lines = stdout.trim().split(/\r?\n/);
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || trimmed.startsWith('ProcessId')) continue;
+              const match = trimmed.match(/^(\d+)\s+(.*)$/);
+              if (match) {
+                cmdByPid.set(parseInt(match[1], 10), match[2]);
+              }
+            }
+          } else {
+            const { stdout } = await execPromise(`ps -o pid=,command= -p ${pids.join(',')}`);
+            const lines = stdout.trim().split(/\r?\n/);
+            for (const line of lines) {
+              const match = line.trim().match(/^(\d+)\s+(.*)$/);
+              if (match) {
+                cmdByPid.set(parseInt(match[1], 10), match[2]);
+              }
+            }
+          }
+        } catch (_e) {
+          // ignore command line lookup failures
+        }
       if (cmdByPid.size > 0) {
         console.info('[Lifecycle] Active command lines:');
         for (const pid of pids) {
-          const cmd = cmdByPid.get(pid);
-          if (cmd) {
-            console.info(`   ${pid}: ${cmd}`);
+            const cmd = cmdByPid.get(pid);
+            if (cmd) {
+              console.info(`   ${pid}: ${cmd}`);
+            }
           }
         }
       }
-    }
       console.info(''); // spacer
     } // End if (!cacheOnly) - server status
 
-    // APPEND LOGS INFO (Cache Status)
-    const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
-    console.info('[Status] Inspecting cache status...\n');
-
-    if (fix) {
-      console.info('[Status] Fixing stale caches...\n');
-      await clearStaleCaches();
-    }
-
-    const cacheDirs = await fs.readdir(globalCacheRoot).catch(() => []);
-
-    if (cacheDirs.length === 0) {
-      console.info('[Status] No cache directories found.');
-      console.info(`[Status] Expected location: ${globalCacheRoot}`);
-    } else {
-      console.info(
-        `[Status] Found ${cacheDirs.length} cache director${cacheDirs.length === 1 ? 'y' : 'ies'} in ${globalCacheRoot}`
-      );
-
-      for (const dir of cacheDirs) {
-        const cacheDir = path.join(globalCacheRoot, dir);
-        const metaFile = path.join(cacheDir, 'meta.json');
-        const progressFile = path.join(cacheDir, 'progress.json');
-
-        console.info(`${'─'.repeat(60)}`);
-        console.info(`📁 Cache: ${dir}`);
-        console.info(`   Path: ${cacheDir}`);
-
-        let metaData = null;
+    if (!cacheOnly) {
+      try {
+        const captured = await captureConsoleOutput(() => loadConfig(workspaceDir));
+        config = captured.result;
+        configLogs = captured.lines;
+        logPath = getLogFilePath(config);
         try {
-          metaData = JSON.parse(await fs.readFile(metaFile, 'utf-8'));
-
-          console.info(`   Status: ✅ Valid cache`);
-          console.info(`   Workspace: ${metaData.workspace || 'Unknown'}`);
-          console.info(`   Files indexed: ${metaData.filesIndexed ?? 'N/A'}`);
-          console.info(`   Chunks stored: ${metaData.chunksStored ?? 'N/A'}`);
-
-          if (Number.isFinite(metaData.lastDiscoveredFiles)) {
-            console.info(`   Files discovered (last run): ${metaData.lastDiscoveredFiles}`);
-          }
-          if (Number.isFinite(metaData.lastFilesProcessed)) {
-            console.info(`   Files processed (last run): ${metaData.lastFilesProcessed}`);
-          }
-          if (
-            Number.isFinite(metaData.lastDiscoveredFiles) &&
-            Number.isFinite(metaData.lastFilesProcessed)
-          ) {
-            const delta = metaData.lastDiscoveredFiles - metaData.lastFilesProcessed;
-            console.info(`   Discovery delta (last run): ${delta >= 0 ? delta : 0}`);
-          }
-
-          if (metaData.lastSaveTime) {
-            const saveDate = new Date(metaData.lastSaveTime);
-            const ageMs = now - saveDate;
-            const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
-            const ageMins = Math.floor((ageMs % (1000 * 60 * 60)) / (1000 * 60));
-            console.info(
-              `   Cached snapshot saved: ${formatDateTime(saveDate)} (${ageHours}h ${ageMins}m ago)`
-            );
-            const ageLabel = formatDurationMs(ageMs);
-            if (ageLabel) {
-              console.info(`   Cached snapshot age: ${ageLabel}`);
-            }
-            console.info(`   Initial index complete at: ${formatDateTime(saveDate)}`);
-          }
-          if (metaData.lastIndexStartedAt) {
-            console.info(`   Last index started: ${formatDateTime(metaData.lastIndexStartedAt)}`);
-          }
-          if (metaData.lastIndexEndedAt) {
-            console.info(`   Last index ended: ${formatDateTime(metaData.lastIndexEndedAt)}`);
-          }
-          if (Number.isFinite(metaData.indexDurationMs)) {
-            const duration = formatDurationMs(metaData.indexDurationMs);
-            if (duration) {
-              console.info(`   Last full index duration: ${duration}`);
-            }
-          }
-          if (metaData.lastIndexMode) {
-            console.info(`   Last index mode: ${String(metaData.lastIndexMode)}`);
-          }
-          if (Number.isFinite(metaData.lastBatchSize)) {
-            console.info(`   Last batch size: ${metaData.lastBatchSize}`);
-          }
-          if (Number.isFinite(metaData.lastWorkerThreads)) {
-            console.info(`   Last worker threads: ${metaData.lastWorkerThreads}`);
+          await fs.access(logPath);
+          logStatus = '(exists)';
+        } catch {
+          logStatus = '(not found)';
+        }
+        if (config?.cacheDirectory) {
+          const metaFile = path.join(config.cacheDirectory, 'meta.json');
+          const progressFile = path.join(config.cacheDirectory, 'progress.json');
+          let metaData = null;
+          let progressData = null;
+          try {
+            metaData = JSON.parse(await fs.readFile(metaFile, 'utf-8'));
+          } catch {
+            metaData = null;
           }
           try {
-            const dirStats = await fs.stat(cacheDir);
-            console.info(`   Cache dir last write: ${formatDateTime(dirStats.mtime)}`);
+            progressData = JSON.parse(await fs.readFile(progressFile, 'utf-8'));
           } catch {
-            // ignore cache dir stat errors
+            progressData = null;
           }
-
-          // Verify indexing completion
-          if (metaData.filesIndexed && metaData.filesIndexed > 0) {
-            console.info(`   Cached index: ✅ COMPLETE (${metaData.filesIndexed} files)`);
-          } else if (metaData.filesIndexed === 0) {
-            console.info(`   Cached index: ⚠️  NO FILES (check excludePatterns)`);
-          } else {
-            console.info(`   Cached index: ⚠️  INCOMPLETE`);
-          }
-        } catch (err) {
-          if (err.code === 'ENOENT') {
-            try {
-              const stats = await fs.stat(cacheDir);
-              const ageMs = new Date() - stats.mtime;
-              if (ageMs < 10 * 60 * 1000) {
-                console.info(`   Status: ⏳ Initializing / Indexing in progress...`);
-                console.info(`   (Metadata file has not been written yet using ID ${dir})`);
-                console.info('   Initial index: ⏳ IN PROGRESS');
-              } else {
-                console.info(`   Status: ⚠️  Incomplete cache (stale)`);
-              }
-              console.info(`   Cache dir last write: ${stats.mtime.toLocaleString()}`);
-            } catch {
-              console.info(`   Status: ❌ Invalid cache directory`);
-            }
-          } else {
-            console.info(`   Status: ❌ Invalid or corrupted (${err.message})`);
-          }
+          cacheSummary = {
+            cacheDir: config.cacheDirectory,
+            hasSnapshot: !!metaData,
+            snapshotTime: metaData?.lastSaveTime || null,
+            progress: progressData && typeof progressData.progress === 'number' ? progressData : null,
+          };
         }
+      } catch {
+        logPath = 'unknown';
+      }
 
-        // Show latest indexing progress if available
-        let progressData = null;
-        try {
-          progressData = JSON.parse(await fs.readFile(progressFile, 'utf-8'));
-        } catch {
-          // no progress file
-        }
-
-        if (progressData && typeof progressData.progress === 'number') {
-          const updatedAt = progressData.updatedAt
-            ? formatDateTime(progressData.updatedAt)
-            : 'Unknown';
-          const progressLabel = metaData
-            ? 'Incremental update (post-snapshot)'
-            : 'Initial index progress';
+      if (config?.searchDirectory) {
+        console.info(`[Lifecycle] Workspace: ${config.searchDirectory}`);
+      }
+      console.info(`         Log file: ${logPath} ${logStatus}`.trimEnd());
+      if (cacheSummary?.cacheDir) {
+        const snapshotLabel = cacheSummary.hasSnapshot ? 'available' : 'none';
+        console.info(`[Cache] Snapshot: ${snapshotLabel}`);
+        if (cacheSummary.snapshotTime) {
           console.info(
-            `   ${progressLabel}: ${progressData.progress}/${progressData.total} (${progressData.message || 'n/a'})`
+            `[Cache] Snapshot saved: ${formatDateTime(cacheSummary.snapshotTime) || cacheSummary.snapshotTime}`
           );
-          console.info(`   Progress updated: ${updatedAt}`);
-
-          if (progressData.updatedAt) {
-            const updatedDate = new Date(progressData.updatedAt);
-            const ageMs = now - updatedDate;
-            const staleMs = 5 * 60 * 1000;
-            const ageLabel = formatDurationMs(ageMs);
-            if (ageLabel) {
-              console.info(`   Progress age: ${ageLabel}`);
-            }
-            if (Number.isFinite(ageMs) && ageMs > staleMs) {
-              const staleLabel = formatDurationMs(ageMs);
-              console.info(`   Progress stale: last update ${staleLabel} ago`);
-            }
-          }
-
-          if (progressData.updatedAt && metaData?.lastSaveTime) {
-            const updatedDate = new Date(progressData.updatedAt);
-            const saveDate = new Date(metaData.lastSaveTime);
-            if (updatedDate > saveDate) {
-              console.info('   Note: Incremental update in progress; cached snapshot may lag.');
-            }
-          }
-          if (progressData.indexMode) {
-            console.info(`   Current index mode: ${String(progressData.indexMode)}`);
-          }
-          if (
-            progressData.workerCircuitOpen &&
-            Number.isFinite(progressData.workersDisabledUntil)
-          ) {
-            const remainingMs = progressData.workersDisabledUntil - Date.now();
-            const remainingLabel = formatDurationMs(Math.max(0, remainingMs));
-            console.info(`   Workers paused: ${remainingLabel || '0s'} remaining`);
-            console.info(
-              `   Workers disabled until: ${formatDateTime(progressData.workersDisabledUntil)}`
-            );
-          }
-        } else {
-          if (metaData) {
-            console.info('   Summary: Cached snapshot available; no update running.');
-          } else {
-            console.info('   Summary: No cached snapshot yet; indexing has not started.');
-          }
         }
-
-        if (metaData && progressData && typeof progressData.progress === 'number') {
-          console.info('   Indexing state: Cached snapshot available; incremental update running.');
-        } else if (metaData) {
-          console.info('   Indexing state: Cached snapshot available; idle.');
-        } else if (progressData && typeof progressData.progress === 'number') {
-          console.info('   Indexing state: Initial index in progress; no cached snapshot yet.');
+        if (cacheSummary.progress) {
+          const progress = cacheSummary.progress;
+          console.info(
+            `[Cache] Progress: ${progress.progress}/${progress.total} (${progress.message || 'n/a'})`
+          );
         } else {
-          console.info('   Indexing state: No cached snapshot; idle.');
+          console.info('[Cache] Progress: idle');
         }
       }
-      console.info(`${'─'.repeat(60)}`);
+      console.info(''); // spacer
+
+      if (configLogs.length > 0) {
+        for (const line of configLogs) {
+          console.info(line);
+        }
+        console.info(''); // spacer
+      }
+    }
+
+    if (cacheOnly) {
+      // APPEND LOGS INFO (Cache Status)
+      console.info('[Status] Inspecting cache status...\n');
+
+      if (fix) {
+        console.info('[Status] Fixing stale caches...\n');
+        await clearStaleCaches();
+      }
+
+      const cacheDirs = await fs.readdir(globalCacheRoot).catch(() => []);
+
+      if (cacheDirs.length === 0) {
+        console.info('[Status] No cache directories found.');
+        console.info(`[Status] Expected location: ${globalCacheRoot}`);
+      } else {
+        console.info(
+          `[Status] Found ${cacheDirs.length} cache director${cacheDirs.length === 1 ? 'y' : 'ies'} in ${globalCacheRoot}`
+        );
+
+        for (const dir of cacheDirs) {
+          const cacheDir = path.join(globalCacheRoot, dir);
+          const metaFile = path.join(cacheDir, 'meta.json');
+          const progressFile = path.join(cacheDir, 'progress.json');
+
+          console.info(`${'─'.repeat(60)}`);
+          console.info(`📁 Cache: ${dir}`);
+          console.info(`   Path: ${cacheDir}`);
+
+          let metaData = null;
+          try {
+            metaData = JSON.parse(await fs.readFile(metaFile, 'utf-8'));
+
+            console.info(`   Status: ✅ Valid cache`);
+            console.info(`   Workspace: ${metaData.workspace || 'Unknown'}`);
+            console.info(`   Files indexed: ${metaData.filesIndexed ?? 'N/A'}`);
+            console.info(`   Chunks stored: ${metaData.chunksStored ?? 'N/A'}`);
+
+            if (Number.isFinite(metaData.lastDiscoveredFiles)) {
+              console.info(`   Files discovered (last run): ${metaData.lastDiscoveredFiles}`);
+            }
+            if (Number.isFinite(metaData.lastFilesProcessed)) {
+              console.info(`   Files processed (last run): ${metaData.lastFilesProcessed}`);
+            }
+            if (
+              Number.isFinite(metaData.lastDiscoveredFiles) &&
+              Number.isFinite(metaData.lastFilesProcessed)
+            ) {
+              const delta = metaData.lastDiscoveredFiles - metaData.lastFilesProcessed;
+              console.info(`   Discovery delta (last run): ${delta >= 0 ? delta : 0}`);
+            }
+
+            if (metaData.lastSaveTime) {
+              const saveDate = new Date(metaData.lastSaveTime);
+              const ageMs = now - saveDate;
+              const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
+              const ageMins = Math.floor((ageMs % (1000 * 60 * 60)) / (1000 * 60));
+              console.info(
+                `   Cached snapshot saved: ${formatDateTime(saveDate)} (${ageHours}h ${ageMins}m ago)`
+              );
+              const ageLabel = formatDurationMs(ageMs);
+              if (ageLabel) {
+                console.info(`   Cached snapshot age: ${ageLabel}`);
+              }
+              console.info(`   Initial index complete at: ${formatDateTime(saveDate)}`);
+            }
+            if (metaData.lastIndexStartedAt) {
+              console.info(`   Last index started: ${formatDateTime(metaData.lastIndexStartedAt)}`);
+            }
+            if (metaData.lastIndexEndedAt) {
+              console.info(`   Last index ended: ${formatDateTime(metaData.lastIndexEndedAt)}`);
+            }
+            if (Number.isFinite(metaData.indexDurationMs)) {
+              const duration = formatDurationMs(metaData.indexDurationMs);
+              if (duration) {
+                console.info(`   Last full index duration: ${duration}`);
+              }
+            }
+            if (metaData.lastIndexMode) {
+              console.info(`   Last index mode: ${String(metaData.lastIndexMode)}`);
+            }
+            if (Number.isFinite(metaData.lastBatchSize)) {
+              console.info(`   Last batch size: ${metaData.lastBatchSize}`);
+            }
+            if (Number.isFinite(metaData.lastWorkerThreads)) {
+              console.info(`   Last worker threads: ${metaData.lastWorkerThreads}`);
+            }
+            try {
+              const dirStats = await fs.stat(cacheDir);
+              console.info(`   Cache dir last write: ${formatDateTime(dirStats.mtime)}`);
+            } catch {
+              // ignore cache dir stat errors
+            }
+
+            // Verify indexing completion
+            if (metaData.filesIndexed && metaData.filesIndexed > 0) {
+              console.info(`   Cached index: ✅ COMPLETE (${metaData.filesIndexed} files)`);
+            } else if (metaData.filesIndexed === 0) {
+              console.info(`   Cached index: ⚠️  NO FILES (check excludePatterns)`);
+            } else {
+              console.info(`   Cached index: ⚠️  INCOMPLETE`);
+            }
+          } catch (err) {
+            if (err.code === 'ENOENT') {
+              try {
+                const stats = await fs.stat(cacheDir);
+                const ageMs = new Date() - stats.mtime;
+                if (ageMs < 10 * 60 * 1000) {
+                  console.info(`   Status: ⏳ Initializing / Indexing in progress...`);
+                  console.info(`   (Metadata file has not been written yet using ID ${dir})`);
+                  console.info('   Initial index: ⏳ IN PROGRESS');
+                } else {
+                  console.info(`   Status: ⚠️  Incomplete cache (stale)`);
+                }
+                console.info(`   Cache dir last write: ${stats.mtime.toLocaleString()}`);
+              } catch {
+                console.info(`   Status: ❌ Invalid cache directory`);
+              }
+            } else {
+              console.info(`   Status: ❌ Invalid or corrupted (${err.message})`);
+            }
+          }
+
+          // Show latest indexing progress if available
+          let progressData = null;
+          try {
+            progressData = JSON.parse(await fs.readFile(progressFile, 'utf-8'));
+          } catch {
+            // no progress file
+          }
+
+          if (progressData && typeof progressData.progress === 'number') {
+            const updatedAt = progressData.updatedAt
+              ? formatDateTime(progressData.updatedAt)
+              : 'Unknown';
+            const progressLabel = metaData
+              ? 'Incremental update (post-snapshot)'
+              : 'Initial index progress';
+            console.info(
+              `   ${progressLabel}: ${progressData.progress}/${progressData.total} (${progressData.message || 'n/a'})`
+            );
+            console.info(`   Progress updated: ${updatedAt}`);
+
+            if (progressData.updatedAt) {
+              const updatedDate = new Date(progressData.updatedAt);
+              const ageMs = now - updatedDate;
+              const staleMs = 5 * 60 * 1000;
+              const ageLabel = formatDurationMs(ageMs);
+              if (ageLabel) {
+                console.info(`   Progress age: ${ageLabel}`);
+              }
+              if (Number.isFinite(ageMs) && ageMs > staleMs) {
+                const staleLabel = formatDurationMs(ageMs);
+                console.info(`   Progress stale: last update ${staleLabel} ago`);
+              }
+            }
+
+            if (progressData.updatedAt && metaData?.lastSaveTime) {
+              const updatedDate = new Date(progressData.updatedAt);
+              const saveDate = new Date(metaData.lastSaveTime);
+              if (updatedDate > saveDate) {
+                console.info('   Note: Incremental update in progress; cached snapshot may lag.');
+              }
+            }
+            if (progressData.indexMode) {
+              console.info(`   Current index mode: ${String(progressData.indexMode)}`);
+            }
+            if (
+              progressData.workerCircuitOpen &&
+              Number.isFinite(progressData.workersDisabledUntil)
+            ) {
+              const remainingMs = progressData.workersDisabledUntil - Date.now();
+              const remainingLabel = formatDurationMs(Math.max(0, remainingMs));
+              console.info(`   Workers paused: ${remainingLabel || '0s'} remaining`);
+              console.info(
+                `   Workers disabled until: ${formatDateTime(progressData.workersDisabledUntil)}`
+              );
+            }
+          } else {
+            if (metaData) {
+              console.info('   Summary: Cached snapshot available; no update running.');
+            } else {
+              console.info('   Summary: No cached snapshot yet; indexing has not started.');
+            }
+          }
+
+          if (metaData && progressData && typeof progressData.progress === 'number') {
+            console.info('   Indexing state: Cached snapshot available; incremental update running.');
+          } else if (metaData) {
+            console.info('   Indexing state: Cached snapshot available; idle.');
+          } else if (progressData && typeof progressData.progress === 'number') {
+            console.info('   Indexing state: Initial index in progress; no cached snapshot yet.');
+          } else {
+            console.info('   Indexing state: No cached snapshot; idle.');
+          }
+        }
+        console.info(`${'─'.repeat(60)}`);
+      }
+    } else {
+      if (fix) {
+        const results = await clearStaleCaches();
+        if (results.removed > 0) {
+          console.info(
+            `[Status] Cache cleanup removed ${results.removed} stale cache${results.removed === 1 ? '' : 's'}`
+          );
+        }
+      }
+      const cacheDirs = await fs.readdir(globalCacheRoot).catch(() => null);
+      if (Array.isArray(cacheDirs)) {
+        console.info(
+          `[Status] Cache: ${cacheDirs.length} director${cacheDirs.length === 1 ? 'y' : 'ies'} in ${globalCacheRoot}`
+        );
+      } else {
+        console.info(`[Status] Cache: ${globalCacheRoot} (not found)`);
+      }
     }
 
     // Show paths only for --status command
@@ -905,6 +1023,7 @@ export async function status({ fix = false, cacheOnly = false } = {}) {
       console.info(`      - ${loc.name}: ${loc.path} ${status}`);
     }
 
+      console.info(`   📝 Log file: ${logPath} ${logStatus}`.trimEnd());
       console.info(`   💾 Cache root: ${globalCacheRoot}`);
       console.info(`   📁 Current dir: ${process.cwd()}`);
       console.info('');

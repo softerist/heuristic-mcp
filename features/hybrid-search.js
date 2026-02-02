@@ -73,14 +73,16 @@ export class HybridSearch {
     await Promise.all(Array.from({ length: workerCount }, (_, i) => worker(i)));
 
     // Prevent unbounded growth (LRU-style eviction based on access time)
-    if (this.fileModTimes.size > 5000) {
+    const lruMaxEntries = this.config.lruMaxEntries ?? 5000;
+    const lruTargetEntries = this.config.lruTargetEntries ?? 4000;
+    if (this.fileModTimes.size > lruMaxEntries) {
       // Convert to array with last-access info, sort by oldest access
       const entries = [...this.fileModTimes.keys()].map((k) => ({
         key: k,
         lastAccess: this._lastAccess?.get(k) ?? 0,
       }));
       entries.sort((a, b) => a.lastAccess - b.lastAccess); // Oldest first
-      const toEvict = entries.slice(0, entries.length - 4000);
+      const toEvict = entries.slice(0, entries.length - lruTargetEntries);
       for (const { key } of toEvict) {
         this.fileModTimes.delete(key);
         this._lastAccess?.delete(key);
@@ -242,12 +244,30 @@ export class HybridSearch {
         for (let j = i; j < limit; j++) {
           const idx = candidateIndices ? candidateIndices[j] : j;
 
-          // Lazy load keys
-          const vector = this.cache.getVector(idx);
+          // CRITICAL: Fetch chunk info FIRST to ensure atomicity with index.
+          // If we fetch vector and chunk separately, the store could be modified
+          // between calls (e.g., by removeFileFromStore compacting the array).
+          const chunkInfo = this.cache.getChunk(idx);
+          if (!chunkInfo) {
+            // Chunk was removed or index is stale - skip silently
+            continue;
+          }
+
+          // Get vector from chunk or via index (now safe since we have valid chunkInfo)
+          const vector = this.cache.getChunkVector(chunkInfo, idx);
           if (!vector) continue;
 
-          // Ensure vector compatibility (dotSimilarity now checks length too)
-          let score = dotSimilarity(queryVector, vector) * semanticWeight;
+          // Ensure vector compatibility with try-catch for dimension mismatch
+          let score;
+          try {
+            score = dotSimilarity(queryVector, vector) * semanticWeight;
+          } catch (err) {
+            // Dimension mismatch indicates config change - log and skip this chunk
+            if (this.config.verbose) {
+              console.warn(`[Search] ${err.message} at index ${idx}`);
+            }
+            continue;
+          }
 
           // Exact match boost
           const content = await this.getChunkContent(idx);
@@ -262,16 +282,6 @@ export class HybridSearch {
               if (lowerContent.includes(queryWords[k])) matchedWords++;
             }
             score += (matchedWords / queryWordCount) * 0.3;
-          }
-
-          // Needs chunk info for result
-          const chunkInfo = this.cache.getChunk(idx);
-
-          // Log store inconsistency: vector exists but chunk metadata is missing
-          if (!chunkInfo) {
-            // Always log store inconsistencies - indicates cache corruption or indexing issue
-            console.warn(`[Search] Store inconsistency: vector at index ${idx} has no chunk info`);
-            continue;
           }
 
           // Recency boost

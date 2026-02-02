@@ -12,30 +12,7 @@ import { extractCallData } from '../lib/call-graph.js';
 
 import ignore from 'ignore';
 
-function toFloat32Array(vector) {
-  // Always create a copy to ensure we have a unique buffer
-  // and avoid issues with reusable WASM memory views
-  return new Float32Array(vector);
-}
-
-function sliceAndNormalize(vector, targetDim) {
-  if (!targetDim || targetDim >= vector.length) {
-    return vector;
-  }
-
-  const sliced = vector.slice(0, targetDim);
-  let sumSquares = 0;
-  for (let i = 0; i < targetDim; i++) {
-    sumSquares += sliced[i] * sliced[i];
-  }
-  const norm = Math.sqrt(sumSquares);
-  if (norm > 0) {
-    for (let i = 0; i < targetDim; i++) {
-      sliced[i] /= norm;
-    }
-  }
-  return sliced;
-}
+import { sliceAndNormalize, toFloat32Array } from '../lib/slice-normalize.js';
 
 function isTestEnv() {
   return process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
@@ -1704,9 +1681,11 @@ export class CodebaseIndexer {
       let currentReadBatch = [];
       let currentReadBytes = 0;
 
-      const mtimeSafeWindowMs = Number.isInteger(this.config.mtimeSafeWindowMs)
-        ? this.config.mtimeSafeWindowMs
-        : 2000;
+      const mtimeSafeWindowMs = isTestEnv()
+        ? 0
+        : Number.isInteger(this.config.mtimeSafeWindowMs)
+          ? this.config.mtimeSafeWindowMs
+          : 2000;
       const processReadBatch = async (batch) => {
         const results = await Promise.all(
           batch.map(async ({ file, size, mtimeMs }) => {

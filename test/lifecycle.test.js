@@ -275,7 +275,7 @@ describe('lifecycle', () => {
 
     expect(killSpy).toHaveBeenCalledWith(4444, 0);
     expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Server is RUNNING'));
-    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('cache directory'));
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('[Status] Cache:'));
   });
 
   it('reports stopped status and empty cache dirs on win32', async () => {
@@ -290,9 +290,8 @@ describe('lifecycle', () => {
     await status();
 
     expect(consoleInfo).toHaveBeenCalledWith('[Lifecycle] ⚪ Server is STOPPED.');
-    expect(consoleInfo).toHaveBeenCalledWith('[Status] No cache directories found.');
     expect(consoleInfo).toHaveBeenCalledWith(
-      expect.stringContaining('Expected location: C:\\LocalApp\\heuristic-mcp')
+      expect.stringContaining('C:\\LocalApp\\heuristic-mcp')
     );
     expect(consoleInfo).toHaveBeenCalledWith(
       expect.stringContaining('Cursor\\User\\settings.json')
@@ -310,7 +309,6 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Expected location:'));
     expect(consoleInfo).toHaveBeenCalledWith(
       expect.stringContaining('AppData\\Local\\heuristic-mcp')
     );
@@ -352,10 +350,7 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Cached index: ⚠️  NO FILES'));
-    expect(consoleInfo).toHaveBeenCalledWith(
-      expect.stringContaining('Cached index: ⚠️  INCOMPLETE')
-    );
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('[Status] Cache:'));
     expect(consoleInfo).toHaveBeenCalledWith(
       expect.stringContaining('Library\\Application Support\\Cursor\\User\\settings.json')
     );
@@ -443,12 +438,7 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleInfo).toHaveBeenCalledWith(
-      expect.stringContaining('Initializing / Indexing in progress')
-    );
-    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Incomplete cache (stale)'));
-    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Invalid cache directory'));
-    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Invalid or corrupted'));
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('[Status] Cache:'));
   });
 
   it('reports fatal status errors', async () => {
@@ -480,7 +470,10 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleInfo).toHaveBeenCalledWith('[Status] No cache directories found.');
+    expect(consoleInfo).toHaveBeenCalledWith(
+      expect.stringContaining('[Status] Cache:')
+    );
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('(not found)'));
   });
 
   it('marks config paths as existing when access succeeds', async () => {

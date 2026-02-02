@@ -449,13 +449,13 @@ export async function main(argv = process.argv) {
   }
 
   if (wantsStatus) {
-    await status({ fix: wantsFix });
+    await status({ fix: wantsFix, workspaceDir });
     process.exit(0);
   }
 
   // --cache command (cache-only, no server status)
   if (wantsCache) {
-    await status({ fix: wantsClean, cacheOnly: true });
+    await status({ fix: wantsClean, cacheOnly: true, workspaceDir });
     process.exit(0);
   }
 

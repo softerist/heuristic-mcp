@@ -109,7 +109,15 @@ export class FindSimilarCode {
         for (const chunk of batch) {
           const vector = this.getChunkVector(chunk);
           if (!vector) continue;
-          const similarity = dotSimilarity(codeVector, vector);
+          let similarity;
+          try {
+            similarity = dotSimilarity(codeVector, vector);
+          } catch (err) {
+            if (!warningMessage) {
+              warningMessage = err?.message || 'Vector dimension mismatch.';
+            }
+            continue;
+          }
 
           if (similarity >= minSimilarity) {
             // Deduplicate against input
