@@ -172,6 +172,7 @@ Selected overrides (prefix `SMART_CODING_`):
 - `SMART_CODING_CONTENT_CACHE_ENTRIES=256` — LRU entries for decoded content.
 - `SMART_CODING_VECTOR_CACHE_ENTRIES=64` — LRU entries for vectors (disk mode).
 - `SMART_CODING_CLEAR_CACHE_AFTER_INDEX=true|false` — drop in-memory vectors after indexing.
+- `SMART_CODING_UNLOAD_MODEL_AFTER_INDEX=true|false` — unload embedding model after indexing to free RAM (~500MB-1GB).
 - `SMART_CODING_EXPLICIT_GC=true|false` — opt-in to explicit GC (requires `--expose-gc`).
 - `SMART_CODING_INCREMENTAL_GC_THRESHOLD_MB=2048` — RSS threshold for running incremental GC after watcher updates (requires explicit GC).
 - `SMART_CODING_EMBEDDING_DIMENSION=64|128|256|512|768` — MRL dimension reduction (only for MRL-trained models).
@@ -188,6 +189,7 @@ and reads on demand. Recommended for large repos.
 - `vectorStoreLoadMode=disk` streams vectors from disk to reduce memory usage.
 - `vectorCacheEntries` controls the small in-memory LRU for vectors when using disk mode.
 - `clearCacheAfterIndex=true` drops in-memory vectors after indexing and reloads lazily on next query.
+- `unloadModelAfterIndex=true` (default) unloads the embedding model after indexing to free ~500MB-1GB of RAM; the model will reload on the next search query.
 - Note: `annEnabled=true` with `vectorStoreLoadMode=disk` can increase disk reads during ANN rebuilds on large indexes.
 
 ### SQLite Vector Store

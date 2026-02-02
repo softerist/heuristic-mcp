@@ -525,6 +525,148 @@ export class CodebaseIndexer {
     this.workerReady = [];
   }
 
+  /**
+   * Send unload message to all workers to free their model memory.
+   * This keeps workers alive but releases the embedding model from RAM.
+   */
+  async unloadWorkersModels() {
+    if (this.workers.length === 0) return { unloaded: 0 };
+
+    const UNLOAD_TIMEOUT = 10000;
+    let unloadedCount = 0;
+
+    const unloadPromises = this.workers.filter(Boolean).map((worker, idx) => {
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          if (this.config.verbose) {
+            console.warn(`[Indexer] Worker ${idx} unload timed out`);
+          }
+          resolve(false);
+        }, UNLOAD_TIMEOUT);
+
+        const handler = (msg) => {
+          if (msg?.type === 'unload-complete') {
+            clearTimeout(timeout);
+            worker.off('message', handler);
+            if (msg.wasLoaded) unloadedCount++;
+            resolve(true);
+          }
+        };
+
+        worker.on('message', handler);
+        try {
+          worker.postMessage({ type: 'unload' });
+        } catch (err) {
+          clearTimeout(timeout);
+          worker.off('message', handler);
+          if (this.config.verbose) {
+            console.warn(`[Indexer] Failed to send unload to worker ${idx}: ${err.message}`);
+          }
+          resolve(false);
+        }
+      });
+    });
+
+    await Promise.all(unloadPromises);
+
+    if (this.config.verbose) {
+      console.info(`[Indexer] Unloaded models from ${unloadedCount} workers`);
+    }
+
+    return { unloaded: unloadedCount };
+  }
+
+  /**
+   * Send unload message to the embedding child process.
+   * This frees the embedding model from RAM in the child process.
+   */
+  async unloadEmbeddingChildModel() {
+    const child = this._embeddingChild;
+    if (!child) return { success: true, wasLoaded: false };
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        if (this.config.verbose) {
+          console.warn('[Indexer] Embedding child unload timed out');
+        }
+        resolve({ success: false, timeout: true });
+      }, 10000);
+
+      const onData = (data) => {
+        try {
+          const lines = data.toString().split('\n').filter(Boolean);
+          for (const line of lines) {
+            const parsed = JSON.parse(line);
+            if (parsed?.success !== undefined) {
+              clearTimeout(timeout);
+              child.stdout.off('data', onData);
+              resolve(parsed);
+              return;
+            }
+          }
+        } catch {
+          // Not JSON or incomplete, keep waiting
+        }
+      };
+
+      child.stdout.on('data', onData);
+
+      try {
+        child.stdin.write(`${JSON.stringify({ type: 'unload' })}\n`);
+      } catch (err) {
+        clearTimeout(timeout);
+        child.stdout.off('data', onData);
+        if (this.config.verbose) {
+          console.warn(`[Indexer] Failed to send unload to child: ${err.message}`);
+        }
+        resolve({ success: false, error: err.message });
+      }
+    });
+  }
+
+  /**
+   * Unload embedding models from all sources (workers and child process) to free RAM.
+   * This is called after indexing when unloadModelAfterIndex is enabled.
+   */
+  async unloadEmbeddingModels() {
+    const results = { workers: 0, childUnloaded: false };
+
+    // Unload from workers (or terminate them - termination also frees memory)
+    if (this.workers.length > 0) {
+      // Terminating workers is more reliable than unloading in-place
+      // since it fully releases the ONNX runtime memory
+      if (this.config.verbose) {
+        console.info(`[Indexer] Terminating ${this.workers.length} workers to free model memory`);
+      }
+      await this.terminateWorkers();
+      results.workers = this.workers.length;
+    }
+
+    // Unload from persistent embedding child process
+    if (this._embeddingChild) {
+      const childResult = await this.unloadEmbeddingChildModel();
+      results.childUnloaded = childResult?.wasLoaded || false;
+      if (this.config.verbose) {
+        console.info(`[Indexer] Embedding child model unloaded: ${results.childUnloaded}`);
+      }
+    }
+
+    // Trigger GC in main process if available
+    if (typeof global.gc === 'function') {
+      const before = process.memoryUsage();
+      global.gc();
+      const after = process.memoryUsage();
+      if (this.config.verbose) {
+        console.info(
+          `[Indexer] Post-unload GC: rss ${(before.rss / 1024 / 1024).toFixed(1)}MB -> ${(after.rss / 1024 / 1024).toFixed(1)}MB`
+        );
+      }
+    }
+
+    return results;
+  }
+
+
   async loadGitignore() {
     if (!this.config.searchDirectory) {
       this.gitignore = ignore();
@@ -2375,6 +2517,14 @@ export class CodebaseIndexer {
         if (this.config.verbose) {
           console.info('[Cache] Cleared in-memory vectors after indexing');
         }
+      }
+
+      // Unload embedding models to free RAM
+      if (this.config.unloadModelAfterIndex) {
+        console.info(
+          '[Indexer] unloadModelAfterIndex enabled; embedding model will be reloaded on next query'
+        );
+        await this.unloadEmbeddingModels();
       }
 
       // Rebuild call graph in background
