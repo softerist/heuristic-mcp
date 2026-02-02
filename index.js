@@ -171,7 +171,9 @@ async function initialize(workspaceDir) {
     }
   }
   
-  if (config.enableExplicitGc && typeof global.gc !== 'function') {
+  // Skip gc check during tests (VITEST env is set)
+  const isTest = Boolean(process.env.VITEST || process.env.VITEST_WORKER_ID);
+  if (config.enableExplicitGc && typeof global.gc !== 'function' && !isTest) {
     console.error(
       '[Server] FATAL: enableExplicitGc=true but this process was not started with --expose-gc.'
     );

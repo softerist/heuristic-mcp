@@ -130,6 +130,9 @@ export async function createTestFixtures(options = {}) {
   } else {
     config.clearCacheAfterIndex = false;
   }
+  
+  // Disable child process embedding in tests - use mock embedder directly
+  config.unloadModelAfterSearch = false;
 
   const useRealEmbedder = options.useRealEmbedder === true;
   const embedder = useRealEmbedder

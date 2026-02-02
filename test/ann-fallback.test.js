@@ -19,6 +19,7 @@ describe('ANN Fallback (Missing hnswlib-node)', () => {
       annMinChunks: 5, // Low threshold for testing
       annIndexCache: false,
       embeddingModel: 'test-model',
+      unloadModelAfterSearch: false, // Use mock embedder directly, not child process
     };
 
     // Mock embedder
