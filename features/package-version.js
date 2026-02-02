@@ -260,7 +260,8 @@ export function getToolDefinition() {
 
 // Tool handler
 export async function handleToolCall(request) {
-  const packageName = request.params.arguments.package;
+  const args = request.params?.arguments || {};
+  const packageName = args.package;
 
   if (!packageName || typeof packageName !== 'string' || packageName.trim() === '') {
     return {
@@ -270,6 +271,7 @@ export async function handleToolCall(request) {
           text: 'Error: Please provide a package name.',
         },
       ],
+      isError: true,
     };
   }
 

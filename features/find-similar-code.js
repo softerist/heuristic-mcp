@@ -30,6 +30,18 @@ export class FindSimilarCode {
   }
 
   async execute({ code, maxResults = 5, minSimilarity = 0.3 }) {
+    if (typeof code !== 'string' || code.trim().length === 0) {
+      return {
+        results: [],
+        message: 'Error: A non-empty code string is required.',
+      };
+    }
+    const safeMaxResults =
+      Number.isFinite(maxResults) && maxResults > 0 ? Math.floor(maxResults) : 5;
+    const safeMinSimilarity = Number.isFinite(minSimilarity)
+      ? Math.min(1, Math.max(0, minSimilarity))
+      : 0.3;
+
     if (typeof this.cache.ensureLoaded === 'function') {
       await this.cache.ensureLoaded();
     }
@@ -90,9 +102,9 @@ export class FindSimilarCode {
       let candidates = vectorStore;
       let usedAnn = false;
       if (this.config.annEnabled) {
-        const candidateCount = this.getAnnCandidateCount(maxResults, vectorStore.length);
+        const candidateCount = this.getAnnCandidateCount(safeMaxResults, vectorStore.length);
         const annLabels = await this.cache.queryAnn(codeVector, candidateCount);
-        if (annLabels && annLabels.length >= maxResults) {
+        if (annLabels && annLabels.length >= safeMaxResults) {
           usedAnn = true;
           const seen = new Set();
           candidates = annLabels
@@ -105,7 +117,8 @@ export class FindSimilarCode {
         }
       }
 
-      const normalizedInput = codeToEmbed.trim().replace(/\s+/g, ' ');
+      const normalizeText = (text) => text.trim().replace(/\s+/g, ' ');
+      const normalizedInput = normalizeText(codeToEmbed);
 
       /**
        * Batch scoring function to prevent blocking the event loop
@@ -135,14 +148,7 @@ export class FindSimilarCode {
               continue;
             }
 
-            if (similarity >= minSimilarity) {
-              // Deduplicate against input
-              if (normalizedInput) {
-                const content = await this.getChunkContent(chunk);
-                const normalizedChunk = content.trim().replace(/\s+/g, ' ');
-                if (normalizedChunk === normalizedInput) continue;
-              }
-
+            if (similarity >= safeMinSimilarity) {
               scored.push({ ...chunk, similarity });
             }
           }
@@ -156,21 +162,23 @@ export class FindSimilarCode {
       // Fallback to full scan if ANN didn't provide enough results
       // Optimization: Skip full scan on large codebases to avoid long pauses
       const MAX_FULL_SCAN_SIZE = 5000;
-      if (usedAnn && filteredResults.length < maxResults) {
+      if (usedAnn && filteredResults.length < safeMaxResults) {
         if (vectorStore.length <= MAX_FULL_SCAN_SIZE) {
           filteredResults = await scoreAndFilter(vectorStore);
         } else {
           // Just return what we found via ANN
         }
       }
-      const results = await Promise.all(
-        filteredResults.slice(0, maxResults).map(async (chunk) => {
-          if (chunk.content === undefined || chunk.content === null) {
-            return { ...chunk, content: await this.getChunkContent(chunk) };
-          }
-          return chunk;
-        })
-      );
+      const results = [];
+      for (const chunk of filteredResults) {
+        const content = chunk.content ?? (await this.getChunkContent(chunk));
+        if (normalizedInput) {
+          const normalizedChunk = normalizeText(content);
+          if (normalizedChunk === normalizedInput) continue;
+        }
+        results.push({ ...chunk, content });
+        if (results.length >= safeMaxResults) break;
+      }
 
       return {
         results,
@@ -250,9 +258,18 @@ export function getToolDefinition(_config) {
 
 // Tool handler
 export async function handleToolCall(request, findSimilarCode) {
-  const code = request.params.arguments.code;
-  const maxResults = request.params.arguments.maxResults || 5;
-  const minSimilarity = request.params.arguments.minSimilarity || 0.3;
+  const args = request.params?.arguments || {};
+  const code = args.code;
+  if (typeof code !== 'string' || code.trim().length === 0) {
+    return {
+      content: [{ type: 'text', text: 'Error: A non-empty code string is required.' }],
+      isError: true,
+    };
+  }
+  const maxResults =
+    typeof args.maxResults === 'number' ? args.maxResults : 5;
+  const minSimilarity =
+    typeof args.minSimilarity === 'number' ? args.minSimilarity : 0.3;
 
   const { results, message } = await findSimilarCode.execute({
     code,

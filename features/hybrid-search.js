@@ -258,6 +258,11 @@ export class HybridSearch {
       // Process in batches
       // Candidates is now implicitly range 0..storeSize OR candidateIndices
       const totalCandidates = candidateIndices ? candidateIndices.length : storeSize;
+      const textMatchMaxCandidates = Number.isInteger(this.config.textMatchMaxCandidates)
+        ? this.config.textMatchMaxCandidates
+        : 2000;
+      const shouldApplyTextMatch = lowerQuery.length > 1;
+      const deferTextMatch = shouldApplyTextMatch && totalCandidates > textMatchMaxCandidates;
 
       for (let i = 0; i < totalCandidates; i += BATCH_SIZE) {
         // Allow event loop to tick between batches
@@ -295,19 +300,21 @@ export class HybridSearch {
             continue;
           }
 
-          // Exact match boost
-          const content = await this.getChunkContent(idx);
-          const lowerContent = content ? content.toLowerCase() : '';
+          let content;
+          if (shouldApplyTextMatch && !deferTextMatch) {
+            content = await this.getChunkContent(idx);
+            const lowerContent = content ? content.toLowerCase() : '';
 
-          if (lowerContent && lowerContent.includes(lowerQuery)) {
-            score += exactMatchBoost;
-          } else if (lowerContent && queryWordCount > 0) {
-            // Partial word matching (optimized)
-            let matchedWords = 0;
-            for (let k = 0; k < queryWordCount; k++) {
-              if (lowerContent.includes(queryWords[k])) matchedWords++;
+            if (lowerContent && lowerContent.includes(lowerQuery)) {
+              score += exactMatchBoost;
+            } else if (lowerContent && queryWordCount > 0) {
+              // Partial word matching (optimized)
+              let matchedWords = 0;
+              for (let k = 0; k < queryWordCount; k++) {
+                if (lowerContent.includes(queryWords[k])) matchedWords++;
+              }
+              score += (matchedWords / queryWordCount) * 0.3;
             }
-            score += (matchedWords / queryWordCount) * 0.3;
           }
 
           // Recency boost
@@ -320,12 +327,41 @@ export class HybridSearch {
             }
           }
 
-          scoredChunks.push({ ...chunkInfo, score, content });
+          const scoredChunk = { ...chunkInfo, score };
+          if (content !== undefined) {
+            scoredChunk.content = content;
+          }
+          scoredChunks.push(scoredChunk);
         }
       }
 
       // Sort by initial score
       scoredChunks.sort((a, b) => b.score - a.score);
+
+      // Defer expensive text matching for large candidate sets
+      if (deferTextMatch) {
+        const textMatchCount = Math.min(textMatchMaxCandidates, scoredChunks.length);
+        for (let i = 0; i < textMatchCount; i++) {
+          const chunk = scoredChunks[i];
+          const content = chunk.content ?? (await this.getChunkContent(chunk));
+          const lowerContent = content ? content.toLowerCase() : '';
+
+          if (lowerContent && lowerContent.includes(lowerQuery)) {
+            chunk.score += exactMatchBoost;
+          } else if (lowerContent && queryWordCount > 0) {
+            let matchedWords = 0;
+            for (let k = 0; k < queryWordCount; k++) {
+              if (lowerContent.includes(queryWords[k])) matchedWords++;
+            }
+            chunk.score += (matchedWords / queryWordCount) * 0.3;
+          }
+
+          if (chunk.content === undefined) {
+            chunk.content = content;
+          }
+        }
+        scoredChunks.sort((a, b) => b.score - a.score);
+      }
 
       // Apply call graph proximity boost if enabled
       if (this.config.callGraphEnabled && this.config.callGraphBoost > 0) {
@@ -444,7 +480,8 @@ export function getToolDefinition(config) {
 
 // Tool handler
 export async function handleToolCall(request, hybridSearch) {
-  const query = request.params?.arguments?.query;
+  const args = request.params?.arguments || {};
+  const query = args.query;
   
   // Input validation
   if (typeof query !== 'string' || query.trim().length === 0) {
@@ -454,7 +491,10 @@ export async function handleToolCall(request, hybridSearch) {
     };
   }
   
-  const maxResults = request.params.arguments.maxResults || hybridSearch.config.maxResults;
+  const maxResults =
+    typeof args.maxResults === 'number' && args.maxResults > 0
+      ? args.maxResults
+      : hybridSearch.config.maxResults;
 
   const { results, message } = await hybridSearch.search(query, maxResults);
 

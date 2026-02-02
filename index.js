@@ -46,7 +46,7 @@ import * as PackageVersionFeature from './features/package-version.js';
 import * as SetWorkspaceFeature from './features/set-workspace.js';
 import { register } from './features/register.js';
 
-const MEMORY_LOG_INTERVAL_MS = 15000;
+import { MEMORY_LOG_INTERVAL_MS } from './lib/constants.js';
 const PID_FILE_NAME = '.heuristic-mcp.pid';
 
 // Arguments parsed in main()

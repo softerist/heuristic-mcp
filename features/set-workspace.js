@@ -198,7 +198,8 @@ export class SetWorkspaceFeature {
 // Tool handler (needs instance context, so this is a factory)
 export function createHandleToolCall(featureInstance) {
   return async (request) => {
-    const { workspacePath, reindex } = request.params.arguments;
+    const args = request.params?.arguments || {};
+    const { workspacePath, reindex } = args;
 
     const result = await featureInstance.execute({
       workspacePath,

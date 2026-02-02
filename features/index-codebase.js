@@ -107,6 +107,8 @@ export class CodebaseIndexer {
     this._watcherDebounceTimers = new Map();
     // Files currently being indexed via watcher (path -> Promise)
     this._watcherInProgress = new Map();
+    // Files that need a follow-up reindex after current watcher indexing finishes
+    this._watcherPendingReindex = new Map();
     // Debounce delay in ms (consolidates rapid add/change events)
     this._watcherDebounceMs = Number.isInteger(this.config.watchDebounceMs)
       ? this.config.watchDebounceMs
@@ -156,6 +158,9 @@ export class CodebaseIndexer {
     }
     if (this._watcherInProgress) {
       this._watcherInProgress.clear();
+    }
+    if (this._watcherPendingReindex) {
+      this._watcherPendingReindex.clear();
     }
 
     if (restartWatcher && this.config.watchFiles) {
@@ -725,13 +730,16 @@ export class CodebaseIndexer {
             this._workerReplacementPromises = new Map();
           }
           if (!this._workerReplacementPromises.has(workerIndex)) {
-            const replacement = this.replaceDeadWorker(workerIndex)
-              .catch((err) => {
+            // Use IIFE to ensure cleanup happens in finally block even on sync errors
+            const replacement = (async () => {
+              try {
+                await this.replaceDeadWorker(workerIndex);
+              } catch (err) {
                 console.warn(`[Indexer] Failed to replace worker ${workerIndex}: ${err.message}`);
-              })
-              .finally(() => {
+              } finally {
                 this._workerReplacementPromises.delete(workerIndex);
-              });
+              }
+            })();
             this._workerReplacementPromises.set(workerIndex, replacement);
           }
         };
@@ -2456,6 +2464,8 @@ export class CodebaseIndexer {
 
     // If file is currently being indexed, just schedule a re-index after it completes
     if (this._watcherInProgress.has(fullPath)) {
+      // Schedule a follow-up reindex after current one completes
+      this._watcherPendingReindex.set(fullPath, eventType);
       if (this.config.verbose) {
         console.info(
           `[Indexer] Skipping duplicate ${eventType} for ${path.basename(fullPath)} (already indexing)`
@@ -2486,6 +2496,11 @@ export class CodebaseIndexer {
           console.warn(`[Indexer] Failed to index ${path.basename(fullPath)}: ${err.message}`);
         } finally {
           this._watcherInProgress.delete(fullPath);
+          const pendingType = this._watcherPendingReindex.get(fullPath);
+          if (pendingType) {
+            this._watcherPendingReindex.delete(fullPath);
+            this.debouncedWatchIndexFile(fullPath, pendingType);
+          }
         }
       })();
 
