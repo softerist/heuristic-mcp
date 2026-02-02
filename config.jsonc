@@ -664,8 +664,8 @@
   "verbose": true,
   // Embedding model identifier.
   "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
-  // Preload the embedding model on startup.
-  "preloadEmbeddingModel": true,
+  // Preload the embedding model on startup. Set to false when using child processes for memory savings.
+  "preloadEmbeddingModel": false,
   // Vector store format: json, binary, or sqlite.
   "vectorStoreFormat": "binary",
   // Content storage: external or inline.

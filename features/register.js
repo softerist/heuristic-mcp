@@ -117,9 +117,14 @@ export async function register(filter = null) {
   const workspacePath =
     currentIDE === 'Antigravity' ? process.env.INIT_CWD || process.cwd() : '${workspaceFolder}';
 
+  // Build args array - add --expose-gc if enableExplicitGc is likely needed
+  // Since we can't import config here without circular deps, check if config.jsonc exists
+  // and contains enableExplicitGc. For simplicity, always include --expose-gc as it's harmless.
+  const args = ['--expose-gc', scriptPath, '--workspace', workspacePath];
+
   const serverConfig = {
     command: binaryPath,
-    args: [scriptPath, '--workspace', workspacePath],
+    args,
     disabled: false,
   };
 

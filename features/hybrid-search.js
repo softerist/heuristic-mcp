@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { dotSimilarity } from '../lib/utils.js';
 import { extractSymbolsFromContent } from '../lib/call-graph.js';
+import { embedQueryInChildProcess } from '../lib/embed-query-process.js';
 import {
   STAT_CONCURRENCY_LIMIT,
   SEARCH_BATCH_SIZE,
@@ -128,20 +129,29 @@ export class HybridSearch {
       if (this.config.verbose) {
         console.info(`[Search] Query: "${query}"`);
       }
-      const queryEmbed = await this.embedder(query, {
-        pooling: 'mean',
-        normalize: true,
-      });
-
+      
       let queryVector;
-      try {
-        queryVector = new Float32Array(queryEmbed.data);
-      } finally {
-        if (typeof queryEmbed.dispose === 'function') {
-          try {
-            queryEmbed.dispose();
-          } catch {
-            /* ignore */
+      
+      // Use child process for embedding when unloadModelAfterSearch is enabled
+      // This ensures the OS completely reclaims memory when the child exits
+      if (this.config.unloadModelAfterSearch) {
+        queryVector = await embedQueryInChildProcess(query, this.config);
+      } else {
+        // Use main process embedder (faster for consecutive searches)
+        const queryEmbed = await this.embedder(query, {
+          pooling: 'mean',
+          normalize: true,
+        });
+
+        try {
+          queryVector = new Float32Array(queryEmbed.data);
+        } finally {
+          if (typeof queryEmbed.dispose === 'function') {
+            try {
+              queryEmbed.dispose();
+            } catch {
+              /* ignore */
+            }
           }
         }
       }

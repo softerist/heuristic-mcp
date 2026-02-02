@@ -109,6 +109,7 @@ async function printMemorySnapshot(workspaceDir) {
 
 // Global state
 let embedder = null;
+let unloadMainEmbedder = null; // Function to unload the embedding model
 let cache = null;
 let indexer = null;
 let hybridSearch = null;
@@ -297,7 +298,33 @@ async function initialize(workspaceDir) {
     const model = await cachedEmbedderPromise;
     return model(...args);
   };
+  
+  // Unload the main process embedding model to free memory
+  const unloader = async () => {
+    if (!cachedEmbedderPromise) return false;
+    try {
+      const model = await cachedEmbedderPromise;
+      if (model && typeof model.dispose === 'function') {
+        await model.dispose();
+      }
+      cachedEmbedderPromise = null;
+      if (typeof global.gc === 'function') {
+        global.gc();
+      }
+      if (config.verbose) {
+        logMemory('[Server] Memory (after model unload)');
+      }
+      console.info('[Server] Embedding model unloaded to free memory.');
+      return true;
+    } catch (err) {
+      console.warn(`[Server] Error unloading embedding model: ${err.message}`);
+      cachedEmbedderPromise = null;
+      return false;
+    }
+  };
+  
   embedder = lazyEmbedder;
+  unloadMainEmbedder = unloader; // Store in module scope for tool handler access
   let embedderPreloaded = false;
 
   // Preload the embedding model to ensure deterministic startup logs
@@ -311,15 +338,8 @@ async function initialize(workspaceDir) {
     }
   }
 
-  // In verbose mode, we trigger an early load to provide immediate resource feedback
-  if (config.verbose && !embedderPreloaded) {
-    embedder('').catch((err) => {
-      // Ignore "text may not be null" errors as we are just pre-warming
-      if (!err.message.includes('text may not be null')) {
-        console.error(`[Server] Warning: Early model load failed: ${err.message}`);
-      }
-    });
-  }
+  // NOTE: We no longer auto-load in verbose mode when preloadEmbeddingModel=false.
+  // The model will be loaded lazily on first search or by child processes during indexing.
 
   // Initialize cache (load deferred until after server is ready)
   cache = new EmbeddingsCache(config);
@@ -440,7 +460,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           isError: true,
         };
       }
-      return await feature.handler(request, feature.instance);
+      const result = await feature.handler(request, feature.instance);
+      
+      // Unload embedding model after search-related tools to free memory
+      // Tools that use embedder: a_semantic_search, d_find_similar_code
+      const searchTools = ['a_semantic_search', 'd_find_similar_code'];
+      if (config.unloadModelAfterSearch && searchTools.includes(toolDef.name)) {
+        // Defer unload slightly to not block response, use setImmediate for non-blocking
+        setImmediate(async () => {
+          if (typeof unloadMainEmbedder === 'function') {
+            await unloadMainEmbedder();
+          }
+        });
+      }
+      
+      return result;
     }
   }
 
@@ -618,12 +652,10 @@ export async function main(argv = process.argv) {
   }
 
   registerSignalHandlers(requestShutdown);
-  if (isServerMode && !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test')) {
-    const handleStdinClose = () => requestShutdown('stdin');
-    process.stdin?.on('end', handleStdinClose);
-    process.stdin?.on('close', handleStdinClose);
-    process.stdin?.on('error', handleStdinClose);
-  }
+  // NOTE: We intentionally do NOT shut down on stdin close.
+  // When an IDE restarts, it may briefly close stdin then reconnect.
+  // The server should remain running to preserve cache and be ready for reconnection.
+  // Use SIGINT/SIGTERM or --stop command for intentional shutdown.
   const { startBackgroundTasks } = await initialize(workspaceDir);
 
   // (Blocking init moved below)
