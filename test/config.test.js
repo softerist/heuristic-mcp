@@ -66,6 +66,58 @@ describe('Configuration Loading', () => {
     });
   });
 
+  it('applies memoryCleanup namespace values and maps them to runtime keys', async () => {
+    await withTempDir(async (dir) => {
+      const configData = {
+        smartIndexing: false,
+        // Legacy values should be overridden by explicit memoryCleanup values.
+        clearCacheAfterIndex: false,
+        incrementalMemoryProfile: false,
+        recycleServerOnHighRssThresholdMb: 3000,
+        memoryCleanup: {
+          clearCacheAfterIndex: true,
+          unloadModelAfterIndex: false,
+          incrementalMemoryProfile: true,
+          recycleServerOnHighRssThresholdMb: 4500,
+        },
+      };
+
+      await fs.writeFile(path.join(dir, 'config.json'), JSON.stringify(configData));
+
+      const config = await loadConfig(dir);
+      expect(config.clearCacheAfterIndex).toBe(true);
+      expect(config.unloadModelAfterIndex).toBe(false);
+      expect(config.incrementalMemoryProfile).toBe(true);
+      expect(config.recycleServerOnHighRssThresholdMb).toBe(4500);
+      expect(config.memoryCleanup.clearCacheAfterIndex).toBe(true);
+      expect(config.memoryCleanup.incrementalMemoryProfile).toBe(true);
+      expect(config.memoryCleanup.recycleServerOnHighRssThresholdMb).toBe(4500);
+    });
+  });
+
+  it('falls back to legacy top-level memory cleanup keys when namespace is not provided', async () => {
+    await withTempDir(async (dir) => {
+      const configData = {
+        smartIndexing: false,
+        clearCacheAfterIndex: false,
+        unloadModelAfterIndex: false,
+        incrementalMemoryProfile: true,
+        recycleServerOnHighRssAfterIncremental: true,
+      };
+
+      await fs.writeFile(path.join(dir, 'config.json'), JSON.stringify(configData));
+
+      const config = await loadConfig(dir);
+      expect(config.clearCacheAfterIndex).toBe(false);
+      expect(config.unloadModelAfterIndex).toBe(false);
+      expect(config.incrementalMemoryProfile).toBe(true);
+      expect(config.recycleServerOnHighRssAfterIncremental).toBe(true);
+      expect(config.memoryCleanup.clearCacheAfterIndex).toBe(false);
+      expect(config.memoryCleanup.incrementalMemoryProfile).toBe(true);
+      expect(config.memoryCleanup.recycleServerOnHighRssAfterIncremental).toBe(true);
+    });
+  });
+
   it('loads default config when file missing', async () => {
     await withTempDir(async (dir) => {
       const config = await loadConfig(dir);
@@ -202,6 +254,9 @@ describe('Configuration Loading', () => {
       expect(config.recycleServerOnHighRssThresholdMb).toBe(3500);
       expect(config.recycleServerOnHighRssCooldownMs).toBe(120000);
       expect(config.recycleServerOnHighRssDelayMs).toBe(750);
+      expect(config.memoryCleanup.incrementalMemoryProfile).toBe(true);
+      expect(config.memoryCleanup.recycleServerOnHighRssAfterIncremental).toBe(true);
+      expect(config.memoryCleanup.recycleServerOnHighRssThresholdMb).toBe(3500);
       expect(config.annEnabled).toBe(false);
       expect(config.annMinChunks).toBe(123);
       expect(config.annMinCandidates).toBe(10);

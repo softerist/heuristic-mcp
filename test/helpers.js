@@ -131,7 +131,14 @@ export async function createTestFixtures(options = {}) {
     config.clearCacheAfterIndex = false;
   }
   
-  // Disable child process embedding in tests - use mock embedder directly
+  // Keep test embeddings deterministic: use in-process embedding path unless
+  // explicitly overridden by a test.
+  if (isVitest() && options.forceEmbeddingProcessPerBatch !== true) {
+    config.embeddingProcessPerBatch = false;
+    config.autoEmbeddingProcessPerBatch = false;
+  }
+
+  // Disable query child-process embedding in tests - use mock embedder directly.
   config.unloadModelAfterSearch = false;
 
   const useRealEmbedder = options.useRealEmbedder === true;

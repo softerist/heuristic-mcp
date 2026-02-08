@@ -1390,6 +1390,7 @@ export class CodebaseIndexer {
       env: {
         ...process.env,
         EMBEDDING_PROCESS_PERSISTENT: 'true',
+        EMBEDDING_PROCESS_RUN_MAIN: 'true',
       },
     });
 
@@ -1699,6 +1700,10 @@ export class CodebaseIndexer {
       const startedAt = Date.now();
       const child = spawn(nodePath, ['--expose-gc', scriptPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          EMBEDDING_PROCESS_RUN_MAIN: 'true',
+        },
       });
       const childPid = child?.pid ?? 'unknown';
       if (this.config.verbose) {
