@@ -672,6 +672,8 @@
   "vectorStoreContentMode": "external",
   // In-memory content cache entries (binary store).
   "contentCacheEntries": 256,
+  // Vector loading mode: "disk" keeps RAM lower by streaming vectors as needed.
+  "vectorStoreLoadMode": "disk",
   // Weight for semantic similarity scoring.
   "semanticWeight": 0.7,
   // Score boost for exact text matches.
@@ -702,6 +704,12 @@
   // ONNX threads used by embedding child process.
   // 6 is a practical balance on 24-thread desktop CPUs (high throughput, less contention than 8+).
   "embeddingProcessNumThreads": 8,
+  // Embedding-child adaptive GC RSS threshold in MB (higher = less frequent GC).
+  "embeddingProcessGcRssThresholdMb": 2048,
+  // Minimum interval between embedding-child GC runs.
+  "embeddingProcessGcMinIntervalMs": 15000,
+  // Backstop GC cadence if threshold is not crossed.
+  "embeddingProcessGcMaxRequestsWithoutCollection": 8,
   // Wait time for active readers before saving cache (ms).
   "saveReaderWaitTimeoutMs": 5000,
   // Enable ANN index for large codebases.

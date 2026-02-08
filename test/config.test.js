@@ -152,6 +152,9 @@ describe('Configuration Loading', () => {
       process.env.SMART_CODING_CLEAR_CACHE_AFTER_INDEX = 'true';
       process.env.SMART_CODING_WORKER_THREADS = '3';
       process.env.SMART_CODING_EMBEDDING_FAIL_FAST_BREAKER = 'true';
+      process.env.SMART_CODING_EMBEDDING_PROCESS_GC_RSS_THRESHOLD_MB = '3072';
+      process.env.SMART_CODING_EMBEDDING_PROCESS_GC_MIN_INTERVAL_MS = '20000';
+      process.env.SMART_CODING_EMBEDDING_PROCESS_GC_MAX_REQUESTS = '12';
       process.env.SMART_CODING_ANN_ENABLED = 'false';
       process.env.SMART_CODING_ANN_MIN_CHUNKS = '123';
       process.env.SMART_CODING_ANN_MIN_CANDIDATES = '10';
@@ -186,6 +189,9 @@ describe('Configuration Loading', () => {
       expect(config.clearCacheAfterIndex).toBe(true);
       expect(config.workerThreads).toBe(3);
       expect(config.failFastEmbeddingErrors).toBe(true);
+      expect(config.embeddingProcessGcRssThresholdMb).toBe(3072);
+      expect(config.embeddingProcessGcMinIntervalMs).toBe(20000);
+      expect(config.embeddingProcessGcMaxRequestsWithoutCollection).toBe(12);
       expect(config.annEnabled).toBe(false);
       expect(config.annMinChunks).toBe(123);
       expect(config.annMinCandidates).toBe(10);

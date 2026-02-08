@@ -81,6 +81,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
       getFileHash: vi.fn(),
       setFileHash: vi.fn(),
       removeFileFromStore: vi.fn(),
+      dropInMemoryVectors: vi.fn().mockResolvedValue(undefined),
       addToStore: vi.fn(),
       deleteFileHash: vi.fn(),
       save: vi.fn(),
@@ -663,6 +664,34 @@ describe('CodebaseIndexer Branch Coverage', () => {
     expect(gcSpy).toHaveBeenCalledTimes(2);
 
     global.gc = originalGc;
+  });
+
+  it('uses dedicated embedding-process GC config instead of incremental GC threshold', () => {
+    indexer.config.incrementalGcThresholdMb = 64;
+    indexer.config.embeddingProcessGcRssThresholdMb = undefined;
+    indexer.config.embeddingProcessGcMinIntervalMs = undefined;
+    indexer.config.embeddingProcessGcMaxRequestsWithoutCollection = undefined;
+
+    const gcConfig = indexer.getEmbeddingProcessGcConfig();
+
+    expect(gcConfig.gcRssThresholdMb).toBe(2048);
+    expect(gcConfig.gcMinIntervalMs).toBe(15000);
+    expect(gcConfig.gcMaxRequestsWithoutCollection).toBe(8);
+  });
+
+  it('runs post-incremental cleanup with model unload when configured', async () => {
+    indexer.config.clearCacheAfterIndex = true;
+    indexer.config.unloadModelAfterIndex = true;
+    indexer.config.verbose = false;
+    indexer.cache.dropInMemoryVectors = vi.fn().mockResolvedValue(undefined);
+    indexer.unloadEmbeddingModels = vi.fn().mockResolvedValue({});
+    const gcSpy = vi.spyOn(indexer, 'runExplicitGc').mockReturnValue(true);
+
+    await indexer.runPostIncrementalCleanup('watch update');
+
+    expect(indexer.cache.dropInMemoryVectors).toHaveBeenCalledTimes(1);
+    expect(indexer.unloadEmbeddingModels).toHaveBeenCalledTimes(1);
+    expect(gcSpy).toHaveBeenCalledWith({ force: true });
   });
 
   it('skips unchanged files when hash matches', async () => {

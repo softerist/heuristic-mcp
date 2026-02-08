@@ -15,6 +15,9 @@ import ignore from 'ignore';
 
 import { sliceAndNormalize, toFloat32Array } from '../lib/slice-normalize.js';
 import {
+  EMBEDDING_PROCESS_DEFAULT_GC_MAX_REQUESTS_WITHOUT_COLLECTION,
+  EMBEDDING_PROCESS_DEFAULT_GC_MIN_INTERVAL_MS,
+  EMBEDDING_PROCESS_DEFAULT_GC_RSS_THRESHOLD_MB,
   MAX_PENDING_WATCH_EVENTS,
   PENDING_WATCH_EVENTS_TRIM_SIZE,
 } from '../lib/constants.js';
@@ -198,10 +201,27 @@ export class CodebaseIndexer {
   }
 
   getEmbeddingProcessGcConfig() {
-    const thresholdRaw = Number(this.config.incrementalGcThresholdMb);
+    const thresholdRaw = Number(this.config.embeddingProcessGcRssThresholdMb);
+    const minIntervalRaw = Number(this.config.embeddingProcessGcMinIntervalMs);
+    const maxRequestsRaw = Number(this.config.embeddingProcessGcMaxRequestsWithoutCollection);
     const gcRssThresholdMb =
-      Number.isFinite(thresholdRaw) && thresholdRaw > 0 ? thresholdRaw : 2048;
-    return { gcRssThresholdMb };
+      Number.isFinite(thresholdRaw) && thresholdRaw > 0
+        ? thresholdRaw
+        : EMBEDDING_PROCESS_DEFAULT_GC_RSS_THRESHOLD_MB;
+    const gcMinIntervalMs =
+      Number.isFinite(minIntervalRaw) && minIntervalRaw >= 0
+        ? Math.floor(minIntervalRaw)
+        : EMBEDDING_PROCESS_DEFAULT_GC_MIN_INTERVAL_MS;
+    const gcMaxRequestsWithoutCollection =
+      Number.isFinite(maxRequestsRaw) && maxRequestsRaw > 0
+        ? Math.floor(maxRequestsRaw)
+        : EMBEDDING_PROCESS_DEFAULT_GC_MAX_REQUESTS_WITHOUT_COLLECTION;
+    return { gcRssThresholdMb, gcMinIntervalMs, gcMaxRequestsWithoutCollection };
+  }
+
+  shouldPreferDiskCacheLoad() {
+    if (!this.config.clearCacheAfterIndex) return false;
+    return this.config.vectorStoreFormat === 'binary' || this.config.vectorStoreFormat === 'sqlite';
   }
 
   isExplicitGcEnabled() {
@@ -372,6 +392,9 @@ export class CodebaseIndexer {
       this.runExplicitGc({ force: true });
     } else {
       this.maybeRunIncrementalGc(reason);
+    }
+    if (this.config.unloadModelAfterIndex) {
+      await this.unloadEmbeddingModels();
     }
     this.maybeShutdownQueryEmbeddingPool(reason);
     if (this.config.verbose) {
@@ -1721,7 +1744,7 @@ export class CodebaseIndexer {
 
   async indexFile(file) {
     if (typeof this.cache.ensureLoaded === 'function') {
-      await this.cache.ensureLoaded();
+      await this.cache.ensureLoaded({ preferDisk: this.shouldPreferDiskCacheLoad() });
     }
     if (!(await this.isPathInsideWorkspaceReal(file))) {
       console.warn(`[Indexer] Skipped ${path.basename(file)} (outside workspace)`);
@@ -2090,7 +2113,7 @@ export class CodebaseIndexer {
         await this.cache.reset();
       } else {
         if (typeof this.cache.ensureLoaded === 'function') {
-          await this.cache.ensureLoaded();
+          await this.cache.ensureLoaded({ preferDisk: this.shouldPreferDiskCacheLoad() });
         }
       }
 
@@ -2797,7 +2820,7 @@ export class CodebaseIndexer {
     this.processingWatchEvents = true;
     try {
       if (typeof this.cache.ensureLoaded === 'function') {
-        await this.cache.ensureLoaded();
+        await this.cache.ensureLoaded({ preferDisk: this.shouldPreferDiskCacheLoad() });
       }
 
       while (this.pendingWatchEvents.size > 0) {
@@ -2994,7 +3017,7 @@ export class CodebaseIndexer {
         }
 
         if (typeof this.cache.ensureLoaded === 'function') {
-          await this.cache.ensureLoaded();
+          await this.cache.ensureLoaded({ preferDisk: this.shouldPreferDiskCacheLoad() });
         }
         await this.cache.removeFileFromStore(fullPath);
         this.cache.deleteFileHash(fullPath);

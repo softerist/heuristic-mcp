@@ -184,13 +184,13 @@ async function initialize(workspaceDir) {
   // Skip gc check during tests (VITEST env is set)
   const isTest = Boolean(process.env.VITEST || process.env.VITEST_WORKER_ID);
   if (config.enableExplicitGc && typeof global.gc !== 'function' && !isTest) {
-    console.error(
-      '[Server] FATAL: enableExplicitGc=true but this process was not started with --expose-gc.'
+    console.warn(
+      '[Server] enableExplicitGc=true but this process was not started with --expose-gc; continuing with explicit GC disabled.'
     );
-    console.error(
-      '[Server] Please start the server using "npm start" or add --expose-gc to your node command.'
+    console.warn(
+      '[Server] Tip: start with "npm start" or add --expose-gc to enable explicit GC again.'
     );
-    process.exit(1);
+    config.enableExplicitGc = false;
   }
 
   let mainBackendConfigured = false;
@@ -254,6 +254,9 @@ async function initialize(workspaceDir) {
   // Log effective configuration for debugging
   console.info(
     `[Server] Config: workerThreads=${config.workerThreads}, embeddingProcessPerBatch=${config.embeddingProcessPerBatch}`
+  );
+  console.info(
+    `[Server] Config: vectorStoreLoadMode=${config.vectorStoreLoadMode}, vectorCacheEntries=${config.vectorCacheEntries}`
   );
 
   if (pidPath) {
