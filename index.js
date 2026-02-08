@@ -53,7 +53,11 @@ import * as PackageVersionFeature from './features/package-version.js';
 import * as SetWorkspaceFeature from './features/set-workspace.js';
 import { handleListResources, handleReadResource } from './features/resources.js';
 
-import { MEMORY_LOG_INTERVAL_MS, ONNX_THREAD_LIMIT } from './lib/constants.js';
+import {
+  MEMORY_LOG_INTERVAL_MS,
+  ONNX_THREAD_LIMIT,
+  BACKGROUND_INDEX_DELAY_MS,
+} from './lib/constants.js';
 const PID_FILE_NAME = '.heuristic-mcp.pid';
 
 async function readLogTail(logPath, maxLines = 2000) {
@@ -201,14 +205,19 @@ async function initialize(workspaceDir) {
         interOpNumThreads: 1,
       },
     });
-    if (!nativeOnnxAvailable && env?.backends?.onnx?.wasm) {
-      env.backends.onnx.wasm.numThreads = ONNX_THREAD_LIMIT;
-    }
     mainBackendConfigured = true;
   };
 
   ensureMainOnnxBackend();
   if (nativeOnnxAvailable === false) {
+    try {
+      const { env } = await getTransformers();
+      if (env?.backends?.onnx?.wasm) {
+        env.backends.onnx.wasm.numThreads = ONNX_THREAD_LIMIT;
+      }
+    } catch {
+      // ignore: fallback tuning is best effort
+    }
     const status = getNativeOnnxStatus();
     const reason = status?.message || 'onnxruntime-node not available';
     console.warn(`[Server] Native ONNX backend unavailable (${reason}); using WASM backend.`);
@@ -334,18 +343,15 @@ async function initialize(workspaceDir) {
   
   embedder = lazyEmbedder;
   unloadMainEmbedder = unloader; // Store in module scope for tool handler access
-  let embedderPreloaded = false;
-
-  // Preload the embedding model to ensure deterministic startup logs
-  if (config.preloadEmbeddingModel !== false) {
+  const preloadEmbeddingModel = async () => {
+    if (config.preloadEmbeddingModel === false) return;
     try {
-      console.info('[Server] Preloading embedding model...');
+      console.info('[Server] Preloading embedding model (background)...');
       await embedder(' ');
-      embedderPreloaded = true;
     } catch (err) {
       console.warn(`[Server] Embedding model preload failed: ${err.message}`);
     }
-  }
+  };
 
   // NOTE: We no longer auto-load in verbose mode when preloadEmbeddingModel=false.
   // The model will be loaded lazily on first search or by child processes during indexing.
@@ -383,6 +389,9 @@ async function initialize(workspaceDir) {
   server.hybridSearch = hybridSearch;
 
   const startBackgroundTasks = async () => {
+    // Keep startup responsive: do not block server readiness on model preload.
+    void preloadEmbeddingModel();
+
     try {
       console.info('[Server] Loading cache (deferred)...');
       await cache.load();
@@ -411,7 +420,7 @@ async function initialize(workspaceDir) {
         .catch((err) => {
           console.error('[Server] Background indexing error:', err.message);
         });
-    }, 3000);
+    }, BACKGROUND_INDEX_DELAY_MS);
   };
 
   return { startBackgroundTasks, config };

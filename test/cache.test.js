@@ -137,6 +137,31 @@ describe('EmbeddingsCache', () => {
     });
   });
 
+  it('keeps filename-allowed entries when loading JSON cache', async () => {
+    await withTempDir(async (dir) => {
+      const config = await createConfig(dir);
+      config.fileExtensions = ['js'];
+      config.fileNames = ['Dockerfile'];
+      const cache = new EmbeddingsCache(config);
+
+      const dockerPath = path.join(dir, 'Dockerfile');
+      const meta = { version: 1, embeddingModel: config.embeddingModel };
+      const cacheData = [{ file: dockerPath, vector: [1, 2] }];
+      const hashData = { [dockerPath]: 'hash-docker' };
+
+      await fs.writeFile(path.join(dir, 'meta.json'), JSON.stringify(meta));
+      await fs.writeFile(path.join(dir, 'embeddings.json'), JSON.stringify(cacheData));
+      await fs.writeFile(path.join(dir, 'file-hashes.json'), JSON.stringify(hashData));
+
+      await cache.load();
+
+      expect(cache.getVectorStore()).toHaveLength(1);
+      expect(cache.getFileHash(dockerPath)).toBe('hash-docker');
+
+      await cache.close();
+    });
+  });
+
   it('persists file hash metadata and reloads', async () => {
     await withTempDir(async (dir) => {
       const config = await createConfig(dir);
@@ -350,6 +375,57 @@ describe('EmbeddingsCache', () => {
       expect(reloaded.getChunkVector(store[0])).toBeInstanceOf(Float32Array);
 
       await reloaded.close();
+      await cache.close();
+    });
+  });
+
+  it('keeps filename-allowed entries when loading sqlite cache', async () => {
+    await withTempDir(async (dir) => {
+      const config = await createConfig(dir);
+      config.vectorStoreFormat = 'sqlite';
+      config.vectorStoreContentMode = 'external';
+      config.vectorStoreLoadMode = 'disk';
+      config.fileExtensions = ['js'];
+      config.fileNames = ['Dockerfile'];
+      const cache = new EmbeddingsCache(config);
+      const dockerPath = path.join(dir, 'Dockerfile');
+
+      cache.vectorStore = [
+        {
+          file: dockerPath,
+          startLine: 1,
+          endLine: 2,
+          content: 'FROM node:20',
+          vector: new Float32Array([0.9, 0.8]),
+        },
+      ];
+      cache.setFileHash(dockerPath, 'hash-docker-sqlite', { mtimeMs: 10, size: 20 });
+
+      await cache.save();
+
+      const reloaded = new EmbeddingsCache(config);
+      await reloaded.load();
+
+      const store = reloaded.getVectorStore();
+      expect(store.length).toBe(1);
+      expect(reloaded.getFileHash(dockerPath)).toBe('hash-docker-sqlite');
+
+      await reloaded.close();
+      await cache.close();
+    });
+  });
+
+  it('closes sqlite store on clear', async () => {
+    await withTempDir(async (dir) => {
+      const config = await createConfig(dir);
+      const cache = new EmbeddingsCache(config);
+      const sqliteClose = vi.fn();
+      cache.sqliteStore = { close: sqliteClose };
+
+      await cache.clear();
+
+      expect(sqliteClose).toHaveBeenCalled();
+      expect(cache.sqliteStore).toBeNull();
       await cache.close();
     });
   });
