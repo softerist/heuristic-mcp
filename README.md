@@ -105,25 +105,42 @@ Example `config.jsonc`:
 {
   "excludePatterns": ["**/legacy-code/**", "**/*.test.ts"],
   "fileNames": ["Dockerfile", ".env.example", "Makefile"],
-  "smartIndexing": true,
-  "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
-  "workerThreads": 0,
-  "embeddingBatchSize": null,
-  "embeddingProcessNumThreads": 8,
-  "enableExplicitGc": false,
-  "recencyBoost": 0.1,
-  "recencyDecayDays": 30,
-  "callGraphEnabled": true,
-  "callGraphBoost": 0.15,
-  "annEnabled": true,
-  "vectorStoreFormat": "binary",
-  "vectorStoreContentMode": "external",
-  "vectorStoreLoadMode": "disk",
-  "contentCacheEntries": 256,
-  "vectorCacheEntries": 64,
-  "clearCacheAfterIndex": true
+  "indexing": {
+    "smartIndexing": true
+  },
+  "worker": {
+    "workerThreads": 0
+  },
+  "embedding": {
+    "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
+    "embeddingBatchSize": null,
+    "embeddingProcessNumThreads": 8
+  },
+  "search": {
+    "recencyBoost": 0.1,
+    "recencyDecayDays": 30
+  },
+  "callGraph": {
+    "callGraphEnabled": true,
+    "callGraphBoost": 0.15
+  },
+  "ann": {
+    "annEnabled": true
+  },
+  "vectorStore": {
+    "vectorStoreFormat": "binary",
+    "vectorStoreContentMode": "external",
+    "vectorStoreLoadMode": "disk",
+    "contentCacheEntries": 256,
+    "vectorCacheEntries": 64
+  },
+  "memoryCleanup": {
+    "clearCacheAfterIndex": true
+  }
 }
 ```
+
+Preferred style is namespaced keys (shown above). Legacy top-level keys are still supported for backward compatibility.
 
 ### Embedding Model & Dimension Options
 
@@ -135,8 +152,10 @@ For faster search with smaller embeddings, switch to an MRL-compatible model:
 
 ```json
 {
-  "embeddingModel": "nomic-ai/nomic-embed-text-v1.5",
-  "embeddingDimension": 128
+  "embedding": {
+    "embeddingModel": "nomic-ai/nomic-embed-text-v1.5",
+    "embeddingDimension": 128
+  }
 }
 ```
 
@@ -154,6 +173,8 @@ Cache location:
 ### Environment Variables
 
 Selected overrides (prefix `SMART_CODING_`):
+
+Environment overrides target runtime keys and are synced back into namespaces by `lib/config.js`.
 
 - `SMART_CODING_VERBOSE=true|false` — enable detailed logging.
 - `SMART_CODING_WORKER_THREADS=auto|N` — worker thread count.
@@ -181,20 +202,20 @@ See `lib/config.js` for the full list.
 
 ### Binary Vector Store
 
-Set `vectorStoreFormat` to `binary` to use the on-disk binary cache. This keeps vectors and content out of JS heap
+Set `vectorStore.vectorStoreFormat` to `binary` to use the on-disk binary cache. This keeps vectors and content out of JS heap
 and reads on demand. Recommended for large repos.
 
-- `vectorStoreContentMode=external` keeps content in the binary file and only loads for top-N results.
-- `contentCacheEntries` controls the small in-memory LRU for decoded content strings.
-- `vectorStoreLoadMode=disk` streams vectors from disk to reduce memory usage.
-- `vectorCacheEntries` controls the small in-memory LRU for vectors when using disk mode.
-- `clearCacheAfterIndex=true` drops in-memory vectors after indexing and reloads lazily on next query.
-- `unloadModelAfterIndex=true` (default) unloads the embedding model after indexing to free ~500MB-1GB of RAM; the model will reload on the next search query.
-- Note: `annEnabled=true` with `vectorStoreLoadMode=disk` can increase disk reads during ANN rebuilds on large indexes.
+- `vectorStore.vectorStoreContentMode=external` keeps content in the binary file and only loads for top-N results.
+- `vectorStore.contentCacheEntries` controls the small in-memory LRU for decoded content strings.
+- `vectorStore.vectorStoreLoadMode=disk` streams vectors from disk to reduce memory usage.
+- `vectorStore.vectorCacheEntries` controls the small in-memory LRU for vectors when using disk mode.
+- `memoryCleanup.clearCacheAfterIndex=true` drops in-memory vectors after indexing and reloads lazily on next query.
+- `memoryCleanup.unloadModelAfterIndex=true` (default) unloads the embedding model after indexing to free ~500MB-1GB of RAM; the model will reload on the next search query.
+- Note: `ann.annEnabled=true` with `vectorStore.vectorStoreLoadMode=disk` can increase disk reads during ANN rebuilds on large indexes.
 
 ### SQLite Vector Store
 
-Set `vectorStoreFormat` to `sqlite` to use SQLite for persistence. This provides:
+Set `vectorStore.vectorStoreFormat` to `sqlite` to use SQLite for persistence. This provides:
 
 - ACID transactions for reliable writes
 - Simpler concurrent access
@@ -202,12 +223,14 @@ Set `vectorStoreFormat` to `sqlite` to use SQLite for persistence. This provides
 
 ```json
 {
-  "vectorStoreFormat": "sqlite"
+  "vectorStore": {
+    "vectorStoreFormat": "sqlite"
+  }
 }
 ```
 
 The vectors and content are stored in `vectors.sqlite` in your cache directory. You can inspect it with any SQLite browser.
-`vectorStoreContentMode` and `vectorStoreLoadMode` are respected for SQLite (use `vectorStoreLoadMode=disk` to avoid loading vectors into memory).
+`vectorStore.vectorStoreContentMode` and `vectorStore.vectorStoreLoadMode` are respected for SQLite (use `vectorStore.vectorStoreLoadMode=disk` to avoid loading vectors into memory).
 
 **Tradeoffs vs Binary:**
 - Slightly higher read overhead (SQL queries vs direct memory access)
@@ -230,7 +253,7 @@ SMART_CODING_VECTOR_STORE_LOAD_MODE=disk node tools/scripts/benchmark-search.js 
 SMART_CODING_VECTOR_STORE_FORMAT=binary SMART_CODING_VECTOR_STORE_LOAD_MODE=disk node tools/scripts/benchmark-search.js --runs 10
 ```
 
-Note: On small repos, disk mode may be slightly slower and show noisy RSS deltas; benefits are clearer on large indexes with a small `vectorCacheEntries`.
+Note: On small repos, disk mode may be slightly slower and show noisy RSS deltas; benefits are clearer on large indexes with a small `vectorStore.vectorCacheEntries`.
 
 ---
 
@@ -293,7 +316,7 @@ Native ONNX backend unavailable: The operating system cannot run %1.
 ...onnxruntime_binding.node. Falling back to WASM.
 ```
 
-The server will automatically disable workers and force `embeddingProcessPerBatch` to reduce memory spikes, but you
+The server will automatically disable workers and force `embedding.embeddingProcessPerBatch` to reduce memory spikes, but you
 should fix the native binding to restore stable memory usage:
 
 - Ensure you are running **64-bit Node.js** (`node -p "process.arch"` should be `x64`).

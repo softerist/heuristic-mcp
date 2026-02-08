@@ -8,7 +8,7 @@ This document outlines the modular architecture of Heuristic MCP.
 heuristic-mcp/
 ├── index.js                    # Main entry point, MCP server setup
 ├── package.json                # Package configuration
-├── config.json                 # Sample configuration
+├── config.jsonc                # Sample configuration
 ├── LICENSE                     # MIT License
 ├── README.md                   # Project documentation
 ├── ARCHITECTURE.md             # Architecture notes
@@ -16,40 +16,48 @@ heuristic-mcp/
 ├── .gitignore                  # Git ignore rules
 │
 ├── lib/                        # Core libraries
-│   ├── cache-utils.js         # Stale cache detection/cleanup
-│   ├── cache.js               # Embeddings cache management + ANN index
-│   ├── call-graph.js          # Symbol extraction and call graph helpers
-│   ├── cli.js                 # CLI argument parsing helpers
-│   ├── config.js              # Configuration loader and env overrides
-│   ├── embedding-process.js   # Child-process embedder runner (isolation)
-│   ├── embedding-worker.js    # Worker-thread embedder runner
-│   ├── ignore-patterns.js     # Smart ignore patterns by project type
-│   ├── json-worker.js         # Off-thread JSON parsing
-│   ├── json-writer.js         # Streaming JSON writer
-│   ├── logging.js             # Log file + stderr redirection helpers
-│   ├── project-detector.js    # Language/project detection
-│   ├── tokenizer.js           # Token estimation and limits
-│   ├── utils.js               # Shared utilities (chunking, similarity)
-│   └── vector-store-binary.js # Binary on-disk vector store (mmap-friendly)
+│   ├── cache-utils.js          # Stale cache detection/cleanup
+│   ├── cache.js                # Embeddings cache management + ANN index
+│   ├── call-graph.js           # Symbol extraction and call graph helpers
+│   ├── cli.js                  # CLI argument parsing helpers
+│   ├── config.js               # Configuration loader and env overrides
+│   ├── constants.js            # Shared constants
+│   ├── embed-query-process.js  # Query embedding child-process pool
+│   ├── embedding-process.js    # Child-process embedder runner (isolation)
+│   ├── embedding-worker.js     # Worker-thread embedder runner
+│   ├── ignore-patterns.js      # Smart ignore patterns by project type
+│   ├── json-worker.js          # Off-thread JSON parsing
+│   ├── json-writer.js          # Streaming JSON writer
+│   ├── logging.js              # Log file + stderr redirection helpers
+│   ├── project-detector.js     # Language/project detection
+│   ├── slice-normalize.js      # Vector slicing/normalization helpers
+│   ├── tokenizer.js            # Token estimation and limits
+│   ├── utils.js                # Shared utilities (chunking, similarity)
+│   ├── vector-store-binary.js  # Binary on-disk vector store (mmap-friendly)
+│   └── vector-store-sqlite.js  # SQLite-backed vector store
 │
 ├── features/                   # Pluggable features
-│   ├── hybrid-search.js       # Semantic + exact match search
-│   ├── index-codebase.js      # Code indexing feature
-│   ├── clear-cache.js         # Cache management feature
-│   ├── find-similar-code.js   # Similarity search by code snippet
-│   ├── ann-config.js          # ANN configuration tool
-│   ├── lifecycle.js           # CLI lifecycle helpers
-│   └── register.js            # IDE registration logic
+│   ├── hybrid-search.js        # Semantic + exact match search
+│   ├── index-codebase.js       # Code indexing feature
+│   ├── clear-cache.js          # Cache management feature
+│   ├── find-similar-code.js    # Similarity search by code snippet
+│   ├── ann-config.js           # ANN configuration tool
+│   ├── package-version.js      # Package registry version lookup
+│   ├── resources.js            # MCP resources listing/reading
+│   ├── set-workspace.js        # Runtime workspace switching
+│   ├── lifecycle.js            # CLI lifecycle helpers
+│   └── register.js             # IDE registration logic
 │
 ├── scripts/                    # Utility scripts
-│   ├── clear-cache.js         # Cache management utility
-│   ├── download-model.js      # Optional model pre-download
-│   └── postinstall.js         # Auto-register on install
+│   ├── clear-cache.js          # Cache management utility
+│   ├── download-model.js       # Optional model pre-download
+│   └── postinstall.js          # Auto-register on install
 │
 └── tools/                      # Developer-only helpers
     └── scripts/
-        ├── cache-stats.js     # Cache inspection utility
-        └── manual-search.js   # Manual semantic search helper
+        ├── cache-stats.js      # Cache inspection utility
+        ├── benchmark-search.js # Search/memory benchmarking helper
+        └── manual-search.js    # Manual semantic search helper
 ```
 
 ## Module Responsibilities
@@ -63,10 +71,11 @@ heuristic-mcp/
 
 ### lib/config.js
 
-- Loads and validates configuration from `config.json`
+- Loads and validates configuration from `config.jsonc` or `config.json`
 - Provides default configuration values
 - Resolves file paths and cache location
 - Applies `SMART_CODING_*` environment variable overrides
+- Supports namespaced config sections (for example `embedding`, `worker`, `vectorStore`, `memoryCleanup`) with backward-compatible top-level keys
 
 ### lib/cache.js
 
@@ -75,7 +84,8 @@ heuristic-mcp/
 - File hash tracking for change detection
 - Load/save operations for disk cache
 - Optional ANN (HNSW) index build/load/save for fast search
-- Supports JSON or binary vector store formats
+- Supports JSON, binary, and SQLite vector store formats
+- Supports memory or disk vector load modes for lower RSS
 
 ### lib/cache-utils.js
 
@@ -113,6 +123,11 @@ heuristic-mcp/
 
 - Binary vector store with header + record table + content blocks
 - Mmap-friendly layout, content loaded on demand
+
+### lib/vector-store-sqlite.js
+
+- SQLite vector store with transactional writes
+- Standard DB format for inspection and debugging
 
 ### lib/utils.js
 
@@ -159,11 +174,21 @@ heuristic-mcp/
 - Runtime ANN tuning and stats
 - MCP tool: `d_ann_config`
 
+### features/set-workspace.js
+
+- Runtime workspace switching
+- Updates search root and cache root, with optional reindex
+
+### features/package-version.js
+
+- Registry-aware package version lookup
+- MCP tool: `e_check_package_version`
+
 ## Configuration Flow
 
-1. User creates/edits `config.json`
+1. User creates/edits `config.jsonc` (or `config.json`)
 2. `lib/config.js` loads configuration on startup
-3. Configuration merged with defaults and env overrides
+3. Configuration merged with defaults, namespaced key mapping, and env overrides
 4. Passed to all features via constructor
 
 ## Data Flow
@@ -177,11 +202,13 @@ exclude patterns and smart indexing
     ↓
 smartChunk() - split into chunks
     ↓
-embedder - generate vectors
+embedder - generate vectors (worker pool, child process, or main thread)
     ↓
 EmbeddingsCache - store in memory + disk
     ↓
 ANN index (optional) - build/load from cache
+    ↓
+memory cleanup policy - optional model/vector release
 ```
 
 ### Search Flow
@@ -189,7 +216,7 @@ ANN index (optional) - build/load from cache
 ```
 User query
     ↓
-embedder - query to vector
+embedder - query to vector (main thread or query child process)
     ↓
 ANN candidate search (optional)
     ↓
@@ -209,14 +236,15 @@ format output - markdown with code blocks
 - **First Run**: Download model (if not cached), index all files, save cache
 - **Subsequent Runs**: Load cache from disk, only index changed files
 - **File Changes**: Incremental updates via file watcher (if enabled)
-- **Binary Store**: Optional on-disk vector/content storage to reduce JS heap usage
+- **Binary/SQLite Store**: Optional on-disk vector/content storage to reduce JS heap usage
+- **Disk Vector Mode**: `vectorStore.vectorStoreLoadMode=disk` streams vectors to lower steady-state RSS
 
 ### Memory Usage
 
 Approximate memory usage:
 
 - Base (Node.js + libraries): ~50MB
-- Embedding model: ~100MB
+- Embedding model: ~0.5GB-1.5GB (model/runtime dependent)
 - Vector store: ~10KB per code chunk
 - Example: 1000 files × 20 chunks/file = ~200MB
 
