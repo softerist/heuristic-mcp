@@ -39,6 +39,7 @@ describe('embedding-worker', () => {
     });
     parentPort.postMessage.mockReset();
     workerData.embeddingModel = 'test-model';
+    workerData.failFastEmbeddingErrors = false;
     pipeline.mockReset();
     pipeline.mockImplementation(() => Promise.resolve({}));
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
@@ -95,6 +96,71 @@ describe('embedding-worker', () => {
     const message = parentPort.postMessage.mock.calls.find((call) => call[0].type === 'results')[0];
     expect(message.results[0].success).toBe(false);
     expect(message.results[0].error).toBe('embed fail');
+  });
+
+  it('trips fail-fast breaker when enabled for repeated embedding failures', async () => {
+    workerData.failFastEmbeddingErrors = true;
+    pipeline.mockResolvedValue(async () => {
+      throw new Error('embed fail');
+    });
+
+    await import('../lib/embedding-worker.js');
+    await tick();
+
+    const chunks = Array.from({ length: 10 }, (_, i) => ({
+      file: 'breaker.js',
+      startLine: i + 1,
+      endLine: i + 1,
+      text: `bad-${i}`,
+    }));
+
+    await messageHandler({
+      type: 'process',
+      chunks,
+      batchId: 'batch-breaker',
+    });
+
+    expect(parentPort.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        batchId: 'batch-breaker',
+        error: expect.stringContaining('fail-fast breaker tripped'),
+      })
+    );
+  });
+
+  it('trips fail-fast breaker for cross-file processFiles batches', async () => {
+    workerData.failFastEmbeddingErrors = true;
+    pipeline.mockResolvedValue(async () => {
+      throw new Error('embed fail');
+    });
+
+    await import('../lib/embedding-worker.js');
+    await tick();
+
+    const files = Array.from({ length: 10 }, (_, i) => ({
+      file: `cross-${i}.js`,
+      content: Array.from(
+        { length: 40 },
+        (_, line) => `const value_${i}_${line} = ${line};`
+      ).join('\n'),
+      force: true,
+    }));
+
+    await messageHandler({
+      type: 'processFiles',
+      files,
+      batchId: 'batch-cross-breaker',
+      chunkConfig: { chunkSize: 8, chunkOverlap: 0 },
+    });
+
+    expect(parentPort.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        batchId: 'batch-cross-breaker',
+        error: expect.stringContaining('fail-fast breaker tripped'),
+      })
+    );
   });
 
   it('reports initialization failures', async () => {

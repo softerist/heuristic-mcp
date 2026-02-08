@@ -130,6 +130,7 @@ export class CodebaseIndexer {
     this._embeddingRequestId = 0;
     this._embeddingChildNeedsRestart = false;
     this._embeddingChildRestartThresholdMb = this.getEmbeddingChildRestartThresholdMb();
+    this._lastExplicitGcAt = 0;
   }
 
   rebuildExcludeMatchers() {
@@ -185,12 +186,32 @@ export class CodebaseIndexer {
   getEmbeddingProcessConfig() {
     const threads = Number.isInteger(this.config.embeddingProcessNumThreads)
       ? this.config.embeddingProcessNumThreads
-      : 16; // Aggressive: use 16 threads (user has 24 cores) for max speed
+      : 8;
     const batchSize =
       Number.isInteger(this.config.embeddingBatchSize) && this.config.embeddingBatchSize > 0
         ? this.config.embeddingBatchSize
         : null;
     return { threads, batchSize };
+  }
+
+  isExplicitGcEnabled() {
+    return this.config.enableExplicitGc !== false && typeof global.gc === 'function';
+  }
+
+  runExplicitGc({ minIntervalMs = 0, force = false } = {}) {
+    if (!this.isExplicitGcEnabled()) return false;
+    const now = Date.now();
+    if (
+      !force &&
+      minIntervalMs > 0 &&
+      this._lastExplicitGcAt &&
+      now - this._lastExplicitGcAt < minIntervalMs
+    ) {
+      return false;
+    }
+    this._lastExplicitGcAt = now;
+    global.gc();
+    return true;
   }
 
   isPathInsideWorkspace(filePath) {
@@ -437,6 +458,8 @@ export class CodebaseIndexer {
                 searchDirectory: this.config.searchDirectory,
                 maxFileSize: this.config.maxFileSize,
                 callGraphEnabled: this.config.callGraphEnabled,
+                enableExplicitGc: this.config.enableExplicitGc,
+                failFastEmbeddingErrors: this.config.failFastEmbeddingErrors === true,
               },
             });
 
@@ -651,10 +674,10 @@ export class CodebaseIndexer {
       }
     }
 
-    // Trigger GC in main process if available
-    if (typeof global.gc === 'function') {
+    // Trigger GC in main process if configured
+    if (this.isExplicitGcEnabled()) {
       const before = process.memoryUsage();
-      global.gc();
+      this.runExplicitGc({ force: true });
       const after = process.memoryUsage();
       if (this.config.verbose) {
         console.info(
@@ -732,6 +755,8 @@ export class CodebaseIndexer {
         searchDirectory: this.config.searchDirectory,
         maxFileSize: this.config.maxFileSize,
         callGraphEnabled: this.config.callGraphEnabled,
+        enableExplicitGc: this.config.enableExplicitGc,
+        failFastEmbeddingErrors: this.config.failFastEmbeddingErrors === true,
       },
     });
 
@@ -1363,6 +1388,7 @@ export class CodebaseIndexer {
       chunks,
       numThreads: threads,
       batchSize,
+      enableExplicitGc: this.config.enableExplicitGc,
       requestId,
     };
     const timeoutMs = Number.isInteger(this.config.workerBatchTimeoutMs)
@@ -1455,6 +1481,7 @@ export class CodebaseIndexer {
       chunks,
       numThreads: threads,
       batchSize,
+      enableExplicitGc: this.config.enableExplicitGc,
     };
 
     return new Promise((resolve) => {
@@ -1591,8 +1618,8 @@ export class CodebaseIndexer {
 
         // Periodic GC to prevent memory creep
         processedSinceGc++;
-        if (processedSinceGc >= 25 && typeof global.gc === 'function') {
-          global.gc();
+        if (processedSinceGc >= 100) {
+          this.runExplicitGc({ minIntervalMs: 5000 });
           processedSinceGc = 0;
         }
       } catch (error) {
@@ -1693,6 +1720,20 @@ export class CodebaseIndexer {
         }
       }
       const useEmbeddingProcessPerBatch = this.shouldUseEmbeddingProcessPerBatch(useWorkers);
+      let embeddingRuntimeSummary = '';
+      if (useWorkers && this.workers.length > 0) {
+        embeddingRuntimeSummary =
+          `mode=worker-pool workers=${this.workers.length} onnxThreadsPerWorker=1 ` +
+          `effectiveThreads=${this.workers.length}`;
+      } else if (useEmbeddingProcessPerBatch) {
+        const { threads, batchSize } = this.getEmbeddingProcessConfig();
+        embeddingRuntimeSummary =
+          `mode=child-process onnxThreads=${threads} ` +
+          `inferenceBatchSize=${batchSize ?? 1} persistentSession=${this._embeddingProcessSessionActive ? 'true' : 'false'}`;
+      } else {
+        embeddingRuntimeSummary = 'mode=main-thread onnxThreads=auto';
+      }
+      console.info(`[Indexer] Embedding runtime: ${embeddingRuntimeSummary}`);
 
       const chunksToProcess = chunks.map((c) => ({
         file,
@@ -2132,6 +2173,21 @@ export class CodebaseIndexer {
       }
 
       const useEmbeddingProcessPerBatch = this.shouldUseEmbeddingProcessPerBatch(useWorkers);
+      let embeddingRuntimeSummary = '';
+      if (useWorkers && this.workers.length > 0) {
+        // Worker pool is intentionally fixed to 1 ONNX thread per worker.
+        embeddingRuntimeSummary =
+          `mode=worker-pool workers=${this.workers.length} onnxThreadsPerWorker=1 ` +
+          `effectiveThreads=${this.workers.length}`;
+      } else if (useEmbeddingProcessPerBatch) {
+        const { threads, batchSize } = this.getEmbeddingProcessConfig();
+        embeddingRuntimeSummary =
+          `mode=child-process onnxThreads=${threads} ` +
+          `inferenceBatchSize=${batchSize ?? 1} persistentSession=true`;
+      } else {
+        embeddingRuntimeSummary = 'mode=main-thread onnxThreads=auto';
+      }
+      console.info(`[Indexer] Embedding runtime: ${embeddingRuntimeSummary}`);
 
       if (!useWorkers && this.config.verbose) {
         const cpuCount = Array.isArray(os.cpus()) ? os.cpus().length : 0;
@@ -2179,7 +2235,7 @@ export class CodebaseIndexer {
         // Memory safeguard
         const mem = process.memoryUsage();
         if (mem.rss > 2048 * 1024 * 1024) {
-          if (global.gc) global.gc();
+          this.runExplicitGc({ minIntervalMs: 5000 });
         }
 
         const useWorkersForBatch =
@@ -2488,7 +2544,7 @@ export class CodebaseIndexer {
           }
         }
 
-        if (global.gc) global.gc();
+        this.runExplicitGc({ minIntervalMs: 5000 });
 
         processedFiles += batch.length;
 
@@ -2524,7 +2580,7 @@ export class CodebaseIndexer {
       if (this.workers.length > 0) {
         await this.terminateWorkers();
       }
-      if (global.gc) global.gc();
+      this.runExplicitGc({ force: true });
 
       const totalDurationMs = Date.now() - totalStartTime;
       const totalTime = (totalDurationMs / 1000).toFixed(1);

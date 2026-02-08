@@ -330,6 +330,22 @@ describe('CodebaseIndexer Branch Coverage', () => {
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Skipped hash update'));
   });
 
+  it('logs embedding runtime summary during indexFile', async () => {
+    indexer.config.verbose = false;
+    indexer.config.workerThreads = 0;
+    vi.spyOn(fs, 'stat').mockResolvedValue({ isDirectory: () => false, size: 100, mtimeMs: 123 });
+    vi.spyOn(fs, 'readFile').mockResolvedValue('content');
+    vi.spyOn(utils, 'hashContent').mockReturnValue('new-hash');
+    mockCache.getFileHash.mockReturnValue('old-hash');
+    vi.spyOn(utils, 'smartChunk').mockReturnValue([{ text: 'chunk1', startLine: 1, endLine: 2 }]);
+
+    await indexer.indexFile(path.join(mockConfig.searchDirectory, 'file.js'));
+
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('Embedding runtime: mode=main-thread onnxThreads=auto')
+    );
+  });
+
   it('updates file hash registry after successful indexing', async () => {
     indexer.config.verbose = false;
     indexer.config.batchSize = 1;
@@ -576,6 +592,40 @@ describe('CodebaseIndexer Branch Coverage', () => {
       expect.any(String),
       expect.objectContaining({ size: 20, mtimeMs: 123 })
     );
+  });
+
+  it('respects enableExplicitGc in explicit GC helper', () => {
+    const originalGc = global.gc;
+    const gcSpy = vi.fn();
+    global.gc = gcSpy;
+
+    indexer.config.enableExplicitGc = false;
+    expect(indexer.runExplicitGc({ force: true })).toBe(false);
+    expect(gcSpy).not.toHaveBeenCalled();
+
+    indexer.config.enableExplicitGc = true;
+    expect(indexer.runExplicitGc({ force: true })).toBe(true);
+    expect(gcSpy).toHaveBeenCalledTimes(1);
+
+    global.gc = originalGc;
+  });
+
+  it('throttles explicit GC by min interval', async () => {
+    vi.useFakeTimers();
+    const originalGc = global.gc;
+    const gcSpy = vi.fn();
+    global.gc = gcSpy;
+    indexer.config.enableExplicitGc = true;
+
+    expect(indexer.runExplicitGc({ minIntervalMs: 1000 })).toBe(true);
+    expect(indexer.runExplicitGc({ minIntervalMs: 1000 })).toBe(false);
+    expect(gcSpy).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1000);
+    expect(indexer.runExplicitGc({ minIntervalMs: 1000 })).toBe(true);
+    expect(gcSpy).toHaveBeenCalledTimes(2);
+
+    global.gc = originalGc;
   });
 
   it('skips unchanged files when hash matches', async () => {

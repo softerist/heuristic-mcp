@@ -688,6 +688,8 @@
   "workerMaxChunksPerBatch": 20,
   // Allow fallback to main-thread embeddings.
   "allowSingleThreadFallback": false,
+  // Abort worker embedding batches after repeated consecutive embedding failures.
+  "failFastEmbeddingErrors": true,
   // Enable explicit GC (requires --expose-gc).
   "enableExplicitGc": true,
   // Use child process per batch for memory isolation.

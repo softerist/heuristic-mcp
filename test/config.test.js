@@ -70,6 +70,7 @@ describe('Configuration Loading', () => {
     await withTempDir(async (dir) => {
       const config = await loadConfig(dir);
       expect(config.embeddingModel).toBe(DEFAULT_CONFIG.embeddingModel);
+      expect(config.failFastEmbeddingErrors).toBe(false);
     });
   });
 
@@ -150,6 +151,7 @@ describe('Configuration Loading', () => {
       process.env.SMART_CODING_VECTOR_CACHE_ENTRIES = '64';
       process.env.SMART_CODING_CLEAR_CACHE_AFTER_INDEX = 'true';
       process.env.SMART_CODING_WORKER_THREADS = '3';
+      process.env.SMART_CODING_EMBEDDING_FAIL_FAST_BREAKER = 'true';
       process.env.SMART_CODING_ANN_ENABLED = 'false';
       process.env.SMART_CODING_ANN_MIN_CHUNKS = '123';
       process.env.SMART_CODING_ANN_MIN_CANDIDATES = '10';
@@ -183,6 +185,7 @@ describe('Configuration Loading', () => {
       expect(config.vectorCacheEntries).toBe(64);
       expect(config.clearCacheAfterIndex).toBe(true);
       expect(config.workerThreads).toBe(3);
+      expect(config.failFastEmbeddingErrors).toBe(true);
       expect(config.annEnabled).toBe(false);
       expect(config.annMinChunks).toBe(123);
       expect(config.annMinCandidates).toBe(10);
