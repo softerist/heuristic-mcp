@@ -710,6 +710,17 @@
   "embeddingProcessGcMinIntervalMs": 15000,
   // Backstop GC cadence if threshold is not crossed.
   "embeddingProcessGcMaxRequestsWithoutCollection": 8,
+  // Optional: print detailed phase memory traces for incremental indexing/update paths.
+  "incrementalMemoryProfile": false,
+  // Optional: recycle server process when RSS stays too high after incremental cleanup.
+  // Safe default is disabled.
+  "recycleServerOnHighRssAfterIncremental": false,
+  // RSS threshold (MB) for incremental recycle trigger.
+  "recycleServerOnHighRssThresholdMb": 4096,
+  // Minimum interval between recycle attempts (ms).
+  "recycleServerOnHighRssCooldownMs": 300000,
+  // Delay before recycle to let logs/responses flush (ms).
+  "recycleServerOnHighRssDelayMs": 2000,
   // Wait time for active readers before saving cache (ms).
   "saveReaderWaitTimeoutMs": 5000,
   // Enable ANN index for large codebases.

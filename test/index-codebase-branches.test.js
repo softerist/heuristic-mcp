@@ -694,6 +694,88 @@ describe('CodebaseIndexer Branch Coverage', () => {
     expect(gcSpy).toHaveBeenCalledWith({ force: true });
   });
 
+  it('recycles server after incremental cleanup when RSS stays above threshold', async () => {
+    vi.useFakeTimers();
+    indexer.config.clearCacheAfterIndex = false;
+    indexer.config.unloadModelAfterIndex = false;
+    indexer.config.verbose = false;
+    indexer.config.recycleServerOnHighRssAfterIncremental = true;
+    indexer.config.recycleServerOnHighRssThresholdMb = 1024;
+    indexer.config.recycleServerOnHighRssCooldownMs = 0;
+    indexer.config.recycleServerOnHighRssDelayMs = 100;
+    indexer.config.enableExplicitGc = false;
+
+    const memorySpy = vi.spyOn(process, 'memoryUsage').mockReturnValue({
+      rss: 2 * 1024 * 1024 * 1024,
+      heapUsed: 128 * 1024 * 1024,
+      heapTotal: 256 * 1024 * 1024,
+      external: 64 * 1024 * 1024,
+      arrayBuffers: 32 * 1024 * 1024,
+    });
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+
+    await indexer.runPostIncrementalCleanup('watch update');
+    vi.advanceTimersByTime(100);
+
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    memorySpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it('cancels high-RSS recycle when memory drops before delay elapses', async () => {
+    vi.useFakeTimers();
+    indexer.config.clearCacheAfterIndex = false;
+    indexer.config.unloadModelAfterIndex = false;
+    indexer.config.verbose = true;
+    indexer.config.recycleServerOnHighRssAfterIncremental = true;
+    indexer.config.recycleServerOnHighRssThresholdMb = 1024;
+    indexer.config.recycleServerOnHighRssCooldownMs = 0;
+    indexer.config.recycleServerOnHighRssDelayMs = 100;
+    indexer.config.enableExplicitGc = false;
+
+    const memorySpy = vi
+      .spyOn(process, 'memoryUsage')
+      .mockReturnValueOnce({
+        rss: 2 * 1024 * 1024 * 1024,
+        heapUsed: 128 * 1024 * 1024,
+        heapTotal: 256 * 1024 * 1024,
+        external: 64 * 1024 * 1024,
+        arrayBuffers: 32 * 1024 * 1024,
+      })
+      .mockReturnValueOnce({
+        rss: 512 * 1024 * 1024,
+        heapUsed: 96 * 1024 * 1024,
+        heapTotal: 192 * 1024 * 1024,
+        external: 32 * 1024 * 1024,
+        arrayBuffers: 16 * 1024 * 1024,
+      });
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+
+    await indexer.runPostIncrementalCleanup('watch update');
+    vi.advanceTimersByTime(100);
+
+    expect(exitSpy).not.toHaveBeenCalled();
+    memorySpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it('logs incremental memory trace phases when enabled', async () => {
+    indexer.config.incrementalMemoryProfile = true;
+    indexer.config.clearCacheAfterIndex = true;
+    indexer.config.unloadModelAfterIndex = false;
+    indexer.config.recycleServerOnHighRssAfterIncremental = false;
+    indexer.config.verbose = false;
+
+    await indexer.runPostIncrementalCleanup('watch update');
+
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('[Indexer][MemTrace] incremental.dropInMemoryVectors')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('[Indexer][MemTrace] incremental.explicitGc')
+    );
+  });
+
   it('skips unchanged files when hash matches', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['unchanged.js']);
     indexer.preFilterFiles = vi.fn().mockResolvedValue([{ file: 'unchanged.js', force: false }]);

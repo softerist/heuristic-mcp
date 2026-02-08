@@ -137,6 +137,8 @@ export class CodebaseIndexer {
     this._embeddingChildRestartThresholdMb = this.getEmbeddingChildRestartThresholdMb();
     this._embeddingChildStopping = false;
     this._lastExplicitGcAt = 0;
+    this._lastHighRssRecycleAt = 0;
+    this._pendingHighRssRecycleTimer = null;
   }
 
   rebuildExcludeMatchers() {
@@ -242,6 +244,40 @@ export class CodebaseIndexer {
     this._lastExplicitGcAt = now;
     global.gc();
     return true;
+  }
+
+  shouldTraceIncrementalMemory() {
+    return this.config.incrementalMemoryProfile === true;
+  }
+
+  formatMemoryUsage(usage = process.memoryUsage()) {
+    const toMb = (value) => `${(value / 1024 / 1024).toFixed(1)}MB`;
+    return (
+      `rss=${toMb(usage.rss)} ` +
+      `heap=${toMb(usage.heapUsed)}/${toMb(usage.heapTotal)} ` +
+      `ext=${toMb(usage.external)} arr=${toMb(usage.arrayBuffers)}`
+    );
+  }
+
+  async traceIncrementalMemoryPhase(phase, fn) {
+    if (!this.shouldTraceIncrementalMemory()) {
+      return await fn();
+    }
+    const startedAt = Date.now();
+    const startUsage = process.memoryUsage();
+    console.info(`[Indexer][MemTrace] ${phase} start: ${this.formatMemoryUsage(startUsage)}`);
+    try {
+      return await fn();
+    } finally {
+      const endUsage = process.memoryUsage();
+      const deltaRssMb = (endUsage.rss - startUsage.rss) / 1024 / 1024;
+      const deltaHeapMb = (endUsage.heapUsed - startUsage.heapUsed) / 1024 / 1024;
+      const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(2);
+      console.info(
+        `[Indexer][MemTrace] ${phase} end: ${this.formatMemoryUsage(endUsage)} ` +
+          `deltaRss=${deltaRssMb.toFixed(1)}MB deltaHeap=${deltaHeapMb.toFixed(1)}MB elapsed=${elapsedSec}s`
+      );
+    }
   }
 
   isPathInsideWorkspace(filePath) {
@@ -382,21 +418,89 @@ export class CodebaseIndexer {
     forceShutdownEmbeddingPool();
   }
 
+  maybeRecycleServerAfterIncremental(reason = 'watch update') {
+    if (this.config.recycleServerOnHighRssAfterIncremental !== true) return false;
+
+    const thresholdRaw = Number(this.config.recycleServerOnHighRssThresholdMb);
+    const thresholdMb = Number.isFinite(thresholdRaw) && thresholdRaw > 0 ? thresholdRaw : 4096;
+    const cooldownRaw = Number(this.config.recycleServerOnHighRssCooldownMs);
+    const cooldownMs = Number.isFinite(cooldownRaw) && cooldownRaw >= 0 ? cooldownRaw : 300000;
+    const delayRaw = Number(this.config.recycleServerOnHighRssDelayMs);
+    const delayMs = Number.isFinite(delayRaw) && delayRaw >= 0 ? delayRaw : 2000;
+
+    const now = Date.now();
+    if (this._lastHighRssRecycleAt && now - this._lastHighRssRecycleAt < cooldownMs) {
+      return false;
+    }
+
+    const rssMb = process.memoryUsage().rss / 1024 / 1024;
+    if (rssMb < thresholdMb) return false;
+
+    this._lastHighRssRecycleAt = now;
+    if (this._pendingHighRssRecycleTimer) {
+      clearTimeout(this._pendingHighRssRecycleTimer);
+      this._pendingHighRssRecycleTimer = null;
+    }
+
+    console.warn(
+      `[Indexer] High RSS after ${reason} cleanup (${rssMb.toFixed(1)}MB >= ${thresholdMb}MB); recycling server in ${(delayMs / 1000).toFixed(1)}s`
+    );
+
+    this._pendingHighRssRecycleTimer = setTimeout(() => {
+      this._pendingHighRssRecycleTimer = null;
+      this.runExplicitGc({ force: true });
+      const currentRssMb = process.memoryUsage().rss / 1024 / 1024;
+      if (currentRssMb < thresholdMb) {
+        if (this.config.verbose || this.shouldTraceIncrementalMemory()) {
+          console.info(
+            `[Indexer] High-RSS recycle canceled after ${reason}; rss dropped to ${currentRssMb.toFixed(1)}MB`
+          );
+        }
+        return;
+      }
+      console.warn(
+        `[Indexer] Recycling server process due to persistent high RSS after ${reason} (${currentRssMb.toFixed(1)}MB)`
+      );
+      process.exit(0);
+    }, delayMs);
+
+    if (typeof this._pendingHighRssRecycleTimer?.unref === 'function') {
+      this._pendingHighRssRecycleTimer.unref();
+    }
+    return true;
+  }
+
   async runPostIncrementalCleanup(reason = 'watch update') {
     if (this.config.clearCacheAfterIndex) {
-      await this.cache.dropInMemoryVectors();
+      await this.traceIncrementalMemoryPhase(`incremental.dropInMemoryVectors (${reason})`, async () => {
+        await this.cache.dropInMemoryVectors();
+      });
       if (this.config.verbose) {
         console.info(`[Cache] Cleared in-memory vectors after ${reason}`);
       }
       // Keep server RSS low after single-file updates where vector arrays can remain in old-gen.
-      this.runExplicitGc({ force: true });
+      await this.traceIncrementalMemoryPhase(`incremental.explicitGc (${reason})`, async () => {
+        this.runExplicitGc({ force: true });
+      });
     } else {
-      this.maybeRunIncrementalGc(reason);
+      await this.traceIncrementalMemoryPhase(`incremental.maybeRunGc (${reason})`, async () => {
+        this.maybeRunIncrementalGc(reason);
+      });
     }
     if (this.config.unloadModelAfterIndex) {
-      await this.unloadEmbeddingModels();
+      await this.traceIncrementalMemoryPhase(
+        `incremental.unloadEmbeddingModels (${reason})`,
+        async () => {
+          await this.unloadEmbeddingModels();
+        }
+      );
     }
-    this.maybeShutdownQueryEmbeddingPool(reason);
+    await this.traceIncrementalMemoryPhase(
+      `incremental.shutdownQueryPool (${reason})`,
+      async () => {
+        this.maybeShutdownQueryEmbeddingPool(reason);
+      }
+    );
     if (this.config.verbose) {
       const { rss, heapUsed, heapTotal } = process.memoryUsage();
       const toMb = (value) => `${(value / 1024 / 1024).toFixed(1)}MB`;
@@ -404,6 +508,7 @@ export class CodebaseIndexer {
         `[Indexer] Memory after ${reason} cleanup: rss=${toMb(rss)} heap=${toMb(heapUsed)}/${toMb(heapTotal)}`
       );
     }
+    this.maybeRecycleServerAfterIncremental(reason);
   }
 
   recordWorkerFailure(reason) {
@@ -1743,14 +1848,17 @@ export class CodebaseIndexer {
   }
 
   async indexFile(file) {
+    const fileName = path.basename(file);
     if (typeof this.cache.ensureLoaded === 'function') {
-      await this.cache.ensureLoaded({ preferDisk: this.shouldPreferDiskCacheLoad() });
+      const preferDisk = this.shouldPreferDiskCacheLoad();
+      await this.traceIncrementalMemoryPhase(`indexFile.ensureLoaded (${fileName})`, async () => {
+        await this.cache.ensureLoaded({ preferDisk });
+      });
     }
     if (!(await this.isPathInsideWorkspaceReal(file))) {
       console.warn(`[Indexer] Skipped ${path.basename(file)} (outside workspace)`);
       return 0;
     }
-    const fileName = path.basename(file);
     if (this.isExcluded(file)) {
       if (this.config.verbose) {
         console.info(`[Indexer] Skipped ${fileName} (excluded by pattern)`);
@@ -1850,14 +1958,18 @@ export class CodebaseIndexer {
         endLine: c.endLine,
       }));
 
-      let results = [];
-      if (useWorkers && this.workers.length > 0) {
-        results = await this.processChunksWithWorkers(chunksToProcess);
-      } else if (useEmbeddingProcessPerBatch) {
-        results = await this.processChunksInChildProcess(chunksToProcess);
-      } else {
-        results = await this.processChunksSingleThreaded(chunksToProcess);
-      }
+      const results = await this.traceIncrementalMemoryPhase(
+        `indexFile.embedChunks (${fileName})`,
+        async () => {
+          if (useWorkers && this.workers.length > 0) {
+            return await this.processChunksWithWorkers(chunksToProcess);
+          }
+          if (useEmbeddingProcessPerBatch) {
+            return await this.processChunksInChildProcess(chunksToProcess);
+          }
+          return await this.processChunksSingleThreaded(chunksToProcess);
+        }
+      );
 
       for (const result of results) {
         if (result.success) {
@@ -1879,20 +1991,22 @@ export class CodebaseIndexer {
       const totalChunks = chunks.length;
       const allSucceeded = totalChunks === 0 || failedChunks === 0;
 
-      if (allSucceeded) {
-        this.cache.removeFileFromStore(file);
-        for (const chunk of newChunks) {
-          this.cache.addToStore(chunk);
+      await this.traceIncrementalMemoryPhase(`indexFile.commit (${fileName})`, async () => {
+        if (allSucceeded) {
+          this.cache.removeFileFromStore(file);
+          for (const chunk of newChunks) {
+            this.cache.addToStore(chunk);
+          }
+          this.cache.setFileHash(file, hash, stats);
+          if (this.config.callGraphEnabled && callData) {
+            this.cache.setFileCallData(file, callData);
+          }
+        } else if (this.config.verbose) {
+          console.warn(
+            `[Indexer] Skipped hash update for ${fileName} (${successChunks}/${totalChunks} chunks embedded)`
+          );
         }
-        this.cache.setFileHash(file, hash, stats);
-        if (this.config.callGraphEnabled && callData) {
-          this.cache.setFileCallData(file, callData);
-        }
-      } else if (this.config.verbose) {
-        console.warn(
-          `[Indexer] Skipped hash update for ${fileName} (${successChunks}/${totalChunks} chunks embedded)`
-        );
-      }
+      });
 
       if (this.config.verbose) {
         console.info(`[Indexer] Completed ${fileName} (${addedChunks} chunks)`);
@@ -2820,7 +2934,10 @@ export class CodebaseIndexer {
     this.processingWatchEvents = true;
     try {
       if (typeof this.cache.ensureLoaded === 'function') {
-        await this.cache.ensureLoaded({ preferDisk: this.shouldPreferDiskCacheLoad() });
+        const preferDisk = this.shouldPreferDiskCacheLoad();
+        await this.traceIncrementalMemoryPhase('watchBatch.ensureLoaded', async () => {
+          await this.cache.ensureLoaded({ preferDisk });
+        });
       }
 
       while (this.pendingWatchEvents.size > 0) {
@@ -2840,8 +2957,12 @@ export class CodebaseIndexer {
           }
         }
 
-        await this.cache.save();
-        await this.runPostIncrementalCleanup('watch batch');
+        await this.traceIncrementalMemoryPhase('watchBatch.cacheSave', async () => {
+          await this.cache.save();
+        });
+        await this.traceIncrementalMemoryPhase('watchBatch.cleanup', async () => {
+          await this.runPostIncrementalCleanup('watch batch');
+        });
       }
     } finally {
       this.processingWatchEvents = false;
@@ -2884,8 +3005,18 @@ export class CodebaseIndexer {
           }
 
           await this.indexFile(fullPath);
-          await this.cache.save();
-          await this.runPostIncrementalCleanup(`watch ${eventType}`);
+          await this.traceIncrementalMemoryPhase(
+            `watchSingle.cacheSave (${path.basename(fullPath)})`,
+            async () => {
+              await this.cache.save();
+            }
+          );
+          await this.traceIncrementalMemoryPhase(
+            `watchSingle.cleanup (${path.basename(fullPath)})`,
+            async () => {
+              await this.runPostIncrementalCleanup(`watch ${eventType}`);
+            }
+          );
         } catch (err) {
           console.warn(`[Indexer] Failed to index ${path.basename(fullPath)}: ${err.message}`);
         } finally {
@@ -3017,12 +3148,19 @@ export class CodebaseIndexer {
         }
 
         if (typeof this.cache.ensureLoaded === 'function') {
-          await this.cache.ensureLoaded({ preferDisk: this.shouldPreferDiskCacheLoad() });
+          const preferDisk = this.shouldPreferDiskCacheLoad();
+          await this.traceIncrementalMemoryPhase(`watchUnlink.ensureLoaded (${filePath})`, async () => {
+            await this.cache.ensureLoaded({ preferDisk });
+          });
         }
         await this.cache.removeFileFromStore(fullPath);
         this.cache.deleteFileHash(fullPath);
-        await this.cache.save();
-        await this.runPostIncrementalCleanup('watch unlink');
+        await this.traceIncrementalMemoryPhase(`watchUnlink.cacheSave (${filePath})`, async () => {
+          await this.cache.save();
+        });
+        await this.traceIncrementalMemoryPhase(`watchUnlink.cleanup (${filePath})`, async () => {
+          await this.runPostIncrementalCleanup('watch unlink');
+        });
       })
       .on('ready', () => {
         console.info('[Indexer] File watcher ready and monitoring for changes');

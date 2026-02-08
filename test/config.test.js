@@ -155,6 +155,11 @@ describe('Configuration Loading', () => {
       process.env.SMART_CODING_EMBEDDING_PROCESS_GC_RSS_THRESHOLD_MB = '3072';
       process.env.SMART_CODING_EMBEDDING_PROCESS_GC_MIN_INTERVAL_MS = '20000';
       process.env.SMART_CODING_EMBEDDING_PROCESS_GC_MAX_REQUESTS = '12';
+      process.env.SMART_CODING_INCREMENTAL_MEMORY_PROFILE = 'true';
+      process.env.SMART_CODING_RECYCLE_SERVER_ON_HIGH_RSS_AFTER_INCREMENTAL = 'true';
+      process.env.SMART_CODING_RECYCLE_SERVER_RSS_THRESHOLD_MB = '3500';
+      process.env.SMART_CODING_RECYCLE_SERVER_COOLDOWN_MS = '120000';
+      process.env.SMART_CODING_RECYCLE_SERVER_DELAY_MS = '750';
       process.env.SMART_CODING_ANN_ENABLED = 'false';
       process.env.SMART_CODING_ANN_MIN_CHUNKS = '123';
       process.env.SMART_CODING_ANN_MIN_CANDIDATES = '10';
@@ -192,6 +197,11 @@ describe('Configuration Loading', () => {
       expect(config.embeddingProcessGcRssThresholdMb).toBe(3072);
       expect(config.embeddingProcessGcMinIntervalMs).toBe(20000);
       expect(config.embeddingProcessGcMaxRequestsWithoutCollection).toBe(12);
+      expect(config.incrementalMemoryProfile).toBe(true);
+      expect(config.recycleServerOnHighRssAfterIncremental).toBe(true);
+      expect(config.recycleServerOnHighRssThresholdMb).toBe(3500);
+      expect(config.recycleServerOnHighRssCooldownMs).toBe(120000);
+      expect(config.recycleServerOnHighRssDelayMs).toBe(750);
       expect(config.annEnabled).toBe(false);
       expect(config.annMinChunks).toBe(123);
       expect(config.annMinCandidates).toBe(10);
