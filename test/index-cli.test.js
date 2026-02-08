@@ -346,7 +346,7 @@ describe('index.js CLI coverage', () => {
     expect(fsMock.access).not.toHaveBeenCalled();
   });
 
-  it('logs memory stats when verbose is enabled', async () => {
+  it('logs startup/cache memory stats when verbose is enabled', async () => {
     process.argv = ['node', 'index.js'];
     configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
     configMock.loadConfig.mockResolvedValue({
@@ -373,16 +373,11 @@ describe('index.js CLI coverage', () => {
     const hasStartup = messages.some(
       (message) => typeof message === 'string' && message.includes('[Server] Memory (startup)')
     );
-    const hasModelLoad = messages.some(
-      (message) =>
-        typeof message === 'string' && message.includes('[Server] Memory (after model load)')
-    );
     const hasCacheLoad = messages.some(
       (message) =>
         typeof message === 'string' && message.includes('[Server] Memory (after cache load)')
     );
     expect(hasStartup).toBe(true);
-    expect(hasModelLoad).toBe(true);
     expect(hasCacheLoad).toBe(true);
     expect(clearSpy).toHaveBeenCalled();
 

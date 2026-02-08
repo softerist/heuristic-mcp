@@ -2358,9 +2358,47 @@ export class CodebaseIndexer {
                 if (this.config.verbose)
                   console.info(`[Indexer] Fallback for ${path.basename(res.file)}`);
 
+                let fallbackContent = original.content;
+                let fallbackSize = stats.size;
+                let fallbackMtimeMs = stats.mtimeMs;
+
+                if (fallbackContent === undefined || fallbackContent === null) {
+                  try {
+                    const liveStats = await fs.stat(res.file);
+                    if (!liveStats || typeof liveStats.isDirectory !== 'function') {
+                      continue;
+                    }
+                    if (liveStats.isDirectory()) continue;
+                    if (liveStats.size > this.config.maxFileSize) {
+                      if (this.config.verbose) {
+                        console.warn(
+                          `[Indexer] Skipped ${path.basename(res.file)} (too large: ${(liveStats.size / 1024 / 1024).toFixed(2)}MB)`
+                        );
+                      }
+                      continue;
+                    }
+                    fallbackContent = await fs.readFile(res.file, 'utf-8');
+                    fallbackSize = liveStats.size;
+                    fallbackMtimeMs = liveStats.mtimeMs;
+                  } catch (err) {
+                    if (this.config.verbose) {
+                      console.warn(
+                        `[Indexer] Fallback read failed for ${path.basename(res.file)}: ${err.message}`
+                      );
+                    }
+                    continue;
+                  }
+                }
+                if (typeof fallbackContent !== 'string') {
+                  fallbackContent = String(fallbackContent);
+                }
+                stats.hash = hashContent(fallbackContent);
+                if (Number.isFinite(fallbackSize)) stats.size = fallbackSize;
+                if (Number.isFinite(fallbackMtimeMs)) stats.mtimeMs = fallbackMtimeMs;
+
                 if (this.config.callGraphEnabled) {
                   try {
-                    callDataByFile.set(res.file, extractCallData(original.content, res.file));
+                    callDataByFile.set(res.file, extractCallData(fallbackContent, res.file));
                   } catch (err) {
                     if (this.config.verbose) {
                       console.warn(
@@ -2369,7 +2407,7 @@ export class CodebaseIndexer {
                     }
                   }
                 }
-                const fallbackChunks = smartChunk(original.content, res.file, this.config);
+                const fallbackChunks = smartChunk(fallbackContent, res.file, this.config);
                 const chunks = Array.isArray(fallbackChunks) ? fallbackChunks : [];
                 stats.totalChunks = chunks.length;
                 for (const chunk of chunks) {
@@ -2423,14 +2461,22 @@ export class CodebaseIndexer {
               this.cache.addToStore(chunk);
               totalChunks++;
             }
-            this.cache.setFileHash(file, stats.hash, { size: stats.size, mtimeMs: stats.mtimeMs });
+            if (typeof stats.hash === 'string' && stats.hash.length > 0) {
+              this.cache.setFileHash(file, stats.hash, { size: stats.size, mtimeMs: stats.mtimeMs });
+            } else if (this.config.verbose) {
+              console.warn(`[Indexer] Skipped hash update for ${path.basename(file)} (missing hash)`);
+            }
             const callData = callDataByFile.get(file);
             if (callData && this.config.callGraphEnabled) {
               this.cache.setFileCallData(file, callData);
             }
           } else if (stats.totalChunks === 0) {
             // File had no chunks (empty or comments only), just mark as indexed
-            this.cache.setFileHash(file, stats.hash, { size: stats.size, mtimeMs: stats.mtimeMs });
+            if (typeof stats.hash === 'string' && stats.hash.length > 0) {
+              this.cache.setFileHash(file, stats.hash, { size: stats.size, mtimeMs: stats.mtimeMs });
+            } else if (this.config.verbose) {
+              console.warn(`[Indexer] Skipped hash update for ${path.basename(file)} (missing hash)`);
+            }
             const callData = callDataByFile.get(file);
             if (callData && this.config.callGraphEnabled) {
               this.cache.setFileCallData(file, callData);
@@ -2451,8 +2497,9 @@ export class CodebaseIndexer {
           processedFiles % (adaptiveBatchSize * 2) === 0 ||
           processedFiles === filesToProcess.length
         ) {
-          const elapsed = ((Date.now() - totalStartTime) / 1000).toFixed(1);
-          const rate = (processedFiles / parseFloat(elapsed)).toFixed(1);
+          const elapsedSeconds = (Date.now() - totalStartTime) / 1000;
+          const elapsed = elapsedSeconds.toFixed(1);
+          const rate = (processedFiles / Math.max(elapsedSeconds, 0.001)).toFixed(1);
           console.info(
             `[Indexer] Progress: ${processedFiles}/${filesToProcess.length} files (${rate} files/sec, ${elapsed}s elapsed)`
           );

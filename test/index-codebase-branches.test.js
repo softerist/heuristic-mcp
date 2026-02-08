@@ -528,6 +528,56 @@ describe('CodebaseIndexer Branch Coverage', () => {
     );
   });
 
+  it('re-reads file content when worker retry result has no inline content', async () => {
+    indexer.config.verbose = true;
+    indexer.config.workerThreads = 1;
+    indexer.config.allowSingleThreadFallback = true;
+    indexer.config.maxFileSize = 1024;
+
+    indexer.shouldUseWorkers = vi.fn().mockReturnValue(true);
+    indexer.initializeWorkers = vi.fn(async () => {
+      indexer.workers = [{ once: vi.fn(), postMessage: vi.fn(), terminate: vi.fn(), off: vi.fn() }];
+    });
+    indexer.terminateWorkers = vi.fn().mockResolvedValue(undefined);
+
+    indexer.discoverFiles = vi.fn().mockResolvedValue(['/test/retry.js']);
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([
+      { file: '/test/retry.js', force: false, size: 20, mtimeMs: 10 },
+    ]);
+    indexer.processFilesWithWorkers = vi
+      .fn()
+      .mockResolvedValue([{ file: '/test/retry.js', status: 'retry' }]);
+    indexer.processChunksSingleThreaded = vi
+      .fn()
+      .mockResolvedValue([
+        {
+          success: true,
+          file: '/test/retry.js',
+          startLine: 1,
+          endLine: 1,
+          content: 'const x = 1;',
+          vector: [0.1],
+        },
+      ]);
+
+    vi.spyOn(fs, 'stat').mockResolvedValue({
+      isDirectory: () => false,
+      size: 20,
+      mtimeMs: 123,
+    });
+    vi.spyOn(fs, 'readFile').mockResolvedValue('const x = 1;');
+
+    const result = await indexer.indexAll();
+
+    expect(result?.skipped).toBe(false);
+    expect(fs.readFile).toHaveBeenCalledWith('/test/retry.js', 'utf-8');
+    expect(mockCache.setFileHash).toHaveBeenCalledWith(
+      '/test/retry.js',
+      expect.any(String),
+      expect.objectContaining({ size: 20, mtimeMs: 123 })
+    );
+  });
+
   it('skips unchanged files when hash matches', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['unchanged.js']);
     indexer.preFilterFiles = vi.fn().mockResolvedValue([{ file: 'unchanged.js', force: false }]);

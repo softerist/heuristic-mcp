@@ -314,11 +314,11 @@ describe('Configuration Loading', () => {
         path.join(dir, 'config.json'),
         JSON.stringify({ smartIndexing: false, verbose: true })
       );
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       await loadConfig(dir);
 
-      const called = errorSpy.mock.calls.some(
+      const called = infoSpy.mock.calls.some(
         (call) => typeof call[0] === 'string' && call[0].includes('Using existing local cache')
       );
       expect(called).toBe(true);
