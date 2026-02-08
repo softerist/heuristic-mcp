@@ -118,6 +118,81 @@ describe('Configuration Loading', () => {
     });
   });
 
+  it('applies grouped namespace values for worker/embedding/vector/search/ann and maps to runtime keys', async () => {
+    await withTempDir(async (dir) => {
+      const configData = {
+        smartIndexing: false,
+        // Legacy values intentionally opposite to verify namespace precedence.
+        workerThreads: 0,
+        embeddingProcessNumThreads: 4,
+        vectorStoreLoadMode: 'memory',
+        semanticWeight: 0.1,
+        annEnabled: false,
+        worker: {
+          workerThreads: 2,
+          workerBatchTimeoutMs: 90000,
+        },
+        embedding: {
+          embeddingProcessNumThreads: 10,
+          embeddingProcessPerBatch: true,
+        },
+        vectorStore: {
+          vectorStoreLoadMode: 'disk',
+          contentCacheEntries: 64,
+        },
+        search: {
+          semanticWeight: 0.6,
+          exactMatchBoost: 2.25,
+        },
+        ann: {
+          annEnabled: true,
+          annEfSearch: 80,
+        },
+      };
+
+      await fs.writeFile(path.join(dir, 'config.json'), JSON.stringify(configData));
+
+      const config = await loadConfig(dir);
+      expect(config.workerThreads).toBe(2);
+      expect(config.workerBatchTimeoutMs).toBe(90000);
+      expect(config.embeddingProcessNumThreads).toBe(10);
+      expect(config.embeddingProcessPerBatch).toBe(true);
+      expect(config.vectorStoreLoadMode).toBe('disk');
+      expect(config.contentCacheEntries).toBe(64);
+      expect(config.semanticWeight).toBe(0.6);
+      expect(config.exactMatchBoost).toBe(2.25);
+      expect(config.annEnabled).toBe(true);
+      expect(config.annEfSearch).toBe(80);
+      expect(config.worker.workerThreads).toBe(2);
+      expect(config.embedding.embeddingProcessNumThreads).toBe(10);
+      expect(config.vectorStore.vectorStoreLoadMode).toBe('disk');
+      expect(config.search.semanticWeight).toBe(0.6);
+      expect(config.ann.annEnabled).toBe(true);
+    });
+  });
+
+  it('falls back to legacy top-level keys when grouped namespaces are not provided', async () => {
+    await withTempDir(async (dir) => {
+      const configData = {
+        smartIndexing: false,
+        workerThreads: 1,
+        embeddingProcessNumThreads: 6,
+        vectorStoreLoadMode: 'disk',
+        semanticWeight: 0.5,
+        annEnabled: false,
+      };
+
+      await fs.writeFile(path.join(dir, 'config.json'), JSON.stringify(configData));
+      const config = await loadConfig(dir);
+
+      expect(config.worker.workerThreads).toBe(1);
+      expect(config.embedding.embeddingProcessNumThreads).toBe(6);
+      expect(config.vectorStore.vectorStoreLoadMode).toBe('disk');
+      expect(config.search.semanticWeight).toBe(0.5);
+      expect(config.ann.annEnabled).toBe(false);
+    });
+  });
+
   it('loads default config when file missing', async () => {
     await withTempDir(async (dir) => {
       const config = await loadConfig(dir);
@@ -257,6 +332,10 @@ describe('Configuration Loading', () => {
       expect(config.memoryCleanup.incrementalMemoryProfile).toBe(true);
       expect(config.memoryCleanup.recycleServerOnHighRssAfterIncremental).toBe(true);
       expect(config.memoryCleanup.recycleServerOnHighRssThresholdMb).toBe(3500);
+      expect(config.worker.workerThreads).toBe(3);
+      expect(config.vectorStore.vectorStoreLoadMode).toBe('disk');
+      expect(config.search.semanticWeight).toBe(0.3);
+      expect(config.ann.annEnabled).toBe(false);
       expect(config.annEnabled).toBe(false);
       expect(config.annMinChunks).toBe(123);
       expect(config.annMinCandidates).toBe(10);

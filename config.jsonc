@@ -626,73 +626,114 @@
     "**/vendor/**",
     "**/.smart-coding-cache/**",
   ],
-  // Enable project-type detection + smart ignore patterns.
-  "smartIndexing": true,
-  // Lines per chunk.
-  "chunkSize": 16,
-  // Overlapping lines between chunks.
-  "chunkOverlap": 4,
-  // Files per indexing batch.
-  "batchSize": 50,
-  // Skip files larger than this many bytes.
-  "maxFileSize": 1048576,
-  // Maximum number of search results.
-  "maxResults": 5,
-  // Persist embeddings between sessions.
-  "enableCache": true,
-  // Remove stale caches automatically.
-  "autoCleanStaleCaches": true,
-  // Assume vectors are finite (skip validation).
-  "cacheVectorAssumeFinite": true,
-  // Decimal precision for cached vectors (null = default).
-  "cacheVectorFloatDigits": null,
-  // Write stream highWaterMark for cache files.
-  "cacheWriteHighWaterMark": 262144,
-  // Flush threshold (chars) for JSON writer.
-  "cacheVectorFlushChars": 262144,
-  // Validate vectors contain only finite numbers.
-  "cacheVectorCheckFinite": true,
-  // Avoid mutating vectors during serialization.
-  "cacheVectorNoMutation": false,
-  // Join threshold for JSON array chunks.
-  "cacheVectorJoinThreshold": 8192,
-  // Chunk size for JSON join optimization.
-  "cacheVectorJoinChunkSize": 2048,
-  // Enable file watcher for incremental indexing.
-  "watchFiles": true,
-  // Enable verbose logging.
-  "verbose": true,
-  // Embedding model identifier.
-  "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
-  // Preload the embedding model on startup. Set to false when using child processes for memory savings.
-  "preloadEmbeddingModel": false,
-  // Vector store format: json, binary, or sqlite.
-  "vectorStoreFormat": "binary",
-  // Content storage: external or inline.
-  "vectorStoreContentMode": "external",
-  // In-memory content cache entries (binary store).
-  "contentCacheEntries": 256,
-  // Vector loading mode: "disk" keeps RAM lower by streaming vectors as needed.
-  "vectorStoreLoadMode": "disk",
-  // Weight for semantic similarity scoring.
-  "semanticWeight": 0.7,
-  // Score boost for exact text matches.
-  "exactMatchBoost": 1.5,
-  // Number of embedding workers (0 disables).
-  // Windows + heavy Jina models are more stable with child-process embedding than worker pools.
-  "workerThreads": 0,
-  // Worker batch timeout in milliseconds.
-  "workerBatchTimeoutMs": 120000,
-  // Failures before worker circuit opens.
-  "workerFailureThreshold": 1,
-  // Cooldown before re-enabling workers (ms).
-  "workerFailureCooldownMs": 600000,
-  // Max chunks per worker batch.
-  "workerMaxChunksPerBatch": 20,
-  // Allow fallback to main-thread embeddings.
-  "allowSingleThreadFallback": false,
-  // Abort worker embedding batches after repeated consecutive embedding failures.
-  "failFastEmbeddingErrors": false,
+  // Indexing controls.
+  "indexing": {
+    // Enable project-type detection + smart ignore patterns.
+    "smartIndexing": true,
+    // Lines per chunk.
+    "chunkSize": 16,
+    // Overlapping lines between chunks.
+    "chunkOverlap": 4,
+    // Files per indexing batch.
+    "batchSize": 50,
+    // Skip files larger than this many bytes.
+    "maxFileSize": 1048576,
+    // Maximum number of search results.
+    "maxResults": 5,
+    // Enable file watcher for incremental indexing.
+    "watchFiles": true,
+  },
+  // Logging and diagnostics.
+  "logging": {
+    // Enable verbose logging.
+    "verbose": true,
+  },
+  // Cache engine and serialization controls.
+  "cache": {
+    // Persist embeddings between sessions.
+    "enableCache": true,
+    // Assume vectors are finite (skip validation).
+    "cacheVectorAssumeFinite": true,
+    // Decimal precision for cached vectors (null = default).
+    "cacheVectorFloatDigits": null,
+    // Write stream highWaterMark for cache files.
+    "cacheWriteHighWaterMark": 262144,
+    // Flush threshold (chars) for JSON writer.
+    "cacheVectorFlushChars": 262144,
+    // Validate vectors contain only finite numbers.
+    "cacheVectorCheckFinite": true,
+    // Avoid mutating vectors during serialization.
+    "cacheVectorNoMutation": false,
+    // Join threshold for JSON array chunks.
+    "cacheVectorJoinThreshold": 8192,
+    // Chunk size for JSON join optimization.
+    "cacheVectorJoinChunkSize": 2048,
+    // Wait time for active readers before saving cache (ms).
+    "saveReaderWaitTimeoutMs": 5000,
+  },
+  // Stale cache cleanup policy.
+  "cacheCleanup": {
+    // Remove stale caches automatically.
+    "autoCleanup": true,
+  },
+  // Worker-thread controls.
+  "worker": {
+    // Number of embedding workers (0 disables).
+    // Windows + heavy Jina models are more stable with child-process embedding than worker pools.
+    "workerThreads": 0,
+    // Worker batch timeout in milliseconds.
+    "workerBatchTimeoutMs": 120000,
+    // Failures before worker circuit opens.
+    "workerFailureThreshold": 1,
+    // Cooldown before re-enabling workers (ms).
+    "workerFailureCooldownMs": 600000,
+    // Max chunks per worker batch.
+    "workerMaxChunksPerBatch": 20,
+    // Allow fallback to main-thread embeddings.
+    "allowSingleThreadFallback": false,
+    // Abort worker embedding batches after repeated consecutive embedding failures.
+    "failFastEmbeddingErrors": false,
+  },
+  // Embedding/runtime controls.
+  "embedding": {
+    // Embedding model identifier.
+    "embeddingModel": "jinaai/jina-embeddings-v2-base-code",
+    // Preload the embedding model on startup. Set to false when using child processes for memory savings.
+    "preloadEmbeddingModel": false,
+    // Use child process per batch for memory isolation.
+    "embeddingProcessPerBatch": true,
+    // Auto-enable child process when no workers + heavy model.
+    "autoEmbeddingProcessPerBatch": false,
+    // Override embedding batch size (null = auto).
+    "embeddingBatchSize": null,
+    // ONNX threads used by embedding child process.
+    // 6 is a practical balance on 24-thread desktop CPUs (high throughput, less contention than 8+).
+    "embeddingProcessNumThreads": 8,
+    // Embedding-child adaptive GC RSS threshold in MB (higher = less frequent GC).
+    "embeddingProcessGcRssThresholdMb": 2048,
+    // Minimum interval between embedding-child GC runs.
+    "embeddingProcessGcMinIntervalMs": 15000,
+    // Backstop GC cadence if threshold is not crossed.
+    "embeddingProcessGcMaxRequestsWithoutCollection": 8,
+  },
+  // Vector store backend controls.
+  "vectorStore": {
+    // Vector store format: json, binary, or sqlite.
+    "vectorStoreFormat": "binary",
+    // Content storage: external or inline.
+    "vectorStoreContentMode": "external",
+    // In-memory content cache entries (binary store).
+    "contentCacheEntries": 256,
+    // Vector loading mode: "disk" keeps RAM lower by streaming vectors as needed.
+    "vectorStoreLoadMode": "disk",
+  },
+  // Search scoring controls.
+  "search": {
+    // Weight for semantic similarity scoring.
+    "semanticWeight": 0.7,
+    // Score boost for exact text matches.
+    "exactMatchBoost": 1.5,
+  },
   // Memory cleanup and memory-footprint controls.
   "memoryCleanup": {
     // Enable explicit GC (requires --expose-gc).
@@ -721,41 +762,33 @@
     // Delay before recycle to let logs/responses flush (ms).
     "recycleServerOnHighRssDelayMs": 2000,
   },
-  // Use child process per batch for memory isolation.
-  "embeddingProcessPerBatch": true,
-  // Auto-enable child process when no workers + heavy model.
-  "autoEmbeddingProcessPerBatch": false,
-  // Override embedding batch size (null = auto).
-  "embeddingBatchSize": null,
-  // ONNX threads used by embedding child process.
-  // 6 is a practical balance on 24-thread desktop CPUs (high throughput, less contention than 8+).
-  "embeddingProcessNumThreads": 8,
-  // Embedding-child adaptive GC RSS threshold in MB (higher = less frequent GC).
-  "embeddingProcessGcRssThresholdMb": 2048,
-  // Minimum interval between embedding-child GC runs.
-  "embeddingProcessGcMinIntervalMs": 15000,
-  // Backstop GC cadence if threshold is not crossed.
-  "embeddingProcessGcMaxRequestsWithoutCollection": 8,
-  // Wait time for active readers before saving cache (ms).
-  "saveReaderWaitTimeoutMs": 5000,
-  // Enable ANN index for large codebases.
-  "annEnabled": true,
-  // Minimum chunks required to build ANN.
-  "annMinChunks": 5000,
-  // Minimum ANN candidates to retrieve.
-  "annMinCandidates": 50,
-  // Maximum ANN candidates to retrieve.
-  "annMaxCandidates": 200,
-  // Scale ANN candidates by this multiplier.
-  "annCandidateMultiplier": 20,
-  // HNSW efConstruction value.
-  "annEfConstruction": 200,
-  // HNSW efSearch value.
-  "annEfSearch": 64,
-  // HNSW M parameter (graph degree).
-  "annM": 16,
-  // Persist ANN index to disk.
-  "annIndexCache": true,
-  // ANN distance metric.
-  "annMetric": "cosine",
+  // Call graph proximity boosting controls.
+  "callGraph": {
+    "callGraphEnabled": true,
+    "callGraphBoost": 0.15,
+    "callGraphMaxHops": 1,
+  },
+  // ANN index controls.
+  "ann": {
+    // Enable ANN index for large codebases.
+    "annEnabled": true,
+    // Minimum chunks required to build ANN.
+    "annMinChunks": 5000,
+    // Minimum ANN candidates to retrieve.
+    "annMinCandidates": 50,
+    // Maximum ANN candidates to retrieve.
+    "annMaxCandidates": 200,
+    // Scale ANN candidates by this multiplier.
+    "annCandidateMultiplier": 20,
+    // HNSW efConstruction value.
+    "annEfConstruction": 200,
+    // HNSW efSearch value.
+    "annEfSearch": 64,
+    // HNSW M parameter (graph degree).
+    "annM": 16,
+    // Persist ANN index to disk.
+    "annIndexCache": true,
+    // ANN distance metric.
+    "annMetric": "cosine",
+  },
 }
