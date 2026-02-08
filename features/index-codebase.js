@@ -131,6 +131,7 @@ export class CodebaseIndexer {
     this._embeddingRequestId = 0;
     this._embeddingChildNeedsRestart = false;
     this._embeddingChildRestartThresholdMb = this.getEmbeddingChildRestartThresholdMb();
+    this._embeddingChildStopping = false;
     this._lastExplicitGcAt = 0;
   }
 
@@ -1228,6 +1229,7 @@ export class CodebaseIndexer {
 
     this._embeddingChild = child;
     this._embeddingProcessSessionActive = true;
+    this._embeddingChildStopping = false;
     this._embeddingChildBuffer = '';
     this._embeddingChildQueue = [];
     if (!this._embeddingSessionStats) {
@@ -1319,6 +1321,16 @@ export class CodebaseIndexer {
           }
           entry.resolve(parsed?.results || []);
         } else if (this.config.verbose) {
+          const isControlResponse =
+            parsed &&
+            typeof parsed === 'object' &&
+            !Array.isArray(parsed) &&
+            Object.prototype.hasOwnProperty.call(parsed, 'success') &&
+            !Object.prototype.hasOwnProperty.call(parsed, 'results');
+          if (isControlResponse || this._embeddingChildStopping) {
+            newlineIndex = this._embeddingChildBuffer.indexOf('\n');
+            continue;
+          }
           console.warn('[Indexer] Persistent embedding response with no pending request');
         }
       }
@@ -1343,7 +1355,11 @@ export class CodebaseIndexer {
 
   async stopEmbeddingProcessSession({ preserveStats = false } = {}) {
     const child = this._embeddingChild;
-    if (!child) return;
+    if (!child) {
+      this._embeddingChildStopping = false;
+      return;
+    }
+    this._embeddingChildStopping = true;
     const childPid = child?.pid ?? 'unknown';
     if (this.config.verbose) {
       console.info(`[Indexer] Stopping persistent embedding process pid=${childPid}`);
@@ -1389,6 +1405,7 @@ export class CodebaseIndexer {
     }
     this._embeddingChild = null;
     this._embeddingProcessSessionActive = false;
+    this._embeddingChildStopping = false;
     // Clear buffers to release memory
     this._embeddingChildBuffer = '';
     this._embeddingChildQueue = [];

@@ -173,6 +173,30 @@ describe('CodebaseIndexer Branch Coverage', () => {
     await promise;
   });
 
+  it('ignores control responses without pending child requests', () => {
+    indexer._embeddingChildQueue = [];
+    indexer._embeddingChildBuffer = '';
+    indexer._embeddingChildStopping = false;
+
+    indexer._handleEmbeddingChildStdout(Buffer.from('{"success":true,"wasLoaded":true}\n'));
+
+    expect(console.warn).not.toHaveBeenCalledWith(
+      '[Indexer] Persistent embedding response with no pending request'
+    );
+  });
+
+  it('still warns for unexpected embedding responses without pending child requests', () => {
+    indexer._embeddingChildQueue = [];
+    indexer._embeddingChildBuffer = '';
+    indexer._embeddingChildStopping = false;
+
+    indexer._handleEmbeddingChildStdout(Buffer.from('{"results":[{"ok":true}]}\n'));
+
+    expect(console.warn).toHaveBeenCalledWith(
+      '[Indexer] Persistent embedding response with no pending request'
+    );
+  });
+
   it('logs warning when worker initialization fails', async () => {
     indexer.config.workerThreads = 2;
     workerMode = 'error';
