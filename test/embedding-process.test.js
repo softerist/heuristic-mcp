@@ -28,5 +28,14 @@ describe('embedding-process getEmbedder', () => {
     expect(pipeline).toHaveBeenCalledTimes(2);
     expect(pipeline.mock.calls[0][1]).toBe('model-a');
     expect(pipeline.mock.calls[1][1]).toBe('model-b');
+    expect(pipeline.mock.calls[0][2]).toEqual(
+      expect.objectContaining({
+        session_options: expect.objectContaining({
+          numThreads: 1,
+          intraOpNumThreads: 1,
+          interOpNumThreads: 1,
+        }),
+      })
+    );
   });
 });

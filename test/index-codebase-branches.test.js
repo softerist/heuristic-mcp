@@ -147,6 +147,19 @@ describe('CodebaseIndexer Branch Coverage', () => {
     await indexer.initializeWorkers();
   });
 
+  it('applies heavy-model auto worker safety policy', async () => {
+    indexer.config.workerThreads = 'auto';
+    indexer.config.embeddingModel = 'jinaai/jina-embeddings-v2-base-code';
+    vi.spyOn(os, 'cpus').mockReturnValue(Array(8).fill({}));
+    vi.spyOn(os, 'freemem').mockReturnValue(32 * 1024 * 1024 * 1024);
+    vi.spyOn(os, 'totalmem').mockReturnValue(64 * 1024 * 1024 * 1024);
+
+    await indexer.initializeWorkers();
+
+    const expectedWorkers = process.platform === 'win32' ? 1 : 2;
+    expect(indexer.workers.length).toBe(expectedWorkers);
+  });
+
   it('covers initializeWorkers timeout branch', async () => {
     vi.useFakeTimers();
     workerMode = 'none';

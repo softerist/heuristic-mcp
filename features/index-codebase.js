@@ -107,6 +107,7 @@ export class CodebaseIndexer {
     this.workspaceRootReal = null;
     this._lastIncrementalGcAt = 0;
     this._autoEmbeddingProcessLogged = false;
+    this._heavyWorkerSafetyLogged = false;
     // Debounce timers for watcher events (path -> timeout ID)
     this._watcherDebounceTimers = new Map();
     // Files currently being indexed via watcher (path -> Promise)
@@ -283,6 +284,17 @@ export class CodebaseIndexer {
     return model.includes('jina');
   }
 
+  getWorkerInferenceBatchSize({ numWorkers = null } = {}) {
+    const configured =
+      Number.isInteger(this.config.embeddingBatchSize) && this.config.embeddingBatchSize > 0
+        ? this.config.embeddingBatchSize
+        : null;
+    if (configured) return Math.min(configured, 256);
+    // Heavy models are more stable with batch=1 in multi-worker mode on some runtimes.
+    if (this.isHeavyEmbeddingModel() && Number.isInteger(numWorkers) && numWorkers > 1) return 1;
+    return null;
+  }
+
   shouldUseEmbeddingProcessPerBatch(useWorkers = null) {
     if (this.config.embeddingProcessPerBatch) return true;
     if (isTestEnv()) return false;
@@ -378,15 +390,16 @@ export class CodebaseIndexer {
               ? this.config.workerThreads
               : 1;
 
-        // Heavy models (e.g., Jina) can consume multiple GB per worker.
-        // Disable workers in auto mode to avoid OOMs on typical desktops.
-        if (this.config.workerThreads === 'auto' && this.isHeavyEmbeddingModel()) {
-          if (numWorkers > 0 && this.config.verbose) {
-            console.info(
-              '[Indexer] Heavy embedding model detected; disabling auto workers to avoid OOM'
+        // Heavy models can consume multiple GB per worker. Keep auto mode bounded by
+        // existing memory guards below; do not hard-pin to 1 worker as it can hurt throughput.
+        if (process.platform === 'win32' && this.isHeavyEmbeddingModel() && numWorkers > 1) {
+          if (!this._heavyWorkerSafetyLogged) {
+            console.warn(
+              '[Indexer] Heavy model worker safety mode: forcing workers=1 on Windows to avoid native multi-worker crashes'
             );
+            this._heavyWorkerSafetyLogged = true;
           }
-          numWorkers = 0;
+          numWorkers = 1;
         }
 
         // Resource-aware scaling: check available RAM (skip in test env to avoid mocking issues)
@@ -446,6 +459,13 @@ export class CodebaseIndexer {
           `[Indexer] Initializing ${numWorkers} worker threads (${threadsPerWorker} threads per worker)...`
         );
 
+        const workerInferenceBatchSize = this.getWorkerInferenceBatchSize({ numWorkers });
+        if (this.config.verbose && Number.isInteger(workerInferenceBatchSize)) {
+          console.info(
+            `[Indexer] Worker inference batch size: ${workerInferenceBatchSize}`
+          );
+        }
+
         for (let i = 0; i < numWorkers; i++) {
           try {
             const worker = new Worker(new URL('../lib/embedding-worker.js', import.meta.url), {
@@ -460,6 +480,7 @@ export class CodebaseIndexer {
                 callGraphEnabled: this.config.callGraphEnabled,
                 enableExplicitGc: this.config.enableExplicitGc,
                 failFastEmbeddingErrors: this.config.failFastEmbeddingErrors === true,
+                inferenceBatchSize: workerInferenceBatchSize,
               },
             });
 
@@ -745,6 +766,10 @@ export class CodebaseIndexer {
 
     // Use 1 thread per worker to match initializeWorkers and prevent CPU saturation
     const threadsPerWorker = 1;
+    const activeWorkerCount = this.workers.filter(Boolean).length || 1;
+    const workerInferenceBatchSize = this.getWorkerInferenceBatchSize({
+      numWorkers: activeWorkerCount,
+    });
     const newWorker = new Worker(new URL('../lib/embedding-worker.js', import.meta.url), {
       workerData: {
         workerId: index,
@@ -757,6 +782,7 @@ export class CodebaseIndexer {
         callGraphEnabled: this.config.callGraphEnabled,
         enableExplicitGc: this.config.enableExplicitGc,
         failFastEmbeddingErrors: this.config.failFastEmbeddingErrors === true,
+        inferenceBatchSize: workerInferenceBatchSize,
       },
     });
 
@@ -1722,9 +1748,11 @@ export class CodebaseIndexer {
       const useEmbeddingProcessPerBatch = this.shouldUseEmbeddingProcessPerBatch(useWorkers);
       let embeddingRuntimeSummary = '';
       if (useWorkers && this.workers.length > 0) {
+        const workerInferenceBatchSize =
+          this.getWorkerInferenceBatchSize({ numWorkers: this.workers.length }) ?? 'default';
         embeddingRuntimeSummary =
           `mode=worker-pool workers=${this.workers.length} onnxThreadsPerWorker=1 ` +
-          `effectiveThreads=${this.workers.length}`;
+          `effectiveThreads=${this.workers.length} inferenceBatchSize=${workerInferenceBatchSize}`;
       } else if (useEmbeddingProcessPerBatch) {
         const { threads, batchSize } = this.getEmbeddingProcessConfig();
         embeddingRuntimeSummary =
@@ -2176,9 +2204,11 @@ export class CodebaseIndexer {
       let embeddingRuntimeSummary = '';
       if (useWorkers && this.workers.length > 0) {
         // Worker pool is intentionally fixed to 1 ONNX thread per worker.
+        const workerInferenceBatchSize =
+          this.getWorkerInferenceBatchSize({ numWorkers: this.workers.length }) ?? 'default';
         embeddingRuntimeSummary =
           `mode=worker-pool workers=${this.workers.length} onnxThreadsPerWorker=1 ` +
-          `effectiveThreads=${this.workers.length}`;
+          `effectiveThreads=${this.workers.length} inferenceBatchSize=${workerInferenceBatchSize}`;
       } else if (useEmbeddingProcessPerBatch) {
         const { threads, batchSize } = this.getEmbeddingProcessConfig();
         embeddingRuntimeSummary =

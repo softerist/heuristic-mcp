@@ -39,6 +39,7 @@ describe('embedding-worker', () => {
     });
     parentPort.postMessage.mockReset();
     workerData.embeddingModel = 'test-model';
+    workerData.numThreads = 1;
     workerData.failFastEmbeddingErrors = false;
     pipeline.mockReset();
     pipeline.mockImplementation(() => Promise.resolve({}));
@@ -77,6 +78,28 @@ describe('embedding-worker', () => {
     expect(result.vector).toBeInstanceOf(Float32Array);
     expect(Array.from(result.vector)).toEqual([1, 2]);
     expect(transferList).toEqual([result.vector.buffer]);
+  });
+
+  it('initializes pipeline with explicit ONNX session thread options', async () => {
+    workerData.numThreads = 3;
+    pipeline.mockResolvedValue(async () => ({
+      data: Float32Array.from([1, 2]),
+    }));
+
+    await import('../lib/embedding-worker.js');
+    await tick();
+
+    expect(pipeline).toHaveBeenCalledWith(
+      'feature-extraction',
+      'test-model',
+      expect.objectContaining({
+        session_options: expect.objectContaining({
+          numThreads: 3,
+          intraOpNumThreads: 3,
+          interOpNumThreads: 1,
+        }),
+      })
+    );
   });
 
   it('captures embedding errors per chunk', async () => {
