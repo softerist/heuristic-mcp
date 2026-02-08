@@ -701,7 +701,7 @@
   "embeddingBatchSize": null,
   // ONNX threads used by embedding child process.
   // 6 is a practical balance on 24-thread desktop CPUs (high throughput, less contention than 8+).
-  "embeddingProcessNumThreads": 12,
+  "embeddingProcessNumThreads": 8,
   // Wait time for active readers before saving cache (ms).
   "saveReaderWaitTimeoutMs": 5000,
   // Enable ANN index for large codebases.

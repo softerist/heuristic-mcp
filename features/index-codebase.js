@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'timers/promises';
 import { fileURLToPath } from 'url';
 import { smartChunk, hashContent } from '../lib/utils.js';
 import { extractCallData } from '../lib/call-graph.js';
+import { forceShutdownEmbeddingPool, isEmbeddingPoolActive } from '../lib/embed-query-process.js';
 
 import ignore from 'ignore';
 
@@ -196,6 +197,13 @@ export class CodebaseIndexer {
     return { threads, batchSize };
   }
 
+  getEmbeddingProcessGcConfig() {
+    const thresholdRaw = Number(this.config.incrementalGcThresholdMb);
+    const gcRssThresholdMb =
+      Number.isFinite(thresholdRaw) && thresholdRaw > 0 ? thresholdRaw : 2048;
+    return { gcRssThresholdMb };
+  }
+
   isExplicitGcEnabled() {
     return this.config.enableExplicitGc !== false && typeof global.gc === 'function';
   }
@@ -343,6 +351,36 @@ export class CodebaseIndexer {
     }
     this._lastIncrementalGcAt = now;
     global.gc();
+  }
+
+  maybeShutdownQueryEmbeddingPool(reason = 'indexing') {
+    if (this.config.shutdownQueryEmbeddingPoolAfterIndex === false) return;
+    if (!isEmbeddingPoolActive()) return;
+    if (this.config.verbose) {
+      console.info(`[Indexer] Shutting down search embedding pool after ${reason}`);
+    }
+    forceShutdownEmbeddingPool();
+  }
+
+  async runPostIncrementalCleanup(reason = 'watch update') {
+    if (this.config.clearCacheAfterIndex) {
+      await this.cache.dropInMemoryVectors();
+      if (this.config.verbose) {
+        console.info(`[Cache] Cleared in-memory vectors after ${reason}`);
+      }
+      // Keep server RSS low after single-file updates where vector arrays can remain in old-gen.
+      this.runExplicitGc({ force: true });
+    } else {
+      this.maybeRunIncrementalGc(reason);
+    }
+    this.maybeShutdownQueryEmbeddingPool(reason);
+    if (this.config.verbose) {
+      const { rss, heapUsed, heapTotal } = process.memoryUsage();
+      const toMb = (value) => `${(value / 1024 / 1024).toFixed(1)}MB`;
+      console.info(
+        `[Indexer] Memory after ${reason} cleanup: rss=${toMb(rss)} heap=${toMb(heapUsed)}/${toMb(heapTotal)}`
+      );
+    }
   }
 
   recordWorkerFailure(reason) {
@@ -1432,6 +1470,7 @@ export class CodebaseIndexer {
       numThreads: threads,
       batchSize,
       enableExplicitGc: this.config.enableExplicitGc,
+      ...this.getEmbeddingProcessGcConfig(),
       requestId,
     };
     const timeoutMs = Number.isInteger(this.config.workerBatchTimeoutMs)
@@ -1525,6 +1564,7 @@ export class CodebaseIndexer {
       numThreads: threads,
       batchSize,
       enableExplicitGc: this.config.enableExplicitGc,
+      ...this.getEmbeddingProcessGcConfig(),
     };
 
     return new Promise((resolve) => {
@@ -2036,7 +2076,13 @@ export class CodebaseIndexer {
     try {
       logMemory('start');
       if (this.config.verbose) {
-        memoryTimer = setInterval(() => logMemory('periodic'), 15000);
+        const intervalMs =
+          Number.isInteger(this.config.memoryLogIntervalMs) && this.config.memoryLogIntervalMs >= 0
+            ? this.config.memoryLogIntervalMs
+            : 30000;
+        if (intervalMs > 0) {
+          memoryTimer = setInterval(() => logMemory('periodic'), intervalMs);
+        }
       }
 
       if (force) {
@@ -2676,6 +2722,7 @@ export class CodebaseIndexer {
         );
         await this.unloadEmbeddingModels();
       }
+      this.maybeShutdownQueryEmbeddingPool('full index');
 
       // Rebuild call graph in background
       if (this.config.callGraphEnabled) {
@@ -2771,10 +2818,7 @@ export class CodebaseIndexer {
         }
 
         await this.cache.save();
-        if (this.config.clearCacheAfterIndex) {
-          await this.cache.dropInMemoryVectors();
-        }
-        this.maybeRunIncrementalGc('watch batch');
+        await this.runPostIncrementalCleanup('watch batch');
       }
     } finally {
       this.processingWatchEvents = false;
@@ -2818,10 +2862,7 @@ export class CodebaseIndexer {
 
           await this.indexFile(fullPath);
           await this.cache.save();
-          if (this.config.clearCacheAfterIndex) {
-            await this.cache.dropInMemoryVectors();
-          }
-          this.maybeRunIncrementalGc(`watch ${eventType}`);
+          await this.runPostIncrementalCleanup(`watch ${eventType}`);
         } catch (err) {
           console.warn(`[Indexer] Failed to index ${path.basename(fullPath)}: ${err.message}`);
         } finally {
@@ -2958,10 +2999,7 @@ export class CodebaseIndexer {
         await this.cache.removeFileFromStore(fullPath);
         this.cache.deleteFileHash(fullPath);
         await this.cache.save();
-        if (this.config.clearCacheAfterIndex) {
-          await this.cache.dropInMemoryVectors();
-        }
-        this.maybeRunIncrementalGc('watch unlink');
+        await this.runPostIncrementalCleanup('watch unlink');
       })
       .on('ready', () => {
         console.info('[Indexer] File watcher ready and monitoring for changes');
