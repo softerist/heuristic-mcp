@@ -59,6 +59,8 @@ import {
   BACKGROUND_INDEX_DELAY_MS,
 } from './lib/constants.js';
 const PID_FILE_NAME = '.heuristic-mcp.pid';
+const args = parseArgs(process.argv.slice(2));
+const workspace = args.workspace || process.cwd();
 
 async function readLogTail(logPath, maxLines = 2000) {
   const data = await fs.readFile(logPath, 'utf-8');
