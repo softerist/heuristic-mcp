@@ -4,12 +4,8 @@ node_modules
 .git
 *.log
 .DS_Store
-publish.cmd
 Thumbs.db
 test
-tools
-features
-scripts
 GEMINI.md
 ARCHITECTURE.md
 CONTRIBUTING.md

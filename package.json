@@ -1,12 +1,23 @@
 {
   "name": "@softerist/heuristic-mcp",
-  "version": "3.0.15",
+  "version": "3.0.16",
   "description": "An enhanced MCP server providing intelligent semantic code search with find-similar-code, recency ranking, and improved chunking. Fork of smart-coding-mcp.",
   "type": "module",
   "main": "index.js",
   "bin": {
     "heuristic-mcp": "index.js"
   },
+  "files": [
+    "index.js",
+    "config.jsonc",
+    "mcp_config.json",
+    "search-configs.js",
+    "lib/",
+    "features/",
+    "scripts/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node --expose-gc index.js",
     "dev": "node --expose-gc --watch index.js",
