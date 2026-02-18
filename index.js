@@ -52,14 +52,12 @@ import * as AnnConfigFeature from './features/ann-config.js';
 import * as PackageVersionFeature from './features/package-version.js';
 import * as SetWorkspaceFeature from './features/set-workspace.js';
 import { handleListResources, handleReadResource } from './features/resources.js';
+import { getWorkspaceEnvKeys } from './lib/workspace-env.js';
 
 import {
   MEMORY_LOG_INTERVAL_MS,
   ONNX_THREAD_LIMIT,
   BACKGROUND_INDEX_DELAY_MS,
-  DYNAMIC_WORKSPACE_ENV_PREFIX,
-  WORKSPACE_ENV_KEY_PATTERN,
-  WORKSPACE_ENV_VARS,
 } from './lib/constants.js';
 const PID_FILE_NAME = '.heuristic-mcp.pid';
 
@@ -130,25 +128,6 @@ let config = null;
 let setWorkspaceFeatureInstance = null;
 let autoWorkspaceSwitchPromise = null;
 
-function scoreWorkspaceEnvKey(key) {
-  const upper = String(key || '').toUpperCase();
-  let score = 0;
-  if (upper.includes('WORKSPACE')) score += 8;
-  if (upper.includes('PROJECT')) score += 4;
-  if (upper.includes('ROOT')) score += 3;
-  if (upper.includes('CWD')) score += 2;
-  if (upper.includes('DIR')) score += 1;
-  return score;
-}
-
-function getDynamicCodexWorkspaceKeys() {
-  return Object.keys(process.env)
-    .filter((key) => key.startsWith(DYNAMIC_WORKSPACE_ENV_PREFIX))
-    .filter((key) => WORKSPACE_ENV_KEY_PATTERN.test(key))
-    .filter((key) => !WORKSPACE_ENV_VARS.includes(key))
-    .sort((a, b) => scoreWorkspaceEnvKey(b) - scoreWorkspaceEnvKey(a));
-}
-
 async function resolveWorkspaceFromEnvValue(rawValue) {
   if (!rawValue || rawValue.includes('${')) return null;
   const resolved = path.resolve(rawValue);
@@ -162,14 +141,7 @@ async function resolveWorkspaceFromEnvValue(rawValue) {
 }
 
 async function detectRuntimeWorkspaceFromEnv() {
-  for (const key of WORKSPACE_ENV_VARS) {
-    const workspacePath = await resolveWorkspaceFromEnvValue(process.env[key]);
-    if (workspacePath) {
-      return { workspacePath, envKey: key };
-    }
-  }
-
-  for (const key of getDynamicCodexWorkspaceKeys()) {
+  for (const key of getWorkspaceEnvKeys()) {
     const workspacePath = await resolveWorkspaceFromEnvValue(process.env[key]);
     if (workspacePath) {
       return { workspacePath, envKey: key };
