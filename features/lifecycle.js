@@ -10,15 +10,23 @@ import { clearStaleCaches } from '../lib/cache-utils.js';
 import {
   findMcpServerEntry,
   parseJsonc,
+  setMcpServerDisabledInToml,
   upsertMcpServerEntryInText,
 } from '../lib/settings-editor.js';
 
 const execPromise = util.promisify(exec);
 const PID_FILE_NAME = '.heuristic-mcp.pid';
 
+function getUserHomeDir() {
+  if (process.platform === 'win32' && process.env.USERPROFILE) {
+    return process.env.USERPROFILE;
+  }
+  return os.homedir();
+}
+
 async function listPidFilePaths() {
   const pidFiles = new Set();
-  pidFiles.add(path.join(os.homedir(), PID_FILE_NAME));
+  pidFiles.add(path.join(getUserHomeDir(), PID_FILE_NAME));
   const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
   let cacheDirs = [];
   try {
@@ -336,7 +344,7 @@ async function setMcpServerEnabled(enabled) {
   const target = 'heuristic-mcp';
   let changed = 0;
 
-  for (const { name, path: configPath } of paths) {
+  for (const { name, path: configPath, format } of paths) {
     try {
       await fs.access(configPath);
     } catch {
@@ -348,6 +356,16 @@ async function setMcpServerEnabled(enabled) {
       if (!raw || !raw.trim()) {
         continue;
       }
+      if (format === 'toml') {
+        const updatedToml = setMcpServerDisabledInToml(raw, target, !enabled);
+        if (updatedToml === raw) {
+          continue;
+        }
+        await fs.writeFile(configPath, updatedToml);
+        changed++;
+        continue;
+      }
+
       const parsed = parseJsonc(raw);
       if (!parsed) {
         console.warn(
@@ -383,44 +401,80 @@ async function setMcpServerEnabled(enabled) {
 }
 
 function getMcpConfigPaths() {
-  const home = os.homedir();
+  const home = getUserHomeDir();
   const configLocations = [
     {
       name: 'Antigravity',
       path: path.join(home, '.gemini', 'antigravity', 'mcp_config.json'),
+      format: 'json',
+    },
+    {
+      name: 'Codex',
+      path: path.join(home, '.codex', 'config.toml'),
+      format: 'toml',
     },
     {
       name: 'Claude Desktop',
       path: path.join(home, '.config', 'Claude', 'claude_desktop_config.json'),
+      format: 'json',
     },
     {
       name: 'VS Code',
-      path: path.join(home, '.config', 'Code', 'User', 'settings.json'),
-      settingsMode: true,
+      path: path.join(home, '.config', 'Code', 'User', 'mcp.json'),
+      format: 'json',
+    },
+    {
+      name: 'VS Code Insiders',
+      path: path.join(home, '.config', 'Code - Insiders', 'User', 'mcp.json'),
+      format: 'json',
     },
     {
       name: 'Cursor',
       path: path.join(home, '.config', 'Cursor', 'User', 'settings.json'),
+      format: 'json',
+    },
+    {
+      name: 'Cursor Global',
+      path: path.join(home, '.cursor', 'mcp.json'),
+      format: 'json',
+    },
+    {
+      name: 'Windsurf',
+      path: path.join(home, '.codeium', 'windsurf', 'mcp_config.json'),
+      format: 'json',
+    },
+    {
+      name: 'Warp',
+      path: path.join(home, '.warp', 'mcp_settings.json'),
+      format: 'json',
     },
   ];
 
   if (process.platform === 'darwin') {
-    configLocations[1].path = path.join(
+    configLocations[2].path = path.join(
       home,
       'Library',
       'Application Support',
       'Claude',
       'claude_desktop_config.json'
     );
-    configLocations[2].path = path.join(
+    configLocations[3].path = path.join(
       home,
       'Library',
       'Application Support',
       'Code',
       'User',
-      'settings.json'
+      'mcp.json'
     );
-    configLocations[3].path = path.join(
+    configLocations[4].path = path.join(
+      home,
+      'Library',
+      'Application Support',
+      'Code - Insiders',
+      'User',
+      'mcp.json'
+    );
+    configLocations[5].path = path.join(
       home,
       'Library',
       'Application Support',
@@ -429,18 +483,29 @@ function getMcpConfigPaths() {
       'settings.json'
     );
   } else if (process.platform === 'win32') {
-    configLocations[1].path = path.join(
+    configLocations[2].path = path.join(
       process.env.APPDATA || '',
       'Claude',
       'claude_desktop_config.json'
     );
-    configLocations[2].path = path.join(process.env.APPDATA || '', 'Code', 'User', 'settings.json');
-    configLocations[3].path = path.join(
+    configLocations[3].path = path.join(process.env.APPDATA || '', 'Code', 'User', 'mcp.json');
+    configLocations[4].path = path.join(
+      process.env.APPDATA || '',
+      'Code - Insiders',
+      'User',
+      'mcp.json'
+    );
+    configLocations[5].path = path.join(
       process.env.APPDATA || '',
       'Cursor',
       'User',
       'settings.json'
     );
+    configLocations.push({
+      name: 'Warp AppData',
+      path: path.join(process.env.APPDATA || '', 'Warp', 'mcp_settings.json'),
+      format: 'json',
+    });
   }
 
   return configLocations;
@@ -555,12 +620,13 @@ export async function logs({ workspaceDir = null, tailLines = 200, follow = true
 
 // Helper to get global cache dir
 function getGlobalCacheDir() {
+  const home = getUserHomeDir();
   if (process.platform === 'win32') {
-    return process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    return process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
   } else if (process.platform === 'darwin') {
-    return path.join(os.homedir(), 'Library', 'Caches');
+    return path.join(home, 'Library', 'Caches');
   }
-  return process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
+  return process.env.XDG_CACHE_HOME || path.join(home, '.cache');
 }
 
 export async function status({ fix = false, cacheOnly = false, workspaceDir = null } = {}) {
@@ -1017,17 +1083,58 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
     const configLocations = [
       {
         name: 'Antigravity',
-        path: path.join(os.homedir(), '.gemini', 'antigravity', 'mcp_config.json'),
+        path: path.join(getUserHomeDir(), '.gemini', 'antigravity', 'mcp_config.json'),
+      },
+      {
+        name: 'Codex',
+        path: path.join(getUserHomeDir(), '.codex', 'config.toml'),
+      },
+      {
+        name: 'Claude Desktop',
+        path: path.join(getUserHomeDir(), '.config', 'Claude', 'claude_desktop_config.json'),
+      },
+      {
+        name: 'VS Code',
+        path: path.join(getUserHomeDir(), '.config', 'Code', 'User', 'mcp.json'),
       },
       {
         name: 'Cursor',
-        path: path.join(os.homedir(), '.config', 'Cursor', 'User', 'settings.json'),
+        path: path.join(getUserHomeDir(), '.config', 'Cursor', 'User', 'settings.json'),
+      },
+      {
+        name: 'Cursor Global',
+        path: path.join(getUserHomeDir(), '.cursor', 'mcp.json'),
+      },
+      {
+        name: 'Windsurf',
+        path: path.join(getUserHomeDir(), '.codeium', 'windsurf', 'mcp_config.json'),
+      },
+      {
+        name: 'Warp',
+        path: path.join(getUserHomeDir(), '.warp', 'mcp_settings.json'),
       },
     ];
 
-    // Platform specific logic for Cursor
+    // Platform specific logic for config paths
     if (process.platform === 'darwin') {
-      configLocations[1].path = path.join(
+      configLocations[2].path = path.join(
+        os.homedir(),
+        // Keep platform-native macOS path behavior.
+        // Home directory above is used only for Windows/Linux defaults.
+        'Library',
+        'Application Support',
+        'Claude',
+        'claude_desktop_config.json'
+      );
+      configLocations[3].path = path.join(
+        os.homedir(),
+        'Library',
+        'Application Support',
+        'Code',
+        'User',
+        'mcp.json'
+      );
+      configLocations[4].path = path.join(
         os.homedir(),
         'Library',
         'Application Support',
@@ -1036,12 +1143,27 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
         'settings.json'
       );
     } else if (process.platform === 'win32') {
-      configLocations[1].path = path.join(
+      configLocations[2].path = path.join(
+        process.env.APPDATA || '',
+        'Claude',
+        'claude_desktop_config.json'
+      );
+      configLocations[3].path = path.join(
+        process.env.APPDATA || '',
+        'Code',
+        'User',
+        'mcp.json'
+      );
+      configLocations[4].path = path.join(
         process.env.APPDATA || '',
         'Cursor',
         'User',
         'settings.json'
       );
+      configLocations.push({
+        name: 'Warp AppData',
+        path: path.join(process.env.APPDATA || '', 'Warp', 'mcp_settings.json'),
+      });
     }
 
     console.info('   ⚙️  MCP configs:');

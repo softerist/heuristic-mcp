@@ -78,12 +78,18 @@ heuristic-mcp --version
 ```bash
 heuristic-mcp --start
 heuristic-mcp --start antigravity
+heuristic-mcp --start codex
 heuristic-mcp --start cursor
+heuristic-mcp --start vscode
+heuristic-mcp --start windsurf
+heuristic-mcp --start warp
 heuristic-mcp --start "Claude Desktop"
 heuristic-mcp --stop
 ```
 
 `--start` registers (if needed) and enables the MCP server entry. `--stop` disables it so the IDE won't immediately respawn it. Restart/reload the IDE after `--start` to launch.
+
+Warp note: this package now targets `~/.warp/mcp_settings.json` (and `%APPDATA%\\Warp\\mcp_settings.json` on Windows when present). If no local Warp MCP config is writable yet, use Warp MCP settings/UI once to initialize it, then re-run `--start warp`.
 
 ### Clear Cache
 
@@ -97,7 +103,7 @@ Clears the cache for the current working directory (or `--workspace` if provided
 
 ## Configuration (`config.jsonc`)
 
-Configuration is loaded from your workspace root when the server runs with `--workspace` (this is how IDEs launch it). In server mode, it falls back to the package `config.jsonc` (or `config.json`) and then your current working directory.
+Configuration is loaded from your workspace root when the server runs with `--workspace`. If not provided by the IDE, the server auto-detects workspace via environment variables and current working directory. In server mode, it falls back to the package `config.jsonc` (or `config.json`) and then your current working directory.
 
 Example `config.jsonc`:
 
@@ -294,6 +300,8 @@ Fetch the latest version of a package from its official registry.
 ### `f_set_workspace`
 Change the workspace directory at runtime. Updates search directory, cache location, and optionally triggers reindex.
 
+The server also attempts this automatically before each tool call when it detects a new workspace path from environment variables (for example `CODEX_WORKSPACE`, `CODEX_PROJECT_ROOT`, `WORKSPACE_FOLDER`).
+
 **Parameters:**
 - `workspacePath` (required): Absolute path to the new workspace
 - `reindex` (optional, default: `true`): Whether to trigger a full reindex
@@ -357,7 +365,7 @@ node tools/scripts/cache-stats.js --workspace <path>
 
 **Stop doesn't stick**
 
-- The IDE will auto-restart the server if it's still enabled in its config. `--stop` now disables the server entry for Antigravity, Cursor, Claude Desktop, and VS Code (when using common MCP settings keys). Restart the IDE after `--start` to re-enable.
+- The IDE will auto-restart the server if it's still enabled in its config. `--stop` now disables the server entry for Antigravity, Cursor (including `~/.cursor/mcp.json`), Windsurf (`~/.codeium/windsurf/mcp_config.json`), Warp (`~/.warp/mcp_settings.json` and `%APPDATA%\\Warp\\mcp_settings.json` when present), Claude Desktop, and VS Code (when using common MCP settings keys). Restart the IDE after `--start` to re-enable.
 
 ---
 

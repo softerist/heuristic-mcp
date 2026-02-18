@@ -232,6 +232,48 @@ describe('Configuration Loading', () => {
     });
   });
 
+  it('logs workspace resolution env key when env-based workspace is used', async () => {
+    await withTempDir(async (dir) => {
+      const originalCwd = process.cwd();
+      const originalVitest = process.env.VITEST;
+      const originalNodeEnv = process.env.NODE_ENV;
+      const originalCodexProjectRoot = process.env.CODEX_PROJECT_ROOT;
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+      process.chdir(dir);
+      delete process.env.VITEST;
+      delete process.env.NODE_ENV;
+      process.env.CODEX_PROJECT_ROOT = dir;
+
+      try {
+        await loadConfig();
+        const called = infoSpy.mock.calls.some(
+          (call) =>
+            typeof call[0] === 'string' &&
+            call[0].includes('Workspace resolution: env CODEX_PROJECT_ROOT')
+        );
+        expect(called).toBe(true);
+      } finally {
+        process.chdir(originalCwd);
+        if (originalVitest === undefined) {
+          delete process.env.VITEST;
+        } else {
+          process.env.VITEST = originalVitest;
+        }
+        if (originalNodeEnv === undefined) {
+          delete process.env.NODE_ENV;
+        } else {
+          process.env.NODE_ENV = originalNodeEnv;
+        }
+        if (originalCodexProjectRoot === undefined) {
+          delete process.env.CODEX_PROJECT_ROOT;
+        } else {
+          process.env.CODEX_PROJECT_ROOT = originalCodexProjectRoot;
+        }
+      }
+    });
+  });
+
   it('applies environment overrides with validation and locks ANN metric', async () => {
     await withTempDir(async (dir) => {
       await fs.writeFile(path.join(dir, 'config.json'), JSON.stringify({ smartIndexing: false }));

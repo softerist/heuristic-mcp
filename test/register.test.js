@@ -55,12 +55,10 @@ describe('register', () => {
   it('prints manual config when no IDE configs are writable', async () => {
     delete process.env.ANTIGRAVITY_AGENT;
     delete process.env.CURSOR_AGENT;
+    delete process.env.CODEX_THREAD_ID;
     setPlatform('win32');
-    fsMock.existsSync.mockReturnValue(false);
-    fsMock.statSync.mockImplementation(() => {
-      throw new Error('missing');
-    });
     fsPromisesMock.access.mockRejectedValue(new Error('missing'));
+    fsPromisesMock.mkdir.mockRejectedValue(new Error('no perms'));
 
     const { register } = await import('../features/register.js');
 
@@ -69,12 +67,11 @@ describe('register', () => {
     expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('Manual Config'));
   });
 
-  it('detects Antigravity via fallback directory check', async () => {
+  it('detects Codex via environment variable', async () => {
     delete process.env.ANTIGRAVITY_AGENT;
     delete process.env.CURSOR_AGENT;
+    process.env.CODEX_THREAD_ID = 'abc123';
     setPlatform('linux');
-    fsMock.existsSync.mockReturnValue(true);
-    fsMock.statSync.mockReturnValue({ isDirectory: () => true });
     fsPromisesMock.access.mockRejectedValue(new Error('missing'));
     fsPromisesMock.mkdir.mockResolvedValue();
 
@@ -109,7 +106,7 @@ describe('register', () => {
 
     const { register } = await import('../features/register.js');
 
-    await register();
+    await register('cursor');
 
     expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('Warning'));
     expect(fsMock.writeFileSync).not.toHaveBeenCalled();
@@ -217,17 +214,21 @@ describe('register', () => {
     expect(fsMock.writeFileSync).toHaveBeenCalled();
   });
 
-  it('handles missing INIT_CWD for Antigravity', async () => {
+  it('registers without a fixed --workspace argument', async () => {
     process.env.ANTIGRAVITY_AGENT = '1';
     setPlatform('win32');
-    delete process.env.INIT_CWD;
     fsPromisesMock.access.mockResolvedValue();
     fsPromisesMock.readFile.mockResolvedValue('{}');
 
     const { register } = await import('../features/register.js');
     await register();
 
-    expect(fsMock.writeFileSync).toHaveBeenCalled();
+    const [, writtenText] = fsMock.writeFileSync.mock.calls[0];
+    const parsed = JSON.parse(writtenText);
+    expect(parsed.mcpServers['heuristic-mcp'].args).toEqual([
+      '--expose-gc',
+      expect.stringContaining('index.js'),
+    ]);
   });
 
   it('handles existing mcpServers object', async () => {
@@ -258,5 +259,79 @@ describe('register', () => {
     await register();
 
     expect(fsMock.writeFileSync).toHaveBeenCalled();
+  });
+
+  it('registers VS Code mcp.json entries under servers when filtered', async () => {
+    delete process.env.ANTIGRAVITY_AGENT;
+    delete process.env.CURSOR_AGENT;
+    delete process.env.CODEX_THREAD_ID;
+    setPlatform('win32');
+    fsPromisesMock.access.mockResolvedValue();
+    fsPromisesMock.readFile.mockResolvedValue('{}');
+
+    const { register } = await import('../features/register.js');
+    await register('vscode');
+
+    expect(fsMock.writeFileSync).toHaveBeenCalled();
+    const matchingCall = fsMock.writeFileSync.mock.calls.find(([filePath]) =>
+      String(filePath).toLowerCase().includes('\\code\\user\\mcp.json')
+    );
+    expect(matchingCall).toBeDefined();
+    const parsed = JSON.parse(matchingCall[1]);
+    expect(parsed.servers).toBeDefined();
+    expect(parsed.servers['heuristic-mcp']).toBeDefined();
+  });
+
+  it('includes Cursor global mcp config when filtered by cursor', async () => {
+    delete process.env.ANTIGRAVITY_AGENT;
+    delete process.env.CURSOR_AGENT;
+    setPlatform('win32');
+    fsPromisesMock.access.mockResolvedValue();
+    fsPromisesMock.readFile.mockResolvedValue('{}');
+
+    const { register } = await import('../features/register.js');
+    await register('cursor');
+
+    const cursorGlobalCall = fsMock.writeFileSync.mock.calls.find(([filePath]) =>
+      String(filePath).toLowerCase().includes('.cursor') &&
+      String(filePath).toLowerCase().endsWith('mcp.json')
+    );
+    expect(cursorGlobalCall).toBeDefined();
+  });
+
+  it('updates windsurf global mcp config when filtered by windsurf', async () => {
+    delete process.env.ANTIGRAVITY_AGENT;
+    delete process.env.CURSOR_AGENT;
+    setPlatform('win32');
+    fsPromisesMock.access.mockResolvedValue();
+    fsPromisesMock.readFile.mockResolvedValue('{}');
+
+    const { register } = await import('../features/register.js');
+    await register('windsurf');
+
+    const windsurfCall = fsMock.writeFileSync.mock.calls.find(([filePath]) =>
+      String(filePath).toLowerCase().includes('.codeium') &&
+      String(filePath).toLowerCase().includes('windsurf') &&
+      String(filePath).toLowerCase().endsWith('mcp_config.json')
+    );
+    expect(windsurfCall).toBeDefined();
+  });
+
+  it('updates warp mcp config when filtered by warp', async () => {
+    delete process.env.ANTIGRAVITY_AGENT;
+    delete process.env.CURSOR_AGENT;
+    delete process.env.CODEX_THREAD_ID;
+    setPlatform('win32');
+    fsPromisesMock.access.mockResolvedValue();
+    fsPromisesMock.readFile.mockResolvedValue('{}');
+
+    const { register } = await import('../features/register.js');
+    await register('warp');
+
+    const warpCall = fsMock.writeFileSync.mock.calls.find(([filePath]) =>
+      String(filePath).toLowerCase().includes('.warp') &&
+      String(filePath).toLowerCase().endsWith('mcp_settings.json')
+    );
+    expect(warpCall).toBeDefined();
   });
 });

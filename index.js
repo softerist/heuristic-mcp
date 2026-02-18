@@ -57,10 +57,11 @@ import {
   MEMORY_LOG_INTERVAL_MS,
   ONNX_THREAD_LIMIT,
   BACKGROUND_INDEX_DELAY_MS,
+  DYNAMIC_WORKSPACE_ENV_PREFIX,
+  WORKSPACE_ENV_KEY_PATTERN,
+  WORKSPACE_ENV_VARS,
 } from './lib/constants.js';
 const PID_FILE_NAME = '.heuristic-mcp.pid';
-const args = parseArgs(process.argv.slice(2));
-const workspace = args.workspace || process.cwd();
 
 async function readLogTail(logPath, maxLines = 2000) {
   const data = await fs.readFile(logPath, 'utf-8');
@@ -126,6 +127,95 @@ let cache = null;
 let indexer = null;
 let hybridSearch = null;
 let config = null;
+let setWorkspaceFeatureInstance = null;
+let autoWorkspaceSwitchPromise = null;
+
+function scoreWorkspaceEnvKey(key) {
+  const upper = String(key || '').toUpperCase();
+  let score = 0;
+  if (upper.includes('WORKSPACE')) score += 8;
+  if (upper.includes('PROJECT')) score += 4;
+  if (upper.includes('ROOT')) score += 3;
+  if (upper.includes('CWD')) score += 2;
+  if (upper.includes('DIR')) score += 1;
+  return score;
+}
+
+function getDynamicCodexWorkspaceKeys() {
+  return Object.keys(process.env)
+    .filter((key) => key.startsWith(DYNAMIC_WORKSPACE_ENV_PREFIX))
+    .filter((key) => WORKSPACE_ENV_KEY_PATTERN.test(key))
+    .filter((key) => !WORKSPACE_ENV_VARS.includes(key))
+    .sort((a, b) => scoreWorkspaceEnvKey(b) - scoreWorkspaceEnvKey(a));
+}
+
+async function resolveWorkspaceFromEnvValue(rawValue) {
+  if (!rawValue || rawValue.includes('${')) return null;
+  const resolved = path.resolve(rawValue);
+  try {
+    const stats = await fs.stat(resolved);
+    if (!stats.isDirectory()) return null;
+    return resolved;
+  } catch {
+    return null;
+  }
+}
+
+async function detectRuntimeWorkspaceFromEnv() {
+  for (const key of WORKSPACE_ENV_VARS) {
+    const workspacePath = await resolveWorkspaceFromEnvValue(process.env[key]);
+    if (workspacePath) {
+      return { workspacePath, envKey: key };
+    }
+  }
+
+  for (const key of getDynamicCodexWorkspaceKeys()) {
+    const workspacePath = await resolveWorkspaceFromEnvValue(process.env[key]);
+    if (workspacePath) {
+      return { workspacePath, envKey: key };
+    }
+  }
+
+  return null;
+}
+
+async function maybeAutoSwitchWorkspace(request) {
+  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return;
+  if (!setWorkspaceFeatureInstance || !config?.searchDirectory) return;
+  if (request?.params?.name === 'f_set_workspace') return;
+
+  const detected = await detectRuntimeWorkspaceFromEnv();
+  if (!detected) return;
+
+  const currentWorkspace = path.resolve(config.searchDirectory);
+  if (detected.workspacePath === currentWorkspace) return;
+
+  if (autoWorkspaceSwitchPromise) {
+    await autoWorkspaceSwitchPromise;
+    return;
+  }
+
+  autoWorkspaceSwitchPromise = (async () => {
+    console.info(
+      `[Server] Auto-switching workspace from ${currentWorkspace} to ${detected.workspacePath} (env ${detected.envKey})`
+    );
+    const result = await setWorkspaceFeatureInstance.execute({
+      workspacePath: detected.workspacePath,
+      reindex: false,
+    });
+    if (!result.success) {
+      console.warn(
+        `[Server] Auto workspace switch failed (env ${detected.envKey}): ${result.error}`
+      );
+    }
+  })();
+
+  try {
+    await autoWorkspaceSwitchPromise;
+  } finally {
+    autoWorkspaceSwitchPromise = null;
+  }
+}
 
 // Feature registry - ordered by priority (semantic_search first as primary tool)
 const features = [
@@ -387,6 +477,7 @@ async function initialize(workspaceDir) {
     indexer,
     getGlobalCacheDir
   );
+  setWorkspaceFeatureInstance = setWorkspaceInstance;
   features[6].instance = setWorkspaceInstance;
   features[6].handler = SetWorkspaceFeature.createHandleToolCall(setWorkspaceInstance);
 
@@ -469,6 +560,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 // Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  await maybeAutoSwitchWorkspace(request);
+
   for (const feature of features) {
     const toolDef = feature.module.getToolDefinition(config);
 
