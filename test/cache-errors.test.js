@@ -197,6 +197,28 @@ describe('EmbeddingsCache Error Handling', () => {
       expect(cache.isSaving).toBe(false);
     });
 
+    it('should throw save errors when throwOnError is true', async () => {
+      cache.vectorStore = [{ vector: [1] }];
+      fs.mkdir.mockRejectedValue(new Error('Read-only file system'));
+
+      await expect(cache.save({ throwOnError: true })).rejects.toThrow(
+        'Cache save failed: Read-only file system'
+      );
+    });
+
+    it('should recover save queue after a throwing save failure', async () => {
+      cache.vectorStore = [{ vector: [1] }];
+      fs.mkdir
+        .mockRejectedValueOnce(new Error('Read-only file system'))
+        .mockResolvedValue();
+
+      await expect(cache.save({ throwOnError: true })).rejects.toThrow(
+        'Cache save failed: Read-only file system'
+      );
+
+      await expect(cache.save({ throwOnError: true })).resolves.toBeUndefined();
+    });
+
     it('should handle clear cache errors', async () => {
       fs.rm.mockRejectedValue(new Error('Locked'));
       await expect(cache.clear()).rejects.toThrow('Locked');

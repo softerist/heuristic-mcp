@@ -50,6 +50,7 @@ import {
 } from './lib/server-lifecycle.js';
 
 import { EmbeddingsCache } from './lib/cache.js';
+import { cleanupStaleBinaryArtifacts } from './lib/vector-store-binary.js';
 import { CodebaseIndexer } from './features/index-codebase.js';
 import { HybridSearch } from './features/hybrid-search.js';
 
@@ -831,6 +832,15 @@ async function initialize(workspaceDir) {
   
 
   
+  if (config.vectorStoreFormat === 'binary') {
+    try {
+      await cleanupStaleBinaryArtifacts(config.cacheDirectory, { logger: console });
+    } catch (err) {
+      console.warn(`[Cache] Startup temp cleanup failed: ${err.message}`);
+    }
+  }
+
+  
   cache = new EmbeddingsCache(config);
   console.info(`[Server] Cache directory: ${config.cacheDirectory}`);
 
@@ -883,6 +893,9 @@ async function initialize(workspaceDir) {
       config.searchDirectory = candidate.workspace;
       config.cacheDirectory = candidate.cacheDirectory;
       await fs.mkdir(config.cacheDirectory, { recursive: true });
+      if (config.vectorStoreFormat === 'binary') {
+        await cleanupStaleBinaryArtifacts(config.cacheDirectory, { logger: console });
+      }
       await cache.load();
       console.info(
         `[Server] Auto-attached workspace cache (${reason}): ${candidate.workspace} via ${candidate.source}`
@@ -1174,7 +1187,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           isError: true,
         };
       }
-      const result = await feature.handler(request, feature.instance);
+      let result;
+      try {
+        result = await feature.handler(request, feature.instance);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[Server] Tool ${toolDef.name} failed: ${message}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error: ${message || 'Unknown tool failure'}`,
+            },
+          ],
+          isError: true,
+        };
+      }
       if (toolDef.name === 'f_set_workspace' && !isToolResponseError(result)) {
         trustWorkspacePath(config.searchDirectory);
       }

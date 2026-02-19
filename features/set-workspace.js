@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { acquireWorkspaceLock, releaseWorkspaceLock } from '../lib/server-lifecycle.js';
 import { getWorkspaceCachePath } from '../lib/workspace-cache-key.js';
+import { cleanupStaleBinaryArtifacts } from '../lib/vector-store-binary.js';
 
 
 function getWorkspaceCacheDir(workspacePath, globalCacheDir) {
@@ -188,6 +189,9 @@ export class SetWorkspaceFeature {
     
     if (this.cache && typeof this.cache.load === 'function') {
       try {
+        if (this.config.vectorStoreFormat === 'binary') {
+          await cleanupStaleBinaryArtifacts(newCacheDir);
+        }
         await this.cache.load();
       } catch (err) {
         console.warn(`[SetWorkspace] Failed to load cache: ${err.message}`);

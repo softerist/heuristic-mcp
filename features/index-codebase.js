@@ -2863,9 +2863,9 @@ export class CodebaseIndexer {
 
       
       this.sendProgress(
+        95,
         100,
-        100,
-        `Complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
+        `Embedding complete; saving cache (${totalChunks} chunks from ${filesToProcess.length} files)...`
       );
 
       this.cache.setLastIndexDuration?.(totalDurationMs);
@@ -2881,7 +2881,13 @@ export class CodebaseIndexer {
         lastCheckpointIntervalMs: checkpointIntervalMs,
         lastCheckpointSaves: checkpointSaveCount,
       });
-      await this.cache.save();
+      await this.cache.save({ throwOnError: true });
+
+      this.sendProgress(
+        100,
+        100,
+        `Complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
+      );
 
       const vectorStoreSnapshot = this.cache.getVectorStore();
       const totalFiles = new Set(vectorStoreSnapshot.map((v) => v.file)).size;

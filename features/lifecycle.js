@@ -16,6 +16,21 @@ import {
 
 const execPromise = util.promisify(exec);
 const PID_FILE_NAME = '.heuristic-mcp.pid';
+const BINARY_TELEMETRY_FILE = 'binary-store-telemetry.json';
+
+async function readBinaryTelemetry(cacheDir) {
+  const telemetryPath = path.join(cacheDir, BINARY_TELEMETRY_FILE);
+  try {
+    return JSON.parse(await fs.readFile(telemetryPath, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function hasNonZeroBinaryTelemetry(totals) {
+  if (!totals || typeof totals !== 'object') return false;
+  return Object.values(totals).some((value) => Number.isFinite(value) && value > 0);
+}
 
 function getUserHomeDir() {
   if (process.platform === 'win32' && process.env.USERPROFILE) {
@@ -1224,6 +1239,35 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
               console.info('   Summary: Cached snapshot available; no update running.');
             } else {
               console.info('   Summary: No cached snapshot yet; indexing has not started.');
+            }
+          }
+
+          const binaryTelemetry = await readBinaryTelemetry(cacheDir);
+          if (binaryTelemetry?.totals && hasNonZeroBinaryTelemetry(binaryTelemetry.totals)) {
+            const totals = binaryTelemetry.totals;
+            console.info(
+              `   Binary telemetry: swaps=${totals.atomicReplaceAttempts || 0} ok=${totals.atomicReplaceSuccesses || 0} fail=${totals.atomicReplaceFailures || 0}`
+            );
+            console.info(
+              `   Binary telemetry: retries=${totals.renameRetryCount || 0} fallbackCopies=${totals.fallbackCopyCount || 0} rollbacks=${totals.rollbackCount || 0}`
+            );
+            if ((totals.rollbackRestoreFailureCount || 0) > 0) {
+              console.info(
+                `   Binary telemetry: rollback restore failures=${totals.rollbackRestoreFailureCount}`
+              );
+            }
+            if ((totals.startupCleanupRuns || 0) > 0 || (totals.staleTempFilesRemoved || 0) > 0) {
+              console.info(
+                `   Startup temp cleanup: runs=${totals.startupCleanupRuns || 0} removed=${totals.staleTempFilesRemoved || 0} skippedActive=${totals.staleTempFilesSkippedActive || 0}`
+              );
+            }
+            if (binaryTelemetry.lastAtomicReplace?.at) {
+              console.info(
+                `   Last atomic replace: ${formatDateTime(binaryTelemetry.lastAtomicReplace.at)}`
+              );
+            }
+            if (binaryTelemetry.lastError?.message) {
+              console.info(`   Last binary error: ${binaryTelemetry.lastError.message}`);
             }
           }
 

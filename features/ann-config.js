@@ -26,15 +26,26 @@ export class AnnConfigTool {
     }
 
     if (action === 'rebuild') {
-      
-      this.cache.invalidateAnnIndex();
-      const index = await this.cache.ensureAnnIndex();
-      return {
-        success: index !== null,
-        message: index
-          ? 'ANN index rebuilt successfully'
-          : 'ANN index rebuild failed or not available',
-      };
+      try {
+        
+        this.cache.invalidateAnnIndex();
+        const index = await this.cache.ensureAnnIndex();
+        if (!index) {
+          return {
+            success: false,
+            error: 'ANN index rebuild failed or not available',
+          };
+        }
+        return {
+          success: true,
+          message: 'ANN index rebuilt successfully',
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
     }
 
     return {
@@ -45,7 +56,7 @@ export class AnnConfigTool {
 
   formatResults(result) {
     if (result.success === false) {
-      return `Error: ${result.error}`;
+      return `Error: ${result.error || result.message || 'Unknown error'}`;
     }
 
     if (result.enabled !== undefined) {

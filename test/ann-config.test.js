@@ -78,7 +78,7 @@ describe('AnnConfigTool', () => {
 
     expect(result).toEqual({
       success: false,
-      message: 'ANN index rebuild failed or not available',
+      error: 'ANN index rebuild failed or not available',
     });
   });
 
