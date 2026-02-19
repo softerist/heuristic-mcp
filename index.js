@@ -907,8 +907,19 @@ export async function main(argv = process.argv) {
     console.info(`[Server] Using workspace from MCP roots: ${detectedRoot}`);
   }
   const initPromise = initialize(effectiveWorkspace);
-  configReadyPromise = initPromise;
-  const { startBackgroundTasks } = await initPromise;
+  configReadyPromise = new Promise((resolve) => {
+    configReadyResolve = resolve;
+  });
+  const initWithResolve = initPromise
+    .then((result) => {
+      configReadyResolve();
+      return result;
+    })
+    .catch((err) => {
+      configReadyResolve();
+      throw err;
+    });
+  const { startBackgroundTasks } = await initWithResolve;
 
   console.info('[Server] Heuristic MCP server started.');
 
