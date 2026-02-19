@@ -144,6 +144,43 @@ let setWorkspaceFeatureInstance = null;
 let autoWorkspaceSwitchPromise = null;
 let rootsCapabilitySupported = null;
 let rootsProbeInFlight = null;
+const WORKSPACE_BOUND_TOOL_NAMES = new Set([
+  'a_semantic_search',
+  'b_index_codebase',
+  'c_clear_cache',
+  'd_find_similar_code',
+  'd_ann_config',
+]);
+const trustedWorkspacePaths = new Set();
+
+function shouldRequireTrustedWorkspaceSignalForTool(toolName) {
+  return WORKSPACE_BOUND_TOOL_NAMES.has(toolName);
+}
+
+function trustWorkspacePath(workspacePath) {
+  const normalized = normalizePathForCompare(workspacePath);
+  if (normalized) {
+    trustedWorkspacePaths.add(normalized);
+  }
+}
+
+function isCurrentWorkspaceTrusted() {
+  if (!config?.searchDirectory) return false;
+  return trustedWorkspacePaths.has(normalizePathForCompare(config.searchDirectory));
+}
+
+function isToolResponseError(result) {
+  if (!result || typeof result !== 'object') return true;
+  if (result.isError === true) return true;
+  if (!Array.isArray(result.content)) return false;
+
+  return result.content.some(
+    (entry) =>
+      entry?.type === 'text' &&
+      typeof entry.text === 'string' &&
+      entry.text.trim().toLowerCase().startsWith('error:')
+  );
+}
 
 async function resolveWorkspaceFromEnvValue(rawValue) {
   if (!rawValue || rawValue.includes('${')) return null;
@@ -268,27 +305,28 @@ async function findAutoAttachWorkspaceCandidate({ excludeCacheDirectory = null }
 }
 
 async function maybeAutoSwitchWorkspace(request) {
-  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return;
-  if (!setWorkspaceFeatureInstance || !config?.searchDirectory) return;
-  if (request?.params?.name === 'f_set_workspace') return;
+  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return null;
+  if (!setWorkspaceFeatureInstance || !config?.searchDirectory) return null;
+  if (request?.params?.name === 'f_set_workspace') return null;
 
   const detected = await detectRuntimeWorkspaceFromEnv();
-  if (!detected) return;
+  if (!detected) return null;
   if (isNonProjectDirectory(detected.workspacePath)) {
     console.info(
       `[Server] Ignoring auto-switch candidate from env ${detected.envKey}: non-project path ${detected.workspacePath}`
     );
-    return;
+    return null;
   }
 
   const currentWorkspace = normalizePathForCompare(config.searchDirectory);
   const detectedWorkspace = normalizePathForCompare(detected.workspacePath);
-  if (detectedWorkspace === currentWorkspace) return;
+  if (detectedWorkspace === currentWorkspace) return detected.workspacePath;
 
   await maybeAutoSwitchWorkspaceToPath(detected.workspacePath, {
     source: `env ${detected.envKey}`,
     reindex: false,
   });
+  return detected.workspacePath;
 }
 
 
@@ -381,7 +419,9 @@ async function maybeAutoSwitchWorkspaceToPath(targetWorkspacePath, { source, rei
       console.warn(
         `[Server] Auto workspace switch failed (${source || 'auto'}): ${result.error}`
       );
+      return;
     }
+    trustWorkspacePath(targetWorkspacePath);
   })();
 
   try {
@@ -392,27 +432,27 @@ async function maybeAutoSwitchWorkspaceToPath(targetWorkspacePath, { source, rei
 }
 
 async function maybeAutoSwitchWorkspaceFromRoots(request) {
-  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return;
-  if (!setWorkspaceFeatureInstance || !config?.searchDirectory) return;
-  if (request?.params?.name === 'f_set_workspace') return;
-  if (rootsCapabilitySupported === false) return;
+  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return null;
+  if (!setWorkspaceFeatureInstance || !config?.searchDirectory) return null;
+  if (request?.params?.name === 'f_set_workspace') return null;
+  if (rootsCapabilitySupported === false) return null;
 
   if (rootsProbeInFlight) {
-    await rootsProbeInFlight;
-    return;
+    return await rootsProbeInFlight;
   }
 
   rootsProbeInFlight = (async () => {
     const rootWorkspace = await detectWorkspaceFromRoots({ quiet: true });
-    if (!rootWorkspace) return;
+    if (!rootWorkspace) return null;
     await maybeAutoSwitchWorkspaceToPath(rootWorkspace, {
       source: 'roots probe',
       reindex: false,
     });
+    return rootWorkspace;
   })();
 
   try {
-    await rootsProbeInFlight;
+    return await rootsProbeInFlight;
   } finally {
     rootsProbeInFlight = null;
   }
@@ -531,6 +571,9 @@ async function initialize(workspaceDir) {
     }
   }
   const resolutionSource = config.workspaceResolution?.source || 'unknown';
+  if (resolutionSource === 'workspace-arg' || resolutionSource === 'env') {
+    trustWorkspacePath(config.searchDirectory);
+  }
   const isSystemFallbackWorkspace =
     (resolutionSource === 'cwd' || resolutionSource === 'cwd-root-search') &&
     isNonProjectDirectory(config.searchDirectory);
@@ -996,6 +1039,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
       await fs.mkdir(config.cacheDirectory, { recursive: true });
       await cache.load();
+      trustWorkspacePath(normalizedPath);
       return {
         content: [
           {
@@ -1031,8 +1075,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       isError: true,
     };
   }
-  await maybeAutoSwitchWorkspaceFromRoots(request);
-  await maybeAutoSwitchWorkspace(request);
+  const detectedFromRoots = await maybeAutoSwitchWorkspaceFromRoots(request);
+  const detectedFromEnv = await maybeAutoSwitchWorkspace(request);
+  if (detectedFromRoots) {
+    trustWorkspacePath(detectedFromRoots);
+  }
+  if (detectedFromEnv) {
+    trustWorkspacePath(detectedFromEnv);
+  }
+
+  const toolName = request.params?.name;
+  if (
+    config.requireTrustedWorkspaceSignalForTools === true &&
+    shouldRequireTrustedWorkspaceSignalForTool(toolName) &&
+    !detectedFromRoots &&
+    !detectedFromEnv &&
+    !isCurrentWorkspaceTrusted()
+  ) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text:
+            `Workspace context appears stale for "${toolName}" (current: "${config.searchDirectory}"). ` +
+            'Please reload your IDE window and retry. ' +
+            'If needed, call MCP tool "f_set_workspace" from your chat/client with your opened folder path.',
+        },
+      ],
+      isError: true,
+    };
+  }
 
   for (const feature of features) {
     const toolDef = feature.module.getToolDefinition(config);
@@ -1050,6 +1122,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
       const result = await feature.handler(request, feature.instance);
+      if (toolDef.name === 'f_set_workspace' && !isToolResponseError(result)) {
+        trustWorkspacePath(config.searchDirectory);
+      }
       
       
       
@@ -1356,12 +1431,16 @@ async function gracefulShutdown(signal) {
   
   
   if (cache) {
-    cleanupTasks.push(
-      cache
-        .save()
-        .then(() => console.info('[Server] Cache saved'))
-        .catch((err) => console.error(`[Server] Failed to save cache: ${err.message}`))
-    );
+    if (!workspaceLockAcquired) {
+      console.info('[Server] Secondary/fallback mode: skipping cache save.');
+    } else {
+      cleanupTasks.push(
+        cache
+          .save()
+          .then(() => console.info('[Server] Cache saved'))
+          .catch((err) => console.error(`[Server] Failed to save cache: ${err.message}`))
+      );
+    }
   }
 
   await Promise.allSettled(cleanupTasks);

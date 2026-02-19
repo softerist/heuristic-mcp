@@ -187,6 +187,25 @@ describe('EmbeddingsCache', () => {
     });
   });
 
+  it('skips cache save for non-project system workspaces by default', async () => {
+    await withTempDir(async (dir) => {
+      const config = await createConfig(dir);
+      config.searchDirectory = 'C:\\Users\\claud\\AppData\\Local\\Programs\\Antigravity';
+      const cache = new EmbeddingsCache(config);
+      const filePath = path.join(dir, 'a.js');
+
+      cache.setFileHash(filePath, 'hash-system');
+      await cache.save();
+
+      await expect(fs.access(path.join(dir, 'meta.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(console.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Skipping cache save for non-project workspace')
+      );
+
+      await cache.close();
+    });
+  });
+
   it('writes and loads binary vector store with content lookup', async () => {
     await withTempDir(async (dir) => {
       const config = await createConfig(dir);

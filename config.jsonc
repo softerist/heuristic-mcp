@@ -651,6 +651,10 @@
   // When true, a newly started server instance will terminate older heuristic-mcp server processes.
   // This helps prevent stale workspace binding after IDE reloads/window switches.
   "autoStopOtherServersOnStartup": true,
+  // Safety guard for IDE sessions:
+  // when true, semantic/index tools require a current trusted workspace signal
+  // (MCP roots or explicit workspace env), otherwise the call fails fast.
+  "requireTrustedWorkspaceSignalForTools": true,
   // Logging and diagnostics.
   "logging": {
     // Enable verbose logging.

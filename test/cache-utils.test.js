@@ -7,6 +7,14 @@ import os from 'os';
 let testCacheRoot;
 vi.mock('../lib/config.js', () => ({
   getGlobalCacheDir: () => testCacheRoot,
+  isNonProjectDirectory: (dir) => {
+    const normalized = String(dir || '').replace(/\\/g, '/').toLowerCase();
+    return (
+      normalized.includes('/appdata/local/programs/') ||
+      normalized.includes('/program files/') ||
+      normalized.includes('/program files (x86)/')
+    );
+  },
 }));
 
 const { clearStaleCaches } = await import('../lib/cache-utils.js');
@@ -198,5 +206,29 @@ describe('clearStaleCaches', () => {
     } catch (err) {
       expect(err.code).toBe('ENOENT');
     }
+  });
+
+  it('should remove system/IDE workspace cache even when recent', async () => {
+    const cacheDir = path.join(testCacheRoot, 'heuristic-mcp', 'test-system-workspace');
+    await fs.mkdir(cacheDir, { recursive: true });
+
+    await fs.writeFile(
+      path.join(cacheDir, 'meta.json'),
+      JSON.stringify({
+        workspace: 'C:\\Users\\claud\\AppData\\Local\\Programs\\Antigravity',
+        filesIndexed: 0,
+        chunksStored: 0,
+        lastSaveTime: new Date().toISOString(),
+      })
+    );
+
+    const results = await clearStaleCaches({
+      dryRun: true,
+      logger: null,
+    });
+
+    expect(results.removed).toBe(1);
+    expect(results.kept).toBe(0);
+    expect(results.decisions[0].reason).toBe('system_workspace_cache');
   });
 });

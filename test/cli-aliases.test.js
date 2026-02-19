@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { normalizeCliArgs, parseArgs, shouldDefaultToHelp } from '../lib/cli.js';
+import { describe, expect, it, vi } from 'vitest';
+import { normalizeCliArgs, parseArgs, parseWorkspaceDir, shouldDefaultToHelp } from '../lib/cli.js';
 
 describe('CLI aliases', () => {
   it('maps positional status command to --status', () => {
@@ -44,6 +44,41 @@ describe('CLI aliases', () => {
     expect(parseArgs(['node', 'index.js', 'mem']).wantsMem).toBe(true);
     expect(parseArgs(['node', 'index.js', 'version']).wantsVersion).toBe(true);
     expect(parseArgs(['node', 'index.js', 'help']).wantsHelp).toBe(true);
+  });
+
+  it('uses the first expanded workspace candidate when multiple --workspace values are provided', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const workspace = parseWorkspaceDir([
+        '--workspace',
+        '${workspaceFolder}',
+        '--workspace',
+        'F:\\Git\\gephyr',
+      ]);
+      expect(workspace).toBe('F:\\Git\\gephyr');
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('IDE variable not expanded: ${workspaceFolder}')
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('accepts --workspace=value syntax after unresolved candidates', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const workspace = parseWorkspaceDir([
+        '--workspace',
+        '${workspaceRoot}',
+        '--workspace=C:\\work',
+      ]);
+      expect(workspace).toBe('C:\\work');
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('IDE variable not expanded: ${workspaceRoot}')
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it('defaults to help on no args in interactive terminal only', () => {

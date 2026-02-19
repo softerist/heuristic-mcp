@@ -351,6 +351,7 @@ describe('Configuration Loading', () => {
       process.env.SMART_CODING_RECENCY_DECAY_DAYS = '10';
       process.env.SMART_CODING_WATCH_FILES = 'false';
       process.env.SMART_CODING_AUTO_STOP_OTHER_SERVERS_ON_STARTUP = 'false';
+      process.env.SMART_CODING_REQUIRE_TRUSTED_WORKSPACE_SIGNAL_FOR_TOOLS = 'true';
       process.env.SMART_CODING_INDEX_CHECKPOINT_INTERVAL_MS = '2000';
       process.env.SMART_CODING_SEMANTIC_WEIGHT = '0.3';
       process.env.SMART_CODING_EXACT_MATCH_BOOST = '2';
@@ -395,6 +396,7 @@ describe('Configuration Loading', () => {
       expect(config.recencyDecayDays).toBe(10);
       expect(config.watchFiles).toBe(false);
       expect(config.autoStopOtherServersOnStartup).toBe(false);
+      expect(config.requireTrustedWorkspaceSignalForTools).toBe(true);
       expect(config.indexCheckpointIntervalMs).toBe(2000);
       expect(config.semanticWeight).toBe(0.3);
       expect(config.exactMatchBoost).toBe(2);

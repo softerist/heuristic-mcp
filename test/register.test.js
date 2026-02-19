@@ -214,7 +214,7 @@ describe('register', () => {
     expect(fsMock.writeFileSync).toHaveBeenCalled();
   });
 
-  it('registers without a fixed --workspace argument', async () => {
+  it('registers Antigravity with dynamic workspace args', async () => {
     process.env.ANTIGRAVITY_AGENT = '1';
     setPlatform('win32');
     fsPromisesMock.access.mockResolvedValue();
@@ -226,7 +226,17 @@ describe('register', () => {
     const [, writtenText] = fsMock.writeFileSync.mock.calls[0];
     const parsed = JSON.parse(writtenText);
     expect(parsed.mcpServers['heuristic-mcp'].command).toBe('heuristic-mcp');
-    expect(parsed.mcpServers['heuristic-mcp'].args).toEqual([]);
+    expect(parsed.mcpServers['heuristic-mcp'].args).toEqual([
+      '--workspace',
+      '${workspaceFolder}',
+      '--workspace',
+      '${workspaceRoot}',
+      '--workspace',
+      '${workspace}',
+    ]);
+    expect(parsed.mcpServers['heuristic-mcp'].env).toEqual({
+      HEURISTIC_MCP_ENABLE_DYNAMIC_WORKSPACE_ENV: 'true',
+    });
     expect(parsed.mcpServers['heuristic-mcp']).not.toHaveProperty('disabled');
   });
 

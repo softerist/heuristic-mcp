@@ -360,7 +360,12 @@ async function setMcpServerEnabled(enabled) {
         continue;
       }
 
-      const updatedEntry = { ...found.entry, disabled: !enabled };
+      const updatedEntry = { ...found.entry };
+      if (enabled) {
+        delete updatedEntry.disabled;
+      } else {
+        updatedEntry.disabled = true;
+      }
       const updatedText = upsertMcpServerEntryInText(raw, target, updatedEntry);
       if (!updatedText) {
         console.warn(`[Lifecycle] Failed to update ${name} config (unparseable layout).`);
@@ -571,6 +576,132 @@ function parseFileProgressSummary(progressData) {
   return null;
 }
 
+function normalizePathForCompare(targetPath) {
+  if (!targetPath) return '';
+  const resolved = path.resolve(targetPath);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+function extractWorkspaceFromCommandLine(commandLine) {
+  if (!commandLine || typeof commandLine !== 'string') return null;
+
+  const regex = /--workspace(?:=|\s+)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\S+)/g;
+  let match;
+  while ((match = regex.exec(commandLine)) !== null) {
+    let candidate = match[1] || '';
+    if (
+      (candidate.startsWith('"') && candidate.endsWith('"')) ||
+      (candidate.startsWith("'") && candidate.endsWith("'"))
+    ) {
+      candidate = candidate.slice(1, -1);
+    }
+    if (!candidate || candidate.includes('${')) continue;
+    return candidate;
+  }
+
+  return null;
+}
+
+async function collectRuntimeByPid({ pids, globalCacheRoot }) {
+  const pidSet = new Set((Array.isArray(pids) ? pids : []).map((pid) => Number(pid)));
+  const runtimeByPid = new Map();
+  if (pidSet.size === 0) return runtimeByPid;
+
+  const cacheDirs = await fs.readdir(globalCacheRoot).catch(() => []);
+  if (!Array.isArray(cacheDirs)) return runtimeByPid;
+
+  for (const dir of cacheDirs) {
+    const cacheDirectory = path.join(globalCacheRoot, dir);
+    const lockPath = path.join(cacheDirectory, 'server.lock.json');
+    const localPidPath = path.join(cacheDirectory, PID_FILE_NAME);
+    const logFile = path.join(cacheDirectory, 'logs', 'server.log');
+    const metaPath = path.join(cacheDirectory, 'meta.json');
+
+    let lockData = null;
+    try {
+      lockData = JSON.parse(await fs.readFile(lockPath, 'utf-8'));
+    } catch {
+      lockData = null;
+    }
+    const lockPid = Number(lockData?.pid);
+    if (Number.isInteger(lockPid) && pidSet.has(lockPid)) {
+      runtimeByPid.set(lockPid, {
+        pid: lockPid,
+        cacheDirectory,
+        workspace:
+          typeof lockData?.workspace === 'string' && lockData.workspace.trim()
+            ? lockData.workspace
+            : null,
+        workspaceSource: 'lock',
+        logFile,
+      });
+      continue;
+    }
+
+    const pidFromCache = await readPidFromFile(localPidPath);
+    if (!Number.isInteger(pidFromCache) || !pidSet.has(pidFromCache)) {
+      continue;
+    }
+    if (runtimeByPid.has(pidFromCache)) {
+      continue;
+    }
+
+    let metaWorkspace = null;
+    try {
+      const metaData = JSON.parse(await fs.readFile(metaPath, 'utf-8'));
+      if (typeof metaData?.workspace === 'string' && metaData.workspace.trim()) {
+        metaWorkspace = metaData.workspace;
+      }
+    } catch {
+      metaWorkspace = null;
+    }
+
+    runtimeByPid.set(pidFromCache, {
+      pid: pidFromCache,
+      cacheDirectory,
+      workspace: metaWorkspace,
+      workspaceSource: metaWorkspace ? 'meta' : 'cache',
+      logFile,
+    });
+  }
+
+  return runtimeByPid;
+}
+
+function selectRuntimeForStatus({ pids, runtimeByPid, requestedWorkspace }) {
+  if (!Array.isArray(pids) || pids.length === 0) return null;
+  if (!(runtimeByPid instanceof Map) || runtimeByPid.size === 0) return null;
+
+  if (requestedWorkspace) {
+    const requestedNormalized = normalizePathForCompare(requestedWorkspace);
+    for (const pid of pids) {
+      const runtime = runtimeByPid.get(pid);
+      if (!runtime?.workspace) continue;
+      if (normalizePathForCompare(runtime.workspace) === requestedNormalized) {
+        return runtime;
+      }
+    }
+  }
+
+  if (pids.length === 1) {
+    return runtimeByPid.get(pids[0]) || null;
+  }
+
+  for (const pid of pids) {
+    const runtime = runtimeByPid.get(pid);
+    if (runtime?.workspace) {
+      return runtime;
+    }
+  }
+
+  for (const pid of pids) {
+    const runtime = runtimeByPid.get(pid);
+    if (runtime) return runtime;
+  }
+
+  return null;
+}
+
 async function captureConsoleOutput(fn) {
   const original = {
     info: console.info,
@@ -646,6 +777,9 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
     let cacheSummary = null;
     let config = null;
     let configLogs = [];
+    const cmdByPid = new Map();
+    let runtimeByPid = new Map();
+    let selectedRuntime = null;
 
     
     const pidFiles = await listPidFilePaths();
@@ -745,7 +879,6 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
         console.info('[Lifecycle] ⚠️  Multiple servers detected; progress may be inconsistent.');
       }
       if (pids.length > 0) {
-        const cmdByPid = new Map();
         try {
           if (process.platform === 'win32') {
             const { stdout } = await execPromise(
@@ -773,7 +906,7 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
         } catch (_e) {
           
         }
-      if (cmdByPid.size > 0) {
+        if (cmdByPid.size > 0) {
         console.info('[Lifecycle] Active command lines:');
         for (const pid of pids) {
             const cmd = cmdByPid.get(pid);
@@ -782,25 +915,43 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
             }
           }
         }
+
+        runtimeByPid = await collectRuntimeByPid({ pids, globalCacheRoot });
+        for (const [pid, runtime] of runtimeByPid.entries()) {
+          if (runtime?.workspace) continue;
+          const cmd = cmdByPid.get(pid);
+          const workspaceFromCmd = extractWorkspaceFromCommandLine(cmd);
+          if (workspaceFromCmd) {
+            runtime.workspace = workspaceFromCmd;
+            runtime.workspaceSource = 'cmd';
+          }
+        }
+        selectedRuntime = selectRuntimeForStatus({
+          pids,
+          runtimeByPid,
+          requestedWorkspace: workspaceDir,
+        });
       }
       console.info(''); 
     } 
 
     if (!cacheOnly) {
       try {
-        const captured = await captureConsoleOutput(() => loadConfig(workspaceDir));
+        const configWorkspaceDir = workspaceDir || selectedRuntime?.workspace || null;
+        const captured = await captureConsoleOutput(() => loadConfig(configWorkspaceDir));
         config = captured.result;
         configLogs = captured.lines;
-        logPath = getLogFilePath(config);
+        logPath = selectedRuntime?.logFile || getLogFilePath(config);
         try {
           await fs.access(logPath);
           logStatus = '(exists)';
         } catch {
           logStatus = '(not found)';
         }
-        if (config?.cacheDirectory) {
-          const metaFile = path.join(config.cacheDirectory, 'meta.json');
-          const progressFile = path.join(config.cacheDirectory, 'progress.json');
+        const statusCacheDirectory = selectedRuntime?.cacheDirectory || config?.cacheDirectory;
+        if (statusCacheDirectory) {
+          const metaFile = path.join(statusCacheDirectory, 'meta.json');
+          const progressFile = path.join(statusCacheDirectory, 'progress.json');
           let metaData = null;
           let progressData = null;
           try {
@@ -814,7 +965,7 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
             progressData = null;
           }
           cacheSummary = {
-            cacheDir: config.cacheDirectory,
+            cacheDir: statusCacheDirectory,
             hasSnapshot: !!metaData,
             snapshotTime: metaData?.lastSaveTime || null,
             progress: progressData && typeof progressData.progress === 'number' ? progressData : null,
@@ -824,8 +975,14 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
         logPath = 'unknown';
       }
 
-      if (config?.searchDirectory) {
-        console.info(`[Lifecycle] Workspace: ${config.searchDirectory}`);
+      const displayWorkspace = selectedRuntime?.workspace || config?.searchDirectory;
+      if (displayWorkspace) {
+        console.info(`[Lifecycle] Workspace: ${displayWorkspace}`);
+      }
+      if (selectedRuntime?.workspace && selectedRuntime.workspace !== config?.searchDirectory) {
+        console.info(
+          `         Workspace source: running server (${selectedRuntime.workspaceSource || 'runtime'})`
+        );
       }
       console.info(`         Log file: ${logPath} ${logStatus}`.trimEnd());
       if (cacheSummary?.cacheDir) {

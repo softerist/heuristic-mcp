@@ -263,15 +263,35 @@ function ideMatchesFilter(name, filter) {
   return false;
 }
 
-export async function register(filter = null) {
-  const currentIDE = detectCurrentIDE();
-
-  
-  
-  const serverConfig = {
+function getServerConfigForIde(name) {
+  const normalizedName = normalizeIdeName(name);
+  const config = {
     command: 'heuristic-mcp',
     args: [],
   };
+
+  if (normalizedName === 'antigravity') {
+    // Prefer explicit workspace forwarding in VS Code-compatible clients.
+    // If the variable is not expanded by the IDE, CLI parsing safely ignores it.
+    config.args = [
+      '--workspace',
+      '${workspaceFolder}',
+      '--workspace',
+      '${workspaceRoot}',
+      '--workspace',
+      '${workspace}',
+    ];
+    // Allow provider-specific workspace env discovery as a backup signal.
+    config.env = {
+      HEURISTIC_MCP_ENABLE_DYNAMIC_WORKSPACE_ENV: 'true',
+    };
+  }
+
+  return config;
+}
+
+export async function register(filter = null) {
+  const currentIDE = detectCurrentIDE();
 
   const configPaths = getConfigPaths();
   let registeredCount = 0;
@@ -323,6 +343,7 @@ export async function register(filter = null) {
         }
       }
 
+      const serverConfig = getServerConfigForIde(name);
       const updated =
         format === 'toml'
           ? upsertMcpServerEntryInToml(content, 'heuristic-mcp', serverConfig)
@@ -350,9 +371,13 @@ export async function register(filter = null) {
   }
 
   if (registeredCount === 0) {
+    const manualServerConfig = {
+      command: 'heuristic-mcp',
+      args: [],
+    };
     forceLog(`[Auto-Register] No compatible IDE configurations found to update.`);
     forceLog(
-      `[Auto-Register] Manual Config:\n${JSON.stringify({ mcpServers: { 'heuristic-mcp': serverConfig } }, null, 2)}`
+      `[Auto-Register] Manual Config:\n${JSON.stringify({ mcpServers: { 'heuristic-mcp': manualServerConfig } }, null, 2)}`
     );
   } else {
     

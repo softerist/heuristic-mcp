@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import path from 'path';
 
 let execPromiseMock;
 const fsMock = {};
@@ -278,6 +279,45 @@ describe('lifecycle', () => {
     expect(killSpy).toHaveBeenCalledWith(4444, 0);
     expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('Server is RUNNING'));
     expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('[Status] Cache:'));
+  });
+
+  it('prefers running server workspace from lock metadata over caller cwd', async () => {
+    setPlatform('linux');
+    fsMock.readFile.mockImplementation(async (filePath) => {
+      const target = String(filePath);
+      if (target.endsWith(path.join('cacheOnly', '.heuristic-mcp.pid'))) {
+        return '4444';
+      }
+      if (target.endsWith(path.join('cacheOnly', 'server.lock.json'))) {
+        return JSON.stringify({
+          pid: 4444,
+          workspace: '/runtime/workspace',
+          startedAt: new Date().toISOString(),
+        });
+      }
+      if (target.endsWith(path.join('cacheOnly', 'meta.json'))) {
+        return JSON.stringify({ filesIndexed: 1, chunksStored: 1 });
+      }
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    });
+    fsMock.readdir.mockResolvedValue(['cacheOnly']);
+    fsMock.access.mockRejectedValue(new Error('missing'));
+    execPromiseMock.mockImplementation(async (cmd) => {
+      if (cmd === 'npm config get prefix') {
+        return { stdout: '/usr/local' };
+      }
+      return { stdout: '' };
+    });
+    killSpy.mockReturnValue(true);
+    const { status } = await import('../features/lifecycle.js');
+
+    await status();
+
+    expect(consoleInfo).toHaveBeenCalledWith('[Lifecycle] Workspace: /runtime/workspace');
+    const callerCwdWorkspaceCall = consoleInfo.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes(`[Lifecycle] Workspace: ${process.cwd()}`)
+    );
+    expect(callerCwdWorkspaceCall).toBe(false);
   });
 
   it('reports stopped status and empty cache dirs on win32', async () => {
