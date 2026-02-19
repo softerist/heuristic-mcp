@@ -54,13 +54,13 @@ async function readPidFromFile(filePath) {
         const pid = Number(parsed?.pid);
         if (Number.isInteger(pid)) return pid;
       } catch {
-        // fall through
+        
       }
     }
     const pid = parseInt(trimmed, 10);
     if (!Number.isNaN(pid)) return pid;
   } catch {
-    // ignore missing/invalid pid file
+    
   }
   return null;
 }
@@ -75,7 +75,7 @@ export async function stop() {
     const manualPid = process.env.HEURISTIC_MCP_PID;
 
     if (platform === 'win32') {
-      // 1. Try PID files first for reliability (per-workspace)
+      
       const pidFiles = await listPidFilePaths();
       for (const pidFile of pidFiles) {
         const pid = await readPidFromFile(pidFile);
@@ -85,7 +85,7 @@ export async function stop() {
           const pidValue = String(pid);
           if (!pids.includes(pidValue)) pids.push(pidValue);
         } catch (e) {
-          // If we lack permission, still attempt to stop by PID.
+          
           if (e.code === 'EPERM') {
             const pidValue = String(pid);
             if (!pids.includes(pidValue)) pids.push(pidValue);
@@ -95,7 +95,7 @@ export async function stop() {
         }
       }
 
-      // 2. Fallback to WMIC when CIM access is denied
+      
       if (pids.length === 0) {
         try {
           const { stdout } = await execPromise(
@@ -109,11 +109,11 @@ export async function stop() {
             }
           }
         } catch (_wmicErr) {
-          // ignore secondary failures
+          
         }
       }
 
-      // 3. Fallback to process list with fuzzier matching (kill all heuristic-mcp instances)
+      
       try {
         const { stdout } = await execPromise(
           `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and ($_.CommandLine -like '*heuristic-mcp*' -or $_.CommandLine -like '*heuristic-mcp\\\\index.js*' -or $_.CommandLine -like '*heuristic-mcp/index.js*') } | Select-Object -ExpandProperty ProcessId"`
@@ -123,7 +123,7 @@ export async function stop() {
           .split(/\s+/)
           .filter((p) => p && !isNaN(p) && parseInt(p) !== currentPid);
 
-        // Retrieve command lines to filter out workers
+        
         if (listPids.length > 0) {
           const { stdout: cmdOut } = await execPromise(
             `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in @(${listPids.join(',')}) } | Select-Object ProcessId, CommandLine"`
@@ -150,15 +150,15 @@ export async function stop() {
           }
         }
       } catch (_e) {
-        /* ignore */
+        
       }
     } else {
-      // Unix: Use pgrep to get all matching PIDs
+      
       try {
         const { stdout } = await execPromise(`pgrep -fl "heuristic-mcp"`);
         const lines = stdout.trim().split(/\r?\n/);
 
-        // Filter out current PID, dead processes, and workers
+        
         pids = [];
         for (const line of lines) {
           const tokens = line.trim().split(/\s+/).filter(Boolean);
@@ -171,7 +171,7 @@ export async function stop() {
             const pid = parseInt(candidate, 10);
             if (!Number.isFinite(pid) || pid === currentPid) continue;
 
-            // Exclude workers when command line is present
+            
             if (
               !allNumeric &&
               (line.includes('embedding-worker') ||
@@ -188,18 +188,18 @@ export async function stop() {
                 pids.push(pidValue);
               }
             } catch (_e) {
-              /* ignore */
+              
             }
           }
         }
       } catch (e) {
-        // pgrep returns code 1 if no processes found, which is fine
+        
         if (e.code === 1) pids = [];
         else throw e;
       }
     }
 
-    // Manual PID override (best-effort)
+    
     if (manualPid) {
       const parts = String(manualPid)
         .split(/[,\s]+/)
@@ -221,7 +221,7 @@ export async function stop() {
       return;
     }
 
-    // Capture command lines before killing (best-effort)
+    
     try {
       if (platform === 'win32') {
         const { stdout } = await execPromise(
@@ -247,10 +247,10 @@ export async function stop() {
         }
       }
     } catch (_e) {
-      // ignore command line lookup failures
+      
     }
 
-    // Kill each process (Windows uses taskkill for compatibility)
+    
     let killedCount = 0;
     const killedPids = [];
     const failedPids = [];
@@ -262,7 +262,7 @@ export async function stop() {
           } catch (e) {
             const message = String(e?.message || '');
             if (message.includes('not found') || message.includes('not be found')) {
-              // Process already exited; treat as success.
+              
               killedCount++;
               killedPids.push(pid);
               continue;
@@ -285,7 +285,7 @@ export async function stop() {
         killedCount++;
         killedPids.push(pid);
       } catch (e) {
-        // Ignore if process already gone
+        
         if (e.code !== 'ESRCH') {
           failedPids.push(pid);
           console.warn(`[Lifecycle] Failed to kill PID ${pid}: ${e.message}`);
@@ -325,7 +325,7 @@ export async function stop() {
 
 export async function start(filter = null) {
   console.info('[Lifecycle] Ensuring server is configured...');
-  // Re-use the registration logic to ensure the config is present and correct
+  
   try {
     const { register } = await import('./register.js');
     await register(filter);
@@ -533,7 +533,7 @@ async function followFile(filePath, startPosition) {
       stream.pipe(process.stdout, { end: false });
       position = stats.size;
     } catch {
-      // ignore read errors while watching
+      
     }
   });
 
@@ -1182,7 +1182,7 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
       console.info(`   💾 Cache root: ${globalCacheRoot}`);
       console.info(`   📁 Current dir: ${process.cwd()}`);
       console.info('');
-    } // End if (!cacheOnly) - paths
+    } 
   } catch (error) {
     console.error(`[Lifecycle] Failed to check status: ${error.message}`);
   }

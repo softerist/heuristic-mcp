@@ -4,14 +4,14 @@ import { EmbeddingsCache } from '../lib/cache.js';
 import fs from 'fs/promises';
 import path from 'path';
 
-// Mock dependencies
+
 vi.mock('fs/promises');
 vi.mock('worker_threads', async () => {
   const { EventEmitter } = await import('events');
   class Worker extends EventEmitter {
     constructor() {
       super();
-      // Don't emit ready automatically to allow manual control in tests
+      
     }
     terminate() {
       return Promise.resolve();
@@ -44,12 +44,12 @@ describe('Ultra Maximizer', () => {
         cacheDirectory: '/cache',
         embeddingModel: 'test',
         fileExtensions: ['js'],
-        verbose: true, // Crucial for line 673
+        verbose: true, 
       };
       const cache = new EmbeddingsCache(config);
       const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
-      // Mock file system for load()
+      
       vi.spyOn(fs, 'mkdir').mockResolvedValue();
       vi.spyOn(fs, 'readFile').mockImplementation(async (p) => {
         if (p.endsWith('meta.json')) return JSON.stringify({ version: 1, embeddingModel: 'test' });
@@ -73,31 +73,31 @@ describe('Ultra Maximizer', () => {
       const cache = { save: vi.fn(), getVectorStore: () => [] };
       const indexer = new CodebaseIndexer(embedder, cache, config);
 
-      // Mock Worker to fail immediately/emit error
+      
       const { Worker } = await import('worker_threads');
-      // We can't change the class constructor behavior easily here.
-      // But we can emit error on the worker instances after creation?
-      // initializeWorkers creates workers and waits for "ready".
+      
+      
+      
 
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const terminateSpy = vi.spyOn(indexer, 'terminateWorkers');
 
-      // We need to trigger the "error" event on the worker.
-      // We can spy on the workers array push?
-      // Or wait a tick?
+      
+      
+      
 
-      // Let's rely on the timeout? No, timeout takes too long.
-      // We need to get access to the worker instance.
+      
+      
 
-      // Better strategy: Mock the Worker constructor to return a specific instance we control.
-      // But vi.mock is hoisted.
-      // We can modify prototype?
+      
+      
+      
 
-      // Actually, we can just run initializeWorkers, then manually emit error on indexer.workers[0].
+      
 
       const initPromise = indexer.initializeWorkers();
 
-      // Wait a tick for workers to be created
+      
       await new Promise((r) => setTimeout(r, 0));
 
       if (indexer.workers.length > 0) {
@@ -106,7 +106,7 @@ describe('Ultra Maximizer', () => {
 
       await initPromise;
 
-      // initializeWorkers catches the error and calls terminateWorkers (Line 146)
+      
       expect(terminateSpy).toHaveBeenCalled();
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Worker initialization failed')

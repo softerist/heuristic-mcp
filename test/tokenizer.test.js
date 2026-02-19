@@ -1,12 +1,4 @@
-/**
- * Tests for Tokenizer utilities
- *
- * Tests the token estimation and model-specific limits including:
- * - Token estimation for various text types
- * - Model token limits lookup
- * - Chunking parameters calculation
- * - Token limit checking
- */
+
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -25,9 +17,9 @@ describe('Token Estimation', () => {
     });
 
     it('should count simple words correctly', () => {
-      // Simple words get ~1 token each + 2 for CLS/SEP
+      
       const result = estimateTokens('hello world');
-      expect(result).toBeGreaterThanOrEqual(4); // 2 words + 2 special tokens
+      expect(result).toBeGreaterThanOrEqual(4); 
       expect(result).toBeLessThanOrEqual(6);
     });
 
@@ -35,7 +27,7 @@ describe('Token Estimation', () => {
       const shortWord = estimateTokens('cat');
       const longWord = estimateTokens('internationalization');
 
-      // Long words should have more tokens due to subword splitting
+      
       expect(longWord).toBeGreaterThan(shortWord);
     });
 
@@ -43,7 +35,7 @@ describe('Token Estimation', () => {
       const withoutSpecial = estimateTokens('hello world');
       const withSpecial = estimateTokens('hello(); world{}');
 
-      // Special characters add to token count
+      
       expect(withSpecial).toBeGreaterThan(withoutSpecial);
     });
 
@@ -57,7 +49,7 @@ describe('Token Estimation', () => {
 
       const tokens = estimateTokens(code);
 
-      // Code has many special chars, should have reasonable token count
+      
       expect(tokens).toBeGreaterThan(10);
       expect(tokens).toBeLessThan(100);
     });
@@ -117,15 +109,15 @@ describe('Chunking Parameters', () => {
       const params = getChunkingParams('jinaai/jina-embeddings-v2-base-code');
 
       expect(params.maxTokens).toBe(512);
-      expect(params.targetTokens).toBeLessThan(512); // 85% of max
+      expect(params.targetTokens).toBeLessThan(512); 
       expect(params.targetTokens).toBeGreaterThan(400);
       expect(params.overlapTokens).toBeLessThan(params.targetTokens);
     });
 
     it('should calculate ~85% for target tokens', () => {
-      const params = getChunkingParams('jinaai/jina-embeddings-v2-base-code'); // 512 limit
+      const params = getChunkingParams('jinaai/jina-embeddings-v2-base-code'); 
 
-      // 85% of 512 = 435.2 -> floor = 435
+      
       expect(params.targetTokens).toBe(Math.floor(512 * 0.85));
     });
 
@@ -173,13 +165,13 @@ describe('Integration: Token Estimation Accuracy', () => {
 
     const tokens = estimateTokens(typicalCodeChunk);
 
-    // Should be within typical chunk size
+    
     expect(tokens).toBeGreaterThan(30);
     expect(tokens).toBeLessThan(200);
   });
 
   it('should keep small code chunks under model limits', () => {
-    // A small chunk should definitely be under the limit
+    
     const safeChunk = 'const x = 1;\n'.repeat(10);
     const limit = getModelTokenLimit('jinaai/jina-embeddings-v2-base-code');
     expect(estimateTokens(safeChunk)).toBeLessThanOrEqual(limit);

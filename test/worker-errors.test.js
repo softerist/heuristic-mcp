@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 
-// Enable worker error tests by default since we mock the worker properly
+
 const runWorkerErrors = true;
 const maybeDescribe = describe;
 
@@ -38,7 +38,7 @@ maybeDescribe('Worker Error Handling', () => {
       cpus: () => [{}, {}, {}, {}],
     }));
 
-    // Dynamic import
+    
     const { CodebaseIndexer } = await import('../features/index-codebase.js');
 
     config = {
@@ -70,16 +70,16 @@ maybeDescribe('Worker Error Handling', () => {
 
     const promise = indexer.processChunksWithWorkers(chunks);
 
-    // Trigger error
+    
     await new Promise((r) => setTimeout(r, 10));
 
     try {
-      // Emit error on the event emitter.
-      // The indexer attached a listener via 'once'.
-      // Vitest might complain if unhandled, so we wrap.
+      
+      
+      
       workers[0].emit('error', new Error('Worker crash'));
     } catch (_e) {
-      /* ignore */
+      
     }
 
     await promise;

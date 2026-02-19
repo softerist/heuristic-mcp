@@ -1,7 +1,7 @@
-// Note: This test file cannot achieve 100% coverage because some code paths
-// in register.js are specific to Windows, macOS, and Linux. The tests are
-// running on a single platform, so the other platform-specific code is not
-// executed.
+
+
+
+
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -267,11 +267,11 @@ describe('register', () => {
   });
 
   it('handles missing LOCALAPPDATA on Windows', async () => {
-    // This targets line 205
+    
     process.env.ANTIGRAVITY_AGENT = '1';
     setPlatform('win32');
     delete process.env.LOCALAPPDATA;
-    // Ensure registerCount > 0 to hit the block
+    
     fsPromisesMock.access.mockResolvedValue();
     fsPromisesMock.readFile.mockResolvedValue('{}');
 

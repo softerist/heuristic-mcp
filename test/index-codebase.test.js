@@ -1,6 +1,4 @@
-/**
- * Tests for CodebaseIndexer feature
- */
+
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import {
@@ -20,9 +18,9 @@ describe('CodebaseIndexer', () => {
 
   beforeAll(async () => {
     fixtures = await createTestFixtures({ workerThreads: 1 });
-    // Exclude the branches test file to avoid instability during self-indexing tests
+    
     fixtures.config.excludePatterns.push('**/index-codebase-branches.test.js');
-    // Re-create indexer to apply exclusion matchers
+    
     fixtures.indexer = new CodebaseIndexer(
       fixtures.embedder,
       fixtures.cache,
@@ -36,7 +34,7 @@ describe('CodebaseIndexer', () => {
   });
 
   beforeEach(async () => {
-    // Reset state
+    
     fixtures.indexer.isIndexing = false;
     await fixtures.indexer.terminateWorkers();
   });
@@ -47,15 +45,15 @@ describe('CodebaseIndexer', () => {
     });
 
     it('should index files and create embeddings', async () => {
-      // Clear cache first
+      
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
       fixtures.cache.clearFileHashes();
 
-      // Run indexing (measure time for basic performance sanity check)
+      
       const { result, duration } = await measureTime(() => fixtures.indexer.indexAll(true));
 
-      // Should have processed files
+      
       expect(result.skipped).toBe(false);
       expect(result.filesProcessed).toBeGreaterThan(0);
       expect(result.chunksCreated).toBeGreaterThan(0);
@@ -65,27 +63,27 @@ describe('CodebaseIndexer', () => {
     });
 
     it('should skip unchanged files on subsequent indexing', async () => {
-      // First index
+      
       await fixtures.indexer.indexAll(true);
 
-      // Second index without force
+      
       const result = await fixtures.indexer.indexAll(false);
 
-      // Should skip processing (files unchanged)
+      
       expect(result.skipped).toBe(false);
       expect(result.filesProcessed).toBe(0);
       expect(result.message).toContain('up to date');
     });
 
     it('should reindex all files when force is true', async () => {
-      // First index
+      
       await fixtures.indexer.indexAll(true);
       const _firstChunks = fixtures.cache.getVectorStore().length;
 
-      // Force reindex
+      
       const result = await fixtures.indexer.indexAll(true);
 
-      // Should have processed all files again
+      
       expect(result.filesProcessed).toBeGreaterThan(0);
       expect(result.chunksCreated).toBeGreaterThan(0);
     });
@@ -93,16 +91,16 @@ describe('CodebaseIndexer', () => {
 
   describe('Concurrent Indexing Protection', () => {
     it('should prevent concurrent indexing', async () => {
-      // Clear for clean state
+      
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
       fixtures.cache.clearFileHashes();
 
-      // Start first indexing
+      
       const promise1 = fixtures.indexer.indexAll(true);
       expect(fixtures.indexer.isIndexing).toBe(true);
 
-      // Second call should be skipped
+      
       const result2 = await fixtures.indexer.indexAll(false);
 
       expect(result2.skipped).toBe(true);
@@ -112,7 +110,7 @@ describe('CodebaseIndexer', () => {
     });
 
     it('should set and clear isIndexing flag correctly', async () => {
-      // Clear cache to ensure indexing actually runs
+      
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
       fixtures.cache.clearFileHashes();
@@ -124,7 +122,7 @@ describe('CodebaseIndexer', () => {
 
       await promise;
 
-      // Should be cleared after indexing
+      
       expect(fixtures.indexer.isIndexing).toBe(false);
     });
   });
@@ -135,7 +133,7 @@ describe('CodebaseIndexer', () => {
 
       expect(files.length).toBeGreaterThan(0);
 
-      // All files should have valid extensions
+      
       const extensions = fixtures.config.fileExtensions.map((ext) => `.${ext}`);
       for (const file of files) {
         const ext = file.substring(file.lastIndexOf('.'));
@@ -146,11 +144,11 @@ describe('CodebaseIndexer', () => {
     it('should exclude files in excluded directories', async () => {
       const files = await fixtures.indexer.discoverFiles();
 
-      // No files from node_modules
+      
       const nodeModulesFiles = files.filter((f) => f.includes('node_modules'));
       expect(nodeModulesFiles.length).toBe(0);
 
-      // No files from .smart-coding-cache
+      
       const cacheFiles = files.filter((f) => f.includes('.smart-coding-cache'));
       expect(cacheFiles.length).toBe(0);
     });
@@ -164,8 +162,8 @@ describe('CodebaseIndexer', () => {
     });
 
     it('should fallback to single thread if worker init fails', async () => {
-      // Can't easily mock Worker constructor failure in integration test without setup
-      // But we can test behavior if workers array is empty
+      
+      
       fixtures.indexer.workers = [];
       const chunks = [{ file: 'f.js', text: 'code' }];
 
@@ -178,7 +176,7 @@ describe('CodebaseIndexer', () => {
     });
 
     it('should handle worker timeouts by falling back', async () => {
-      // Mock a worker that never responds
+      
       const mockWorker = {
         postMessage: vi.fn(),
         on: vi.fn(),
@@ -190,30 +188,30 @@ describe('CodebaseIndexer', () => {
       fixtures.indexer.workers = [mockWorker];
       fixtures.config.verbose = true;
 
-      // Mock fallback to avoid actual embedding
+      
       const fallbackSpy = vi
         .spyOn(fixtures.indexer, 'processChunksSingleThreaded')
         .mockResolvedValue([{ success: true }]);
 
-      // Reduce timeout for test
+      
       const _originalTimeout = setTimeout;
-      // We can't change the constant inside the module, so we rely on mocking
-      // Actually, we can just spy on fallback
-      // Since we can't easily mock the timeout inside the function without using fake timers
-      // We'll rely on the logic: if worker doesn't resolve, it times out?
-      // The timeout is 5min, effectively infinite for test.
-      // We need to simulate the timeout triggering.
-      // Use fake timers
+      
+      
+      
+      
+      
+      
+      
       vi.useFakeTimers();
 
       const promise = fixtures.indexer.processChunksWithWorkers([{ text: 'test' }]);
 
-      // Fast forward time
+      
       vi.advanceTimersByTime(300001);
 
       const _result = await promise;
-      // Should have empty result from timeout path (it resolves [] then retries)
-      // Wait, the code: resolve([]), then failedChunks > 0, then fallback.
+      
+      
 
       expect(fallbackSpy).toHaveBeenCalled();
       vi.useRealTimers();
@@ -238,13 +236,13 @@ describe('CodebaseIndexer', () => {
     it('should handle file read errors gracefully during pre-filter', async () => {
       const _files = ['/path/bad.js', '/path/good.js'];
 
-      // Mock fs.stat/readFile
-      // Since this is integration test with real deps, verifying this is hard without mocks.
-      // fixtures uses real CodebaseIndexer.
+      
+      
+      
       // We can spy on fs/promises if we mocked it globally, but we didn't here.
-      // Better to mock preFilterFiles internals or just rely on indexAll integration?
-      // Let's rely on integration or skip for now if too intrusive.
-      // Actually, helper.js does NOT mock fs.
+      
+      
+      
     });
   });
 
@@ -363,7 +361,7 @@ describe('Index Codebase Tool Handler', () => {
     });
 
     it('should return skipped message on concurrent calls', async () => {
-      // Start first indexing
+      
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
       fixtures.cache.clearFileHashes();
@@ -374,7 +372,7 @@ describe('Index Codebase Tool Handler', () => {
       );
       expect(fixtures.indexer.isIndexing).toBe(true);
 
-      // Second concurrent call
+      
       const result2 = await IndexCodebaseFeature.handleToolCall(
         createMockRequest('b_index_codebase', { force: false }),
         fixtures.indexer
@@ -387,13 +385,13 @@ describe('Index Codebase Tool Handler', () => {
     });
 
     it('should handle force parameter correctly', async () => {
-      // First index
+      
       await IndexCodebaseFeature.handleToolCall(
         createMockRequest('b_index_codebase', { force: true }),
         fixtures.indexer
       );
 
-      // Non-force should skip unchanged
+      
       const result = await IndexCodebaseFeature.handleToolCall(
         createMockRequest('b_index_codebase', { force: false }),
         fixtures.indexer
@@ -417,31 +415,31 @@ describe('Index Codebase Branch Maximizer', () => {
 
   it('covers various verbose=false branches and error paths', async () => {
     fixtures.config.verbose = false;
-    fixtures.indexer.server = null; // Test watcher without server
+    fixtures.indexer.server = null; 
 
-    // Use a sub-directory to avoid interfering with other tests
+    
     const subDir = path.join(fixtures.config.searchDirectory, 'maximizer');
     await fs.mkdir(subDir, { recursive: true });
 
-    // 1. Cover indexFile with excluded file (non-verbose)
+    
     const excluded = await fixtures.indexer.indexFile('node_modules/test.js');
     expect(excluded).toBe(0);
 
-    // 2. Cover indexFile with large file (non-verbose)
+    
     const largeFile = path.join(subDir, 'large.js');
     await fs.writeFile(largeFile, 'x'.repeat(fixtures.config.maxFileSize + 1));
     const zipped = await fixtures.indexer.indexFile(largeFile);
     expect(zipped).toBe(0);
 
-    // 3. Cover indexFile with unchanged hash (non-verbose)
+    
     const unchangedFile = path.join(subDir, 'unchanged.js');
     await fs.writeFile(unchangedFile, 'content');
     await fixtures.indexer.indexFile(unchangedFile);
     const secondRun = await fixtures.indexer.indexFile(unchangedFile);
     expect(secondRun).toBe(0);
 
-    // 4. Cover indexFile hash update skip (non-verbose)
-    // Mock embedder to fail for one chunk
+    
+    
     const originalEmbedder = fixtures.indexer.embedder;
     fixtures.indexer.embedder = vi.fn().mockRejectedValueOnce(new Error('fail'));
     const failFile = path.join(subDir, 'fail.js');
@@ -449,10 +447,10 @@ describe('Index Codebase Branch Maximizer', () => {
     await fixtures.indexer.indexFile(failFile);
     fixtures.indexer.embedder = originalEmbedder;
 
-    // Clean up to avoid affecting other tests
+    
     await fs.rm(subDir, { recursive: true, force: true });
 
-    // 5. Cover indexAll adaptive batching (> 1000)
+    
     const discoverSpy = vi
       .spyOn(fixtures.indexer, 'discoverFiles')
       .mockResolvedValue([...new Array(1001)].map((_, i) => `file_${i}.js`));
@@ -464,12 +462,12 @@ describe('Index Codebase Branch Maximizer', () => {
     discoverSpy.mockRestore();
     preFilterSpy.mockRestore();
 
-    // 6. Cover watcher without server/hybridSearch
-    fixtures.config.watchFiles = true; // IMPORTANT: Set this so watcher is created
+    
+    fixtures.config.watchFiles = true; 
     await fixtures.indexer.setupFileWatcher();
     expect(fixtures.indexer.watcher).not.toBeNull();
 
-    // Manually trigger add/change/unlink to cover the "if (this.server)" checks
+    
     await fixtures.indexer.watcher.emit('add', 'new.js');
     await fixtures.indexer.watcher.emit('change', 'new.js');
     await fixtures.indexer.watcher.emit('unlink', 'new.js');
@@ -480,29 +478,29 @@ describe('Index Codebase Branch Maximizer', () => {
 
   it('covers remaining branches: fileNames fallback, failed hash update logging, and progress', async () => {
     fixtures.config.verbose = true;
-    fixtures.config.fileNames = null; // Cover line 445: fileNames fallback
+    fixtures.config.fileNames = null; 
 
     const subDir = path.join(fixtures.config.searchDirectory, 'remaining');
     await fs.mkdir(subDir, { recursive: true });
     const failFile = path.join(subDir, 'fail_verbose_all.js');
     await fs.writeFile(failFile, 'content');
 
-    // Trigger branch at line 803 (indexAll failed hash update logging)
+    
     const originalEmbedder = fixtures.indexer.embedder;
     fixtures.indexer.embedder = vi.fn().mockRejectedValueOnce(new Error('fail'));
 
-    // Also cover 764: if (stats) by injecting a chunk with a missing file stats entry
-    // This is hard via API, so we'll mock SmartChunk to return a chunk for a file NOT in the batch
+    
+    
     const { smartChunk: _smartChunk } = await import('../lib/utils.js');
     const smartChunkSpy = vi
       .spyOn(await import('../lib/utils.js'), 'smartChunk')
       .mockReturnValue([{ text: 't', startLine: 1, endLine: 1 }]);
-    // Wait, the code uses "file" from the loop.
-    // Actually, we can just spy on fileStats.get in the indexer if we really want to hit it.
-    // But let's try to trigger it naturally or skip if it's truly unreachable (defensive code).
-    // Let's try to mock fileStats map.
+    
+    
+    
+    
 
-    // Trigger branch at line 860 (background ANN failure logging)
+    
     fixtures.cache.ensureAnnIndex = vi.fn().mockRejectedValue(new Error('boom'));
 
     await fixtures.indexer.indexAll(true);
@@ -514,8 +512,8 @@ describe('Index Codebase Branch Maximizer', () => {
   });
 
   it('covers worker result collection edge cases', async () => {
-    // ... (rest of the file)
-    // Cover line 287: failedChunks check
+    
+    
     const chunks = [{ file: 'f.js', text: 't' }];
     fixtures.indexer.config.allowSingleThreadFallback = true;
     fixtures.indexer.workers = [

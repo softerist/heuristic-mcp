@@ -1,6 +1,4 @@
-/**
- * Tests for configuration loading and environment overrides
- */
+
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'fs/promises';
@@ -30,7 +28,7 @@ async function withTempDir(testFn) {
 
 afterEach(() => {
   resetEnv();
-  vi.restoreAllMocks(); // Restore mocks after each test
+  vi.restoreAllMocks(); 
 });
 
 describe('Configuration Loading', () => {
@@ -70,7 +68,7 @@ describe('Configuration Loading', () => {
     await withTempDir(async (dir) => {
       const configData = {
         smartIndexing: false,
-        // Legacy values should be overridden by explicit memoryCleanup values.
+        
         clearCacheAfterIndex: false,
         incrementalMemoryProfile: false,
         recycleServerOnHighRssThresholdMb: 3000,
@@ -122,7 +120,7 @@ describe('Configuration Loading', () => {
     await withTempDir(async (dir) => {
       const configData = {
         smartIndexing: false,
-        // Legacy values intentionally opposite to verify namespace precedence.
+        
         workerThreads: 0,
         embeddingProcessNumThreads: 4,
         vectorStoreLoadMode: 'memory',
@@ -488,7 +486,7 @@ describe('Configuration Loading', () => {
 
   it('ignores invalid boolean environment overrides and empty strings', async () => {
     await withTempDir(async (dir) => {
-      // Set values opposite to defaults in the config file to ensure env var doesn't revert them or mess them up
+      
       await fs.writeFile(
         path.join(dir, 'config.json'),
         JSON.stringify({
@@ -509,7 +507,7 @@ describe('Configuration Loading', () => {
 
       const config = await loadConfig(dir);
 
-      expect(config.verbose).toBe(true); // Should stay as configured in file
+      expect(config.verbose).toBe(true); 
       expect(config.smartIndexing).toBe(false);
       expect(config.watchFiles).toBe(false);
       expect(config.embeddingModel).toBe(DEFAULT_CONFIG.embeddingModel);

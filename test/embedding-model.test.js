@@ -1,12 +1,4 @@
-/**
- * Tests for Local LLM (Embedding Model)
- *
- * Tests the embedding model functionality including:
- * - Model loading
- * - Embedding generation
- * - Vector properties
- * - Similarity calculations
- */
+
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { pipeline } from '@huggingface/transformers';
@@ -26,14 +18,14 @@ describe('Local Embedding Model', () => {
       embedder = await pipeline('feature-extraction', config.embeddingModel);
       console.info('[Test] Embedding model loaded successfully');
     } else {
-      // Smart semi-semantic mock for offline/CI-friendly tests
-      // Simulates semantic similarity using keywords and bag-of-words
+      
+      
       embedder = async (text, options = {}) => {
         const input = String(text ?? '').toLowerCase();
         const vector = new Float32Array(mockDimensions).fill(0);
 
-        // 1. Synonym Mapping (Concept Injection)
-        // Map synonyms to specific vector dimensions to simulate "meaning"
+        
+        
         const concepts = {
           login: 0,
           auth: 0,
@@ -49,29 +41,29 @@ describe('Local Embedding Model', () => {
           require: 3,
           module: 3,
           react: 3,
-          vue: 3, // Frameworks grouped
+          vue: 3, 
           weather: 4,
           sun: 4,
           pizza: 5,
           food: 5,
         };
 
-        // 2. Bag-of-Words with ordering noise
-        // This ensures "A B" == "B A" (high similarity)
+        
+        
         for (const word of input.split(/\W+/)) {
           if (!word) continue;
 
-          // Add concept signal
+          
           if (word in concepts) {
             const dim = concepts[word];
             vector[dim] += 1.0;
           }
 
-          // Add deterministic character signal (hashing)
-          // Use Bag-of-Words approach: sum vectors regardless of position
+          
+          
           for (let i = 0; i < word.length; i++) {
             const charCode = word.charCodeAt(i);
-            // Spread char influence across dimensions to avoid collisions
+            
             vector[charCode % mockDimensions] += 0.1;
           }
         }

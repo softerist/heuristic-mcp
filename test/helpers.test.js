@@ -1,6 +1,4 @@
-/**
- * Additional coverage for test helpers
- */
+
 
 import { describe, it, expect, vi } from 'vitest';
 

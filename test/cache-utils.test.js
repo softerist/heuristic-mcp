@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 
-// Mock getGlobalCacheDir before importing clearStaleCaches
+
 let testCacheRoot;
 vi.mock('../lib/config.js', () => ({
   getGlobalCacheDir: () => testCacheRoot,
@@ -13,17 +13,17 @@ const { clearStaleCaches } = await import('../lib/cache-utils.js');
 
 describe('clearStaleCaches', () => {
   beforeEach(async () => {
-    // Create temporary cache directory
+    
     testCacheRoot = path.join(os.tmpdir(), `heuristic-mcp-test-${Date.now()}`);
     await fs.mkdir(path.join(testCacheRoot, 'heuristic-mcp'), { recursive: true });
   });
 
   afterEach(async () => {
-    // Cleanup test directory
+    
     try {
       await fs.rm(testCacheRoot, { recursive: true, force: true });
     } catch {
-      // ignore cleanup errors
+      
     }
   });
 
@@ -31,7 +31,7 @@ describe('clearStaleCaches', () => {
     const cacheDir = path.join(testCacheRoot, 'heuristic-mcp', 'test-active');
     await fs.mkdir(cacheDir, { recursive: true });
 
-    // Create meta.json
+    
     await fs.writeFile(
       path.join(cacheDir, 'meta.json'),
       JSON.stringify({
@@ -42,7 +42,7 @@ describe('clearStaleCaches', () => {
       })
     );
 
-    // Create lock file with current process PID (active)
+    
     await fs.writeFile(
       path.join(cacheDir, 'server.lock.json'),
       JSON.stringify({
@@ -65,7 +65,7 @@ describe('clearStaleCaches', () => {
     const cacheDir = path.join(testCacheRoot, 'heuristic-mcp', 'test-empty');
     await fs.mkdir(cacheDir, { recursive: true });
 
-    const oldTime = Date.now() - 25 * 60 * 60 * 1000; // 25 hours ago
+    const oldTime = Date.now() - 25 * 60 * 60 * 1000; 
 
     await fs.writeFile(
       path.join(cacheDir, 'meta.json'),
@@ -92,7 +92,7 @@ describe('clearStaleCaches', () => {
     const cacheDir = path.join(testCacheRoot, 'heuristic-mcp', 'test-temp');
     await fs.mkdir(cacheDir, { recursive: true });
 
-    const oldTime = Date.now() - 25 * 60 * 60 * 1000; // 25 hours ago
+    const oldTime = Date.now() - 25 * 60 * 60 * 1000; 
 
     await fs.writeFile(
       path.join(cacheDir, 'meta.json'),
@@ -125,7 +125,7 @@ describe('clearStaleCaches', () => {
         workspace: '/some/path',
         filesIndexed: 10,
         chunksStored: 100,
-        lastSaveTime: new Date().toISOString(), // Very recent
+        lastSaveTime: new Date().toISOString(), 
       })
     );
 
@@ -147,10 +147,10 @@ describe('clearStaleCaches', () => {
     await fs.writeFile(
       path.join(cacheDir, 'meta.json'),
       JSON.stringify({
-        workspace: process.cwd(), // Current directory exists
+        workspace: process.cwd(), 
         filesIndexed: 50,
         chunksStored: 500,
-        lastSaveTime: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days ago
+        lastSaveTime: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), 
       })
     );
 
@@ -169,7 +169,7 @@ describe('clearStaleCaches', () => {
     const cacheDir = path.join(testCacheRoot, 'heuristic-mcp', 'test-remove');
     await fs.mkdir(cacheDir, { recursive: true });
 
-    const oldTime = Date.now() - 25 * 60 * 60 * 1000; // 25 hours ago
+    const oldTime = Date.now() - 25 * 60 * 60 * 1000; 
 
     await fs.writeFile(
       path.join(cacheDir, 'meta.json'),
@@ -191,7 +191,7 @@ describe('clearStaleCaches', () => {
     expect(results.kept).toBe(0);
     expect(results.dryRun).toBe(false);
 
-    // Verify cache directory was actually removed
+    
     try {
       await fs.access(cacheDir);
       expect.fail('Cache directory should have been removed');

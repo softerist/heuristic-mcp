@@ -23,17 +23,17 @@ describe('HybridSearch coverage', () => {
 
     const cache = createHybridSearchCacheStub({
       vectorStore,
-      // ANN returns only the first chunk
+      
       queryAnn: async () => [0],
     });
 
     const config = {
       annEnabled: true,
-      // Ensure we get into the ANN path
+      
       annMinCandidates: 0,
       annMaxCandidates: 10,
       annCandidateMultiplier: 1,
-      // Need maxResults > exactMatchCount (which will be 1)
+      
       maxResults: 5,
       semanticWeight: 1,
       exactMatchBoost: 1,
@@ -46,13 +46,13 @@ describe('HybridSearch coverage', () => {
 
     const hybridSearch = new HybridSearch(embedder, cache, config);
 
-    // Search for "exact match"
-    // 1. ANN returns Chunk 0.
-    // 2. exactMatchCount = 1 (Chunk 0 has "exact match").
-    // 3. maxResults = 5. 1 < 5.
-    // 4. Fallback loop starts.
-    // 5. Checks Chunk 0. content matches. Key is in seen set. Line 113 -> continue.
-    // 6. Checks Chunk 1. content matches. Key not in seen set. Added.
+    
+    
+    
+    
+    
+    
+    
 
     const { results } = await hybridSearch.search('exact match', 5);
 

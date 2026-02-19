@@ -20,19 +20,19 @@ describe('Coverage Gaps', () => {
       const detector = new ProjectDetector('/root');
       vi.mocked(fs.readdir).mockResolvedValue([{ name: 'dir1', isDirectory: () => true }]);
 
-      // We want to trigger depth > 2 return in checkDir
-      // initializeWorkers logic is recursive.
+      
+      
       await detector.detectProjectTypes();
-      // Coverage should show line 16 hit
+      
     });
 
     it('handles missing ignore pattern for detected type', () => {
       const detector = new ProjectDetector('/root');
-      // Force a type that doesn't exist in IGNORE_PATTERNS
+      
       detector.detectedTypes.add('mystery-project');
       const patterns = detector.getSmartIgnorePatterns();
       expect(patterns).toBeDefined();
-      expect(patterns.length).toBeGreaterThan(0); // Should still have common patterns
+      expect(patterns.length).toBeGreaterThan(0); 
     });
   });
 
@@ -49,14 +49,14 @@ describe('Coverage Gaps', () => {
           })
           .mockReturnValue(true),
       };
-      // External functions aren't directly exportable, but we can hit them via buildAnnIndex
-      // or by importing the private functions if we were in a different setup.
-      // Since cache.js doesn't export initHnswIndex, we use buildAnnIndex.
+      
+      
+      
 
       const cache = new EmbeddingsCache({ annMetric: 'l2' });
       cache.vectorStore = [{ vector: [1, 2] }];
 
-      // Use function instead of arrow for constructor
+      
       const HierarchicalNSW = vi.fn(function () {
         return mockIndex;
       });
@@ -83,9 +83,9 @@ describe('Coverage Gaps', () => {
 
     it('covers getRelatedFiles missing graph path', async () => {
       const cache = new EmbeddingsCache({ callGraphEnabled: true });
-      // Correct format for fileCallData: file -> { definitions: [], calls: [] }
+      
       cache.setFileCallData('f.js', { definitions: [], calls: [] });
-      // Avoid rebuildCallGraph which is async/lazy
+      
       cache.callGraph = null;
 
       const result = await cache.getRelatedFiles(['sym']);

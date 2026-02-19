@@ -3,7 +3,7 @@ import { EventEmitter } from 'events';
 import fs from 'fs/promises';
 import path from 'path';
 
-// Master mock for everything
+
 vi.mock('fs/promises');
 vi.mock('chokidar', () => ({
   default: {
@@ -14,7 +14,7 @@ vi.mock('chokidar', () => ({
   },
 }));
 
-// Safe Mock Worker
+
 class SafeMockWorker extends EventEmitter {
   constructor() {
     super();
@@ -76,7 +76,7 @@ describe('Master Coverage Maximizer', () => {
       const cache = new EmbeddingsCache({ callGraphEnabled: true });
       cache.setFileCallData('a.js', { definitions: [], calls: [] });
       cache.callGraph = null;
-      // Force dynamic import to fail or not set callGraph
+      
       const result = await cache.getRelatedFiles(['test']);
       expect(result.size).toBe(0);
     });
@@ -87,7 +87,7 @@ describe('Master Coverage Maximizer', () => {
 
     beforeEach(async () => {
       vi.resetModules();
-      // Mock os
+      
       vi.doMock('os', () => ({
         cpus: () => [{}, {}],
         default: { cpus: () => [{}, {}] },
@@ -139,7 +139,7 @@ describe('Master Coverage Maximizer', () => {
       const indexer = new CodebaseIndexer(vi.fn(), {}, { verbose: true });
       indexer.workers = [worker];
 
-      // Setup postMessage to emit result for p1
+      
       worker.postMessage.mockImplementationOnce((msg) => {
         setTimeout(() => {
           worker.emit('message', {
@@ -154,7 +154,7 @@ describe('Master Coverage Maximizer', () => {
       await p1;
       expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Worker 0 error'));
 
-      // Setup for p2 (crash)
+      
       worker.postMessage.mockImplementationOnce(() => {
         setTimeout(() => {
           worker.emit('error', new Error('crashed'));

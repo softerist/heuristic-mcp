@@ -13,6 +13,9 @@ let transformersModule = null;
 async function getTransformers() {
   if (!transformersModule) {
     transformersModule = await import('@huggingface/transformers');
+    if (transformersModule?.env) {
+      transformersModule.env.cacheDir = path.join(getGlobalCacheDir(), 'xenova');
+    }
   }
   return transformersModule;
 }
@@ -214,7 +217,7 @@ async function detectWorkspaceFromRoots() {
     // Convert file:// URIs to local paths
     const rootPaths = result.roots
       .map(r => r.uri)
-      .filter(uri => uri.startsWith('file://'))
+      .filter(uri => uri.startsWith('file:
       .map(uri => {
         try { return fileURLToPath(uri); } catch { return null; }
       })
@@ -232,7 +235,7 @@ async function detectWorkspaceFromRoots() {
   }
 }
 
-// Feature registry - ordered by priority (semantic_search first as primary tool)
+
 const features = [
   {
     module: HybridSearchFeature,
@@ -267,16 +270,16 @@ const features = [
   {
     module: SetWorkspaceFeature,
     instance: null,
-    handler: null, // Late-bound after initialization
+    handler: null, 
   },
 ];
 
-// Initialize application
+
 async function initialize(workspaceDir) {
-  // Load configuration with workspace support
+  
   config = await loadConfig(workspaceDir);
   
-  // Automatic cache cleanup on startup (Option A)
+  
   if (config.enableCache && config.cacheCleanup?.autoCleanup) {
     console.info('[Server] Running automatic cache cleanup...');
     const results = await clearStaleCaches({
@@ -288,7 +291,7 @@ async function initialize(workspaceDir) {
     }
   }
   
-  // Skip gc check during tests (VITEST env is set)
+  
   const isTest = Boolean(process.env.VITEST || process.env.VITEST_WORKER_ID);
   if (config.enableExplicitGc && typeof global.gc !== 'function' && !isTest) {
     console.warn(
@@ -323,7 +326,7 @@ async function initialize(workspaceDir) {
         env.backends.onnx.wasm.numThreads = ONNX_THREAD_LIMIT;
       }
     } catch {
-      // ignore: fallback tuning is best effort
+      
     }
     const status = getNativeOnnxStatus();
     const reason = status?.message || 'onnxruntime-node not available';
@@ -387,7 +390,7 @@ async function initialize(workspaceDir) {
     }
   }
 
-  // Log effective configuration for debugging
+  
   console.info(
     `[Server] Config: workerThreads=${config.workerThreads}, embeddingProcessPerBatch=${config.embeddingProcessPerBatch}`
   );
@@ -399,7 +402,7 @@ async function initialize(workspaceDir) {
     console.info(`[Server] PID file: ${pidPath}`);
   }
 
-  // Log cache directory logic for debugging
+  
   try {
     const globalCache = path.join(getGlobalCacheDir(), 'heuristic-mcp');
     const localCache = path.join(process.cwd(), '.heuristic-mcp');
@@ -407,7 +410,7 @@ async function initialize(workspaceDir) {
     console.info(`[Server] Process CWD: ${process.cwd()}`);
     console.info(`[Server] Resolved workspace: ${config.searchDirectory} (via ${config.workspaceResolution?.source || 'unknown'})`);
   } catch (_e) {
-    /* ignore */
+    
   }
 
   let stopStartupMemory = null;
@@ -416,7 +419,7 @@ async function initialize(workspaceDir) {
     stopStartupMemory = startMemoryLogger('[Server] Memory (startup)', MEMORY_LOG_INTERVAL_MS);
   }
 
-  // Ensure search directory exists
+  
   try {
     await fs.access(config.searchDirectory);
   } catch {
@@ -424,7 +427,7 @@ async function initialize(workspaceDir) {
     process.exit(1);
   }
 
-  // Create a transparent lazy-loading embedder closure
+  
   console.info('[Server] Initializing features...');
   let cachedEmbedderPromise = null;
   const lazyEmbedder = async (...args) => {
@@ -594,17 +597,17 @@ server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
   }
 });
 
-// Handle resources/list
+
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return await handleListResources(config);
 });
 
-// Handle resources/read
+
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   return await handleReadResource(request.params.uri, config);
 });
 
-// Register tools from all features
+
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   const tools = [];
 
@@ -616,7 +619,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return { tools };
 });
 
-// Handle tool calls
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   await maybeAutoSwitchWorkspace(request);
 
@@ -624,7 +627,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const toolDef = feature.module.getToolDefinition(config);
 
     if (request.params.name === toolDef.name) {
-      // Safety check: handler may be null if initialization is incomplete
+      
       if (typeof feature.handler !== 'function') {
         return {
           content: [{
@@ -636,11 +639,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       const result = await feature.handler(request, feature.instance);
       
-      // Unload embedding model after search-related tools to free memory
-      // Tools that use embedder: a_semantic_search, d_find_similar_code
+      
+      
       const searchTools = ['a_semantic_search', 'd_find_similar_code'];
       if (config.unloadModelAfterSearch && searchTools.includes(toolDef.name)) {
-        // Defer unload slightly to not block response, use setImmediate for non-blocking
+        
         setImmediate(async () => {
           if (typeof unloadMainEmbedder === 'function') {
             await unloadMainEmbedder();
@@ -663,7 +666,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   };
 });
 
-// Main entry point
+
 export async function main(argv = process.argv) {
   const parsed = parseArgs(argv);
   const {
@@ -727,19 +730,19 @@ export async function main(argv = process.argv) {
     process.exit(0);
   }
 
-  // --cache command (cache-only, no server status)
+  
   if (wantsCache) {
     await status({ fix: wantsClean, cacheOnly: true, workspaceDir });
     process.exit(0);
   }
 
-  // --clear <cache_id> command (remove specific cache by ID)
+  
   const clearIndex = parsed.rawArgs.indexOf('--clear');
   if (clearIndex !== -1) {
     const cacheId = parsed.rawArgs[clearIndex + 1];
     if (cacheId && !cacheId.startsWith('--')) {
-      // Remove specific cache by ID
-      // Determine platform-appropriate cache directory
+      
+      
       let cacheHome;
       if (process.platform === 'win32') {
         cacheHome = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
@@ -783,7 +786,7 @@ export async function main(argv = process.argv) {
       }
       process.exit(0);
     }
-    // If --clear with no arg, fall through to --clear-cache behavior
+    
   }
 
   if (wantsClearCache) {
@@ -826,18 +829,15 @@ export async function main(argv = process.argv) {
   }
 
   registerSignalHandlers(requestShutdown);
-  // NOTE: We intentionally do NOT shut down on stdin close.
-  // When an IDE restarts, it may briefly close stdin then reconnect.
-  // The server should remain running to preserve cache and be ready for reconnection.
-  // Use SIGINT/SIGTERM or --stop command for intentional shutdown.
+  
+  
+  
+  
 
-  // 1. Connect MCP transport FIRST so we can query the client for its workspace roots.
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.info('[Server] MCP transport connected.');
 
-  // 2. Wait for MCP handshake to complete (client sends initialized notification).
-  //    This gives us access to client capabilities and the ability to call listRoots().
   const detectedRoot = await new Promise((resolve) => {
     const HANDSHAKE_TIMEOUT_MS = 5000;
     const timer = setTimeout(() => {
@@ -853,7 +853,6 @@ export async function main(argv = process.argv) {
     };
   });
 
-  // 3. Initialize with the correct workspace: MCP root > CLI arg > CWD fallback.
   const effectiveWorkspace = detectedRoot || workspaceDir;
   if (detectedRoot) {
     console.info(`[Server] Using workspace from MCP roots: ${detectedRoot}`);
@@ -862,20 +861,20 @@ export async function main(argv = process.argv) {
 
   console.info('[Server] Heuristic MCP server started.');
 
-  // 4. Load cache and start indexing in background AFTER server is ready
+  
   void startBackgroundTasks().catch((err) => {
     console.error(`[Server] Background task error: ${err.message}`);
   });
   console.info('[Server] MCP server is now fully ready to accept requests.');
 }
 
-// Graceful shutdown
+
 async function gracefulShutdown(signal) {
   console.info(`[Server] Received ${signal}, shutting down gracefully...`);
 
   const cleanupTasks = [];
 
-  // Stop file watcher
+  
   if (indexer && indexer.watcher) {
     cleanupTasks.push(
       indexer.watcher
@@ -885,7 +884,7 @@ async function gracefulShutdown(signal) {
     );
   }
 
-  // Give workers time to finish current batch
+  
   if (indexer && indexer.terminateWorkers) {
     cleanupTasks.push(
       (async () => {
@@ -896,7 +895,7 @@ async function gracefulShutdown(signal) {
     );
   }
 
-  // Save cache
+  
   if (cache) {
     cleanupTasks.push(
       cache
@@ -909,7 +908,7 @@ async function gracefulShutdown(signal) {
   await Promise.allSettled(cleanupTasks);
   console.info('[Server] Goodbye!');
 
-  // Allow stdio buffers to flush
+  
   setTimeout(() => process.exit(0), 100);
 }
 

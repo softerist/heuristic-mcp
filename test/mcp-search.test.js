@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import path from 'path';
 
-// Disable child process embedding in tests - use mock embedder directly
+
 process.env.SMART_CODING_UNLOAD_MODEL_AFTER_SEARCH = 'false';
 
 const workspaceDir = path.join(process.cwd(), 'test', 'fixtures', 'mcp-workspace');

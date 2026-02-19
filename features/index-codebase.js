@@ -112,21 +112,21 @@ export class CodebaseIndexer {
     this._lastIncrementalGcAt = 0;
     this._autoEmbeddingProcessLogged = false;
     this._heavyWorkerSafetyLogged = false;
-    // Debounce timers for watcher events (path -> timeout ID)
+    
     this._watcherDebounceTimers = new Map();
-    // Files currently being indexed via watcher (path -> Promise)
+    
     this._watcherInProgress = new Map();
-    // Files that need a follow-up reindex after current watcher indexing finishes
+    
     this._watcherPendingReindex = new Map();
-    // Debounce delay in ms (consolidates rapid add/change events)
+    
     this._watcherDebounceMs = Number.isInteger(this.config.watchDebounceMs)
       ? this.config.watchDebounceMs
       : 300;
-    // Wait-for-stable writes (chokidar awaitWriteFinish) to reduce add+change churn
+    
     this._watcherWriteStabilityMs = Number.isInteger(this.config.watchWriteStabilityMs)
       ? this.config.watchWriteStabilityMs
       : 1500;
-    // Persistent embedding child process (used to avoid per-batch model reloads)
+    
     this._embeddingProcessSessionActive = false;
     this._embeddingChild = null;
     this._embeddingChildBuffer = '';
@@ -1029,7 +1029,7 @@ export class CodebaseIndexer {
       const progressPath = path.join(this.config.cacheDirectory, 'progress.json');
       await fs.writeFile(progressPath, JSON.stringify(payload), 'utf-8');
     } catch {
-      // ignore progress write errors
+      
     }
   }
 
@@ -1049,7 +1049,7 @@ export class CodebaseIndexer {
       return [];
     }
 
-    // Wait for any pending worker replacements to complete before distributing work
+    
     if (this._workerReplacementPromises && this._workerReplacementPromises.size > 0) {
       await Promise.all(this._workerReplacementPromises.values());
     }
@@ -1059,8 +1059,8 @@ export class CodebaseIndexer {
       .filter((entry) => entry.worker);
 
     if (activeWorkers.length === 0) {
-      // Fallback: This method shouldn't be called if workers aren't available,
-      // but if it is, we return empty and let the caller handle legacy fallback.
+      
+      
       return [];
     }
 
@@ -1222,7 +1222,7 @@ export class CodebaseIndexer {
     const configuredTimeout = Number.isInteger(this.config.workerBatchTimeoutMs)
       ? this.config.workerBatchTimeoutMs
       : 300000;
-    const WORKER_TIMEOUT = isTestEnv() ? 1000 : configuredTimeout; // 1s in tests, configurable in prod
+    const WORKER_TIMEOUT = isTestEnv() ? 1000 : configuredTimeout; 
 
     if (this.config.verbose) {
       console.info(
@@ -1242,21 +1242,21 @@ export class CodebaseIndexer {
       const promise = new Promise((resolve, _reject) => {
         const batchId = `batch-${i}-${Date.now()}`;
         const batchResults = [];
-        let workerKilled = false; // Atomic guard against duplicate kills
+        let workerKilled = false; 
 
-        // Timeout handler
+        
         const killWorker = async () => {
-          // Atomic guard: prevent concurrent killWorker calls for same worker
+          
           if (workerKilled || this.workers[workerIndex] === null) return;
           workerKilled = true;
-          this.workers[workerIndex] = null; // Mark as dead immediately before async work
+          this.workers[workerIndex] = null; 
           try {
             await worker.terminate?.();
           } catch {
-            // ignore terminate errors
+            
           }
 
-          // Track worker replacement to prevent concurrent replacements for the same slot
+          
           if (!this._workerReplacementPromises) {
             this._workerReplacementPromises = new Map();
           }
@@ -1273,14 +1273,14 @@ export class CodebaseIndexer {
         };
 
         const handleTimeout = (label) => {
-          // Terminate first to ensure no more messages arrive
+          
           void killWorker();
           worker.off('message', handler);
           worker.off('error', errorHandler);
           if (exitHandler) worker.off('exit', exitHandler);
           console.warn(`[Indexer] Worker ${workerIndex} timed out, ${label}`);
           this.recordWorkerFailure(`timeout (batch ${batchId})`);
-          // Return empty and let fallback handle it
+          
           resolve([]);
         };
 
@@ -1321,17 +1321,17 @@ export class CodebaseIndexer {
               finalize(batchResults);
             } else if (msg.type === 'error') {
               console.warn(`[Indexer] Worker ${workerIndex} error: ${msg.error}`);
-              finalize([]); // Return empty, don't reject - let fallback handle
+              finalize([]); 
             }
           }
         };
 
-        // Handle worker crash
+        
         const errorHandler = (err) => {
           console.warn(`[Indexer] Worker ${workerIndex} crashed: ${err.message}`);
           this.recordWorkerFailure(`crash (${err.message})`);
           void killWorker();
-          finalize([]); // Return empty, don't reject
+          finalize([]); 
         };
         worker.once('error', errorHandler);
 
@@ -1357,21 +1357,21 @@ export class CodebaseIndexer {
       workerPromises.push({ promise, chunks: workerChunks });
     }
 
-    // Wait for all workers with error recovery
+    
     const workerResults = await Promise.all(workerPromises.map((p) => p.promise));
 
-    // Collect results and identify failed chunks that need retry
+    
     const failedChunks = [];
     for (let i = 0; i < workerResults.length; i++) {
       if (workerResults[i].length > 0) {
         results.push(...workerResults[i]);
       } else if (workerPromises[i].chunks.length > 0) {
-        // Worker failed or timed out, need to retry these chunks
+        
         failedChunks.push(...workerPromises[i].chunks);
       }
     }
 
-    // Retry failed chunks with single-threaded fallback
+    
     if (failedChunks.length > 0 && allowSingleThreadFallback) {
       console.warn(
         `[Indexer] Retrying ${failedChunks.length} chunks with single-threaded fallback...`
@@ -1651,7 +1651,7 @@ export class CodebaseIndexer {
         try {
           child.kill('SIGKILL');
         } catch {
-          // ignore
+          
         }
         resolve([]);
       }, timeoutMs);
@@ -1736,7 +1736,7 @@ export class CodebaseIndexer {
         try {
           child.kill('SIGKILL');
         } catch {
-          // ignore
+          
         }
         if (this.config.verbose && !closed) {
           const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
@@ -2508,12 +2508,12 @@ export class CodebaseIndexer {
             // Speed optimization: Offload reading and hashing to workers.
             // Main thread skips I/O entirely for this file.
             filesForWorkers.push({ file, content: null, force, expectedHash });
-            // Initialize stats placeholder (will be updated with worker results)
+            
             fileStats.set(file, { hash: null, totalChunks: 0, successChunks: 0, size, mtimeMs });
             continue;
           }
 
-          // Read content if not provided (Legacy Path or workers disabled)
+          
           if (content === undefined || content === null) {
             let stats = null;
             try {
@@ -2554,7 +2554,7 @@ export class CodebaseIndexer {
             if (typeof content !== 'string') content = String(content);
             if (!liveHash) liveHash = hashContent(content);
             if (!Number.isFinite(size)) {
-              // Use character length as approximation to avoid blocking Buffer.byteLength on large strings
+              
               size = content.length;
             }
             if (size > this.config.maxFileSize) {
@@ -2578,7 +2578,7 @@ export class CodebaseIndexer {
 
           if (useWorkersForBatch) {
             filesForWorkers.push({ file, content, force, expectedHash });
-            // Initialize stats placeholder (will be updated with worker results)
+            
             fileStats.set(file, {
               hash: liveHash,
               totalChunks: 0,
@@ -2589,7 +2589,7 @@ export class CodebaseIndexer {
             continue;
           }
 
-          // Legacy / Fallback path: Chunk on main thread
+          
           if (this.config.callGraphEnabled) {
             try {
               const callData = extractCallData(content, file);
@@ -2623,7 +2623,7 @@ export class CodebaseIndexer {
           }
         }
 
-        // Process files with workers (New Path)
+        
         if (filesForWorkers.length > 0) {
           const results = await this.processFilesWithWorkers(filesForWorkers);
 
@@ -2632,7 +2632,7 @@ export class CodebaseIndexer {
             if (res.status === 'indexed' && stats) {
               stats.totalChunks = res.results.length;
               stats.successChunks = res.results.length;
-              if (res.hash) stats.hash = res.hash; // Update with new hash from worker
+              if (res.hash) stats.hash = res.hash; 
               if (res.callData) callDataByFile.set(res.file, res.callData);
 
               const chunks = res.results.map((r) => ({
@@ -2644,8 +2644,8 @@ export class CodebaseIndexer {
               }));
               newChunksByFile.set(res.file, chunks);
             } else if (res.status === 'unchanged' && stats) {
-              // Worker found file hash matches old hash
-              stats.totalChunks = 0; // Signal skip commit
+              
+              stats.totalChunks = 0; 
               stats.successChunks = 0;
               stats.hash = res.hash;
               this.cache.setFileHash(res.file, res.hash, { size: res.size, mtimeMs: res.mtimeMs });
@@ -2653,7 +2653,7 @@ export class CodebaseIndexer {
                 this.cache.setFileCallData(res.file, res.callData);
               }
             } else if ((res.status === 'retry' || res.status === 'error') && stats) {
-              // Worker failed, fallback to local chunking + single threaded
+              
               const original = filesForWorkers.find((f) => f.file === res.file);
               if (original) {
                 if (this.config.verbose)
@@ -2724,15 +2724,15 @@ export class CodebaseIndexer {
           }
         }
 
-        // Process chunks (Legacy Path & Fallbacks)
+        
         if (allChunks.length > 0) {
           const chunksToProcess = allChunks.slice();
           let results = [];
           if (useEmbeddingProcessPerBatch) {
             results = await this.processChunksInChildProcess(chunksToProcess);
           } else {
-            // If we are here, either workers are disabled/full or these are retry chunks
-            // Use single threaded fallback if not using child process
+            
+            
             results = await this.processChunksSingleThreaded(chunksToProcess);
           }
 
@@ -2753,7 +2753,7 @@ export class CodebaseIndexer {
           }
         }
 
-        // Commit changes to cache
+        
         for (const [file, stats] of fileStats) {
           if (stats.totalChunks > 0 && stats.successChunks === stats.totalChunks) {
             this.cache.removeFileFromStore(file);
@@ -2772,7 +2772,7 @@ export class CodebaseIndexer {
               this.cache.setFileCallData(file, callData);
             }
           } else if (stats.totalChunks === 0) {
-            // File had no chunks (empty or comments only), just mark as indexed
+            
             if (typeof stats.hash === 'string' && stats.hash.length > 0) {
               this.cache.setFileHash(file, stats.hash, { size: stats.size, mtimeMs: stats.mtimeMs });
             } else if (this.config.verbose) {
@@ -2810,7 +2810,7 @@ export class CodebaseIndexer {
           }
         }
 
-        // Progress indicator
+        
         if (
           processedFiles % (adaptiveBatchSize * 2) === 0 ||
           processedFiles === filesToProcess.length
@@ -2850,7 +2850,7 @@ export class CodebaseIndexer {
         `[Indexer] Embedding pass complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
       );
 
-      // Send completion progress
+      
       this.sendProgress(
         100,
         100,
@@ -2886,7 +2886,7 @@ export class CodebaseIndexer {
         }
       }
 
-      // Unload embedding models to free RAM
+      
       if (this.config.unloadModelAfterIndex) {
         console.info(
           '[Indexer] unloadModelAfterIndex enabled; embedding model will be reloaded on next query'
@@ -2895,7 +2895,7 @@ export class CodebaseIndexer {
       }
       this.maybeShutdownQueryEmbeddingPool('full index');
 
-      // Rebuild call graph in background
+      
       if (this.config.callGraphEnabled) {
         this.cache.rebuildCallGraph();
       }
@@ -2935,13 +2935,13 @@ export class CodebaseIndexer {
   }
 
   enqueueWatchEvent(type, filePath) {
-    // Prevent unbounded memory growth during rapid file churn (e.g., build processes)
+    
     if (this.pendingWatchEvents.size >= MAX_PENDING_WATCH_EVENTS) {
       console.warn(
         `[Indexer] pendingWatchEvents limit reached (${MAX_PENDING_WATCH_EVENTS}), ` +
         `trimming oldest ${this.pendingWatchEvents.size - PENDING_WATCH_EVENTS_TRIM_SIZE} events`
       );
-      // Drop oldest events (Map iterates in insertion order)
+      
       const toRemove = this.pendingWatchEvents.size - PENDING_WATCH_EVENTS_TRIM_SIZE;
       let count = 0;
       for (const key of this.pendingWatchEvents.keys()) {
@@ -2950,13 +2950,13 @@ export class CodebaseIndexer {
       }
     }
 
-    // If it's a delete, it always wins
+    
     if (type === 'unlink') {
       this.pendingWatchEvents.set(filePath, 'unlink');
       return;
     }
 
-    // If we're adding/changing, it overwrites a potential unlink (file came back)
+    
     this.pendingWatchEvents.set(filePath, type);
   }
 
@@ -3003,20 +3003,17 @@ export class CodebaseIndexer {
     }
   }
 
-  /**
-   * Debounced file indexing for watcher events.
-   * Consolidates rapid add/change events and prevents concurrent indexing of the same file.
-   */
+  
   debouncedWatchIndexFile(fullPath, eventType) {
-    // Cancel any pending debounce timer for this file
+    
     const existingTimer = this._watcherDebounceTimers.get(fullPath);
     if (existingTimer) {
       clearTimeout(existingTimer);
     }
 
-    // If file is currently being indexed, just schedule a re-index after it completes
+    
     if (this._watcherInProgress.has(fullPath)) {
-      // Schedule a follow-up reindex after current one completes
+      
       this._watcherPendingReindex.set(fullPath, eventType);
       if (this.config.verbose) {
         console.info(
@@ -3026,14 +3023,14 @@ export class CodebaseIndexer {
       return;
     }
 
-    // Set a debounce timer to consolidate rapid events
+    
     const timer = setTimeout(async () => {
       this._watcherDebounceTimers.delete(fullPath);
 
-      // Mark file as in-progress
+      
       const indexPromise = (async () => {
         try {
-          // Invalidate recency cache
+          
           if (this.server && this.server.hybridSearch) {
             this.server.hybridSearch.clearFileModTime(fullPath);
           }
@@ -3072,7 +3069,7 @@ export class CodebaseIndexer {
   async setupFileWatcher() {
     if (!this.config.watchFiles) return;
 
-    // Close existing watcher if active to prevent leaks
+    
     if (this.watcher) {
       await this.watcher.close();
       this.watcher = null;
@@ -3128,7 +3125,7 @@ export class CodebaseIndexer {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.info(`[Indexer] New file detected: ${filePath}`);
 
-        // Invalidate recency cache for consistency
+        
         if (this.server && this.server.hybridSearch) {
           this.server.hybridSearch.clearFileModTime(fullPath);
         }
@@ -3141,14 +3138,14 @@ export class CodebaseIndexer {
           return;
         }
 
-        // Use debounced indexing to consolidate rapid add/change events
+        
         this.debouncedWatchIndexFile(fullPath, 'add');
       })
       .on('change', (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.info(`[Indexer] File changed: ${filePath}`);
 
-        // Invalidate recency cache for consistency
+        
         if (this.server && this.server.hybridSearch) {
           this.server.hybridSearch.clearFileModTime(fullPath);
         }
@@ -3161,7 +3158,7 @@ export class CodebaseIndexer {
           return;
         }
 
-        // Use debounced indexing to consolidate rapid add/change events
+        
         this.debouncedWatchIndexFile(fullPath, 'change');
       })
       .on('unlink', async (filePath) => {
@@ -3176,7 +3173,7 @@ export class CodebaseIndexer {
           return;
         }
 
-        // Invalidate recency cache
+        
         if (this.server && this.server.hybridSearch) {
           this.server.hybridSearch.clearFileModTime(fullPath);
         }
@@ -3224,7 +3221,7 @@ export class CodebaseIndexer {
   }
 }
 
-// MCP Tool definition for this feature
+
 export function getToolDefinition() {
   return {
     name: 'b_index_codebase',
@@ -3250,12 +3247,12 @@ export function getToolDefinition() {
   };
 }
 
-// Tool handler
+
 export async function handleToolCall(request, indexer) {
   const force = request.params.arguments?.force || false;
   const result = await indexer.indexAll(force);
 
-  // Handle case when indexing was skipped due to concurrent request
+  
   if (result?.skipped) {
     return {
       content: [
@@ -3267,7 +3264,7 @@ export async function handleToolCall(request, indexer) {
     };
   }
 
-  // Get current stats from cache
+  
   const vectorStore = indexer.cache.getVectorStore();
   const stats = {
     totalChunks: result?.totalChunks ?? vectorStore.length,

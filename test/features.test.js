@@ -30,37 +30,37 @@ describe('Features Coverage Maximizer', () => {
 
       const tool = new annConfig.AnnConfigTool(mockCache, {});
 
-      // Action: stats
+      
       const r1 = await annConfig.handleToolCall(
         { params: { arguments: { action: 'stats' } } },
         tool
       );
       expect(r1.content[0].text).toContain('ANN Index Statistics');
 
-      // Action: set_ef_search
+      
       const r2 = await annConfig.handleToolCall(
         { params: { arguments: { action: 'set_ef_search', efSearch: 100 } } },
         tool
       );
       expect(r2.content[0].text).toContain('true');
 
-      // Action: rebuild
+      
       const r3 = await annConfig.handleToolCall(
         { params: { arguments: { action: 'rebuild' } } },
         tool
       );
       expect(r3.content[0].text).toContain('true');
 
-      // Error path: Unknown action
+      
       const r4 = await tool.execute({ action: 'unknown' });
       expect(r4.success).toBe(false);
       expect(tool.formatResults(r4)).toContain('Error');
 
-      // Missing parameter for set_ef_search (line 27)
+      
       const r5 = await tool.execute({ action: 'set_ef_search' });
       expect(r5.success).toBe(false);
 
-      // No active ANN index output (line 68)
+      
       const r6 = tool.formatResults({
         enabled: true,
         indexLoaded: false,
@@ -129,9 +129,9 @@ describe('Features Coverage Maximizer', () => {
       );
       expect(result.content[0].text).toContain('No code has been indexed yet');
 
-      // Force "No similar code found" message (line 96)
+      
       tool.config.annEnabled = false;
-      mockCache.getVectorStore = () => [{ file: 'a.js', content: 'y', vector: [0, 1] }]; // No match
+      mockCache.getVectorStore = () => [{ file: 'a.js', content: 'y', vector: [0, 1] }]; 
       const r3 = await tool.execute({ code: 'z', minSimilarity: 0.9 });
       await expect(tool.formatResults(r3.results)).resolves.toContain(
         'No similar code patterns found'

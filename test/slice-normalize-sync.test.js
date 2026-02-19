@@ -1,18 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { sliceAndNormalize } from '../lib/slice-normalize.js';
 
-/**
- * This test verifies that the sliceAndNormalize implementation in lib/slice-normalize.js
- * matches the duplicated implementation in lib/embedding-worker.js.
- * 
- * The worker duplicates this function to avoid dynamic import latency.
- * If this test fails, both implementations need to be synchronized.
- * 
- * See comment in lib/embedding-worker.js around line 107-110.
- */
+
 
 describe('sliceAndNormalize synchronization', () => {
-  // Replicate the worker's implementation for comparison
+  
   function workerSliceAndNormalize(vector, targetDim) {
     if (!targetDim || targetDim >= vector.length) {
       return vector;

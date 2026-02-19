@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 
 vi.mock('fs/promises');
 
-// Basic mock index for stats
+
 const mockIndex = {
   setEf: vi.fn(),
   efConstruction: 200,
@@ -30,7 +30,7 @@ describe('EmbeddingsCache Helper Methods', () => {
     };
     cache = new EmbeddingsCache(config);
 
-    // Spy on console
+    
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -96,7 +96,7 @@ describe('EmbeddingsCache Helper Methods', () => {
 
       cache.setFileCallData(file, data);
       expect(cache.getFileCallData(file)).toBe(data);
-      expect(cache.callGraph).toBeNull(); // invalidation
+      expect(cache.callGraph).toBeNull(); 
 
       cache.removeFileCallData(file);
       expect(cache.getFileCallData(file)).toBeUndefined();
@@ -133,9 +133,9 @@ describe('EmbeddingsCache Helper Methods', () => {
   describe('Call Graph Lazy Loading', () => {
     beforeEach(() => {
       vi.resetModules();
-      // We need to re-import CodebaseIndexer or Cache if we were testing its internal dynamic imports,
-      // but we are testing cache.js which does dynamic imports of call-graph.js.
-      // We mock call-graph.js
+      
+      
+      
       const fakeGraph = { defines: new Map(), calledBy: new Map() };
       vi.doMock('../lib/call-graph.js', () => ({
         buildCallGraph: vi.fn(() => fakeGraph),
@@ -144,19 +144,19 @@ describe('EmbeddingsCache Helper Methods', () => {
     });
 
     it('rebuildCallGraph should handle import and build', async () => {
-      // Re-instantiate to ensure clean state
+      
       const { EmbeddingsCache } = await import('../lib/cache.js');
       const cache = new EmbeddingsCache({ ...config, verbose: true });
 
       cache.setFileCallData('f.js', {});
 
-      // Spy on console to verify success
+      
       const logSpy = vi.spyOn(console, 'info');
 
-      // Trigger rebuild
+      
       await cache.rebuildCallGraph();
 
-      // Wait for microtask resolution of dynamic import
+      
       await new Promise((r) => setTimeout(r, 10));
 
       expect(cache.callGraph).toBeDefined();
@@ -187,17 +187,17 @@ describe('EmbeddingsCache Helper Methods', () => {
 
       const result = await cache.getRelatedFiles(['sym']);
 
-      expect(result.size).toBe(1); // Mock returns 1 item
+      expect(result.size).toBe(1); 
       expect(cache.callGraph).toBeDefined();
     });
 
     it('getRelatedFiles should return empty if disabled or empty', async () => {
       const { EmbeddingsCache } = await import('../lib/cache.js');
-      // Disabled
+      
       let c = new EmbeddingsCache({ ...config, callGraphEnabled: false });
       expect((await c.getRelatedFiles(['s'])).size).toBe(0);
 
-      // Empty symbols
+      
       c = new EmbeddingsCache(config);
       expect((await c.getRelatedFiles([])).size).toBe(0);
     });

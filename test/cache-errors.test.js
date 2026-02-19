@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs/promises';
 
-// Mock fs
+
 vi.mock('fs/promises');
 vi.mock('../lib/json-writer.js', () => ({
   StreamingJsonWriter: class {
@@ -15,7 +15,7 @@ vi.mock('../lib/json-writer.js', () => ({
   },
 }));
 
-// Define mocks at top level to ensure stability across module resets
+
 const mockIndex = {
   initIndex: vi.fn(),
   readIndexSync: vi.fn(),
@@ -27,12 +27,12 @@ const mockIndex = {
   getCurrentCount: vi.fn().mockReturnValue(0),
 };
 
-// Use a regular function for constructor
+
 const mockConstructor = vi.fn(function () {
   return mockIndex;
 });
 
-// Mock hnswlib-node with stable constructor
+
 vi.mock('hnswlib-node', () => {
   return {
     default: {
@@ -47,16 +47,16 @@ describe('EmbeddingsCache Error Handling', () => {
   let config;
 
   beforeEach(async () => {
-    vi.clearAllMocks(); // Clear call history
-    vi.resetModules(); // Reset module cache
+    vi.clearAllMocks(); 
+    vi.resetModules(); 
 
-    // Reset default implementations for consistency
+    
     mockIndex.initIndex.mockImplementation(() => undefined);
     mockIndex.readIndexSync.mockImplementation(() => true);
     mockIndex.addPoint.mockImplementation(() => undefined);
     mockIndex.writeIndexSync.mockImplementation(() => undefined);
 
-    // Dynamic import to pick up fresh mock and reset module state
+    
     const { EmbeddingsCache } = await import('../lib/cache.js');
 
     config = {
@@ -74,7 +74,7 @@ describe('EmbeddingsCache Error Handling', () => {
     };
     cache = new EmbeddingsCache(config);
 
-    // Spy on console warn/error but verify calls
+    
     vi.spyOn(console, 'warn');
     vi.spyOn(console, 'error');
 
@@ -223,7 +223,7 @@ describe('EmbeddingsCache Error Handling', () => {
     it('should handle metadata mismatch forcing rebuild', async () => {
       fs.readFile.mockResolvedValue(
         JSON.stringify({
-          version: 999, // Mismatch
+          version: 999, 
           embeddingModel: 'test-model',
         })
       );

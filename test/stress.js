@@ -1,11 +1,8 @@
-/**
- * Large test file for indexing stress test
- * This file contains substantial code to verify memory handling during indexing
- */
 
-// ============================================================================
-// SECTION 1: Complex Data Structures
-// ============================================================================
+
+
+
+
 
 const LARGE_CONFIG = {
   database: {
@@ -39,9 +36,9 @@ const LARGE_CONFIG = {
   },
 };
 
-// ============================================================================
-// SECTION 2: Utility Functions
-// ============================================================================
+
+
+
 
 function deepClone(obj) {
   if (obj === null || typeof obj !== 'object') return obj;
@@ -102,9 +99,9 @@ function throttle(func, limit) {
   };
 }
 
-// ============================================================================
-// SECTION 3: Data Processing Classes
-// ============================================================================
+
+
+
 
 class DataProcessor {
   constructor(options = {}) {
@@ -151,7 +148,7 @@ class DataProcessor {
   }
 
   async processItem(item) {
-    // Simulate async processing
+    
     return new Promise((resolve, reject) => {
       setTimeout(() => {
         if (Math.random() > 0.1) {
@@ -176,7 +173,7 @@ class CacheManager {
     if (this.cache.has(key)) {
       this.hits++;
       const item = this.cache.get(key);
-      // Move to end (LRU)
+      
       this.cache.delete(key);
       this.cache.set(key, item);
       return item.value;
@@ -187,7 +184,7 @@ class CacheManager {
 
   set(key, value, ttl = 3600000) {
     if (this.cache.size >= this.maxSize) {
-      // Remove oldest entry
+      
       const firstKey = this.cache.keys().next().value;
       this.cache.delete(firstKey);
     }
@@ -398,9 +395,9 @@ class PriorityQueue {
   }
 }
 
-// ============================================================================
-// SECTION 6: HTTP Client
-// ============================================================================
+
+
+
 
 class HttpClient {
   constructor(baseUrl, options = {}) {
@@ -490,9 +487,9 @@ class HttpClient {
   }
 }
 
-// ============================================================================
-// SECTION 7: State Management
-// ============================================================================
+
+
+
 
 class Store {
   constructor(initialState = {}, reducers = {}) {
@@ -507,7 +504,7 @@ class Store {
   }
 
   dispatch(action) {
-    // Run through middlewares
+    
     const chain = this.middlewares.map((mw) => mw(this));
     const dispatch = chain.reduceRight(
       (next, middleware) => middleware(next),
@@ -544,7 +541,7 @@ class Store {
   }
 }
 
-// Logger middleware
+
 const loggerMiddleware = (store) => (next) => (action) => {
   console.log('Dispatching:', action.type);
   const result = next(action);
@@ -552,7 +549,7 @@ const loggerMiddleware = (store) => (next) => (action) => {
   return result;
 };
 
-// Thunk middleware
+
 const thunkMiddleware = (store) => (next) => (action) => {
   if (typeof action === 'function') {
     return action(store.dispatch.bind(store), store.getState.bind(store));
@@ -560,9 +557,9 @@ const thunkMiddleware = (store) => (next) => (action) => {
   return next(action);
 };
 
-// ============================================================================
-// SECTION 8: Validation Library
-// ============================================================================
+
+
+
 
 const validators = {
   required: (value) => value !== undefined && value !== null && value !== '',
@@ -621,9 +618,9 @@ function validate(data, schema) {
   return { valid: Object.keys(errors).length === 0, errors };
 }
 
-// ============================================================================
-// SECTION 9: String Utilities
-// ============================================================================
+
+
+
 
 const stringUtils = {
   capitalize: (str) => str.charAt(0).toUpperCase() + str.slice(1).toLowerCase(),
@@ -661,9 +658,9 @@ const stringUtils = {
       .replace(/^-+|-+$/g, ''),
 };
 
-// ============================================================================
-// SECTION 10: Date Utilities
-// ============================================================================
+
+
+
 
 const dateUtils = {
   format: (date, pattern) => {
@@ -755,9 +752,9 @@ const dateUtils = {
   },
 };
 
-// ============================================================================
-// SECTION 11: Array Utilities
-// ============================================================================
+
+
+
 
 const arrayUtils = {
   chunk: (arr, size) => {

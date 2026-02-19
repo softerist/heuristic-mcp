@@ -1,13 +1,4 @@
-/**
- * Tests for CacheClearer feature
- *
- * Tests the cache clearing functionality including:
- * - Basic cache clearing
- * - Protection during indexing
- * - Protection during save operations
- * - Concurrent clear prevention
- * - Tool handler responses
- */
+
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import {
@@ -32,7 +23,7 @@ describe('CacheClearer', () => {
   });
 
   beforeEach(async () => {
-    // Reset state
+    
     fixtures.indexer.isIndexing = false;
     fixtures.cache.isSaving = false;
     fixtures.cacheClearer.isClearing = false;
@@ -42,13 +33,13 @@ describe('CacheClearer', () => {
     it('should clear cache successfully', async () => {
       expect(fixtures.cacheClearer).toBeInstanceOf(CacheClearer);
 
-      // First ensure we have a cache
+      
       await fixtures.indexer.indexAll(true);
 
-      // Verify cache exists
+      
       expect(fixtures.cache.getVectorStore().length).toBeGreaterThan(0);
 
-      // Clear cache
+      
       const result = await fixtures.cacheClearer.execute();
 
       expect(result.success).toBe(true);
@@ -57,35 +48,35 @@ describe('CacheClearer', () => {
     });
 
     it('should empty vectorStore and fileHashes', async () => {
-      // Create some cache
+      
       await fixtures.indexer.indexAll(true);
 
-      // Clear
+      
       await fixtures.cacheClearer.execute();
 
-      // Both should be empty
+      
       expect(fixtures.cache.getVectorStore().length).toBe(0);
       expect(fixtures.cache.getFileHashCount()).toBe(0);
     });
 
     it('should delete cache directory', async () => {
-      // Create cache
+      
       await fixtures.indexer.indexAll(true);
 
-      // Verify cache directory exists
+      
       await expect(fs.access(fixtures.config.cacheDirectory)).resolves.not.toThrow();
 
-      // Clear
+      
       await fixtures.cacheClearer.execute();
 
-      // Directory should not exist
+      
       await expect(fs.access(fixtures.config.cacheDirectory)).rejects.toThrow();
     });
   });
 
   describe('Protection During Indexing', () => {
     it('should prevent clear while indexing is in progress', async () => {
-      // Simulate indexing in progress
+      
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
       fixtures.cache.clearFileHashes();
@@ -93,7 +84,7 @@ describe('CacheClearer', () => {
       const indexPromise = fixtures.indexer.indexAll(true);
       expect(fixtures.indexer.isIndexing).toBe(true);
 
-      // Try to clear - should fail
+      
       await expect(fixtures.cacheClearer.execute()).rejects.toThrow(
         'Cannot clear cache while indexing is in progress'
       );
@@ -102,11 +93,11 @@ describe('CacheClearer', () => {
     });
 
     it('should allow clear after indexing completes', async () => {
-      // Complete indexing
+      
       await fixtures.indexer.indexAll(true);
       expect(fixtures.indexer.isIndexing).toBe(false);
 
-      // Clear should work
+      
       const result = await fixtures.cacheClearer.execute();
       expect(result.success).toBe(true);
     });
@@ -114,26 +105,26 @@ describe('CacheClearer', () => {
 
   describe('Protection During Save', () => {
     it('should prevent clear while cache is being saved', async () => {
-      // Simulate save in progress
+      
       fixtures.cache.isSaving = true;
 
-      // Try to clear - should fail
+      
       await expect(fixtures.cacheClearer.execute()).rejects.toThrow(
         'Cannot clear cache while cache is being saved'
       );
 
-      // Reset
+      
       fixtures.cache.isSaving = false;
     });
 
     it('should allow clear after save completes', async () => {
-      // Index first
+      
       await fixtures.indexer.indexAll(true);
 
-      // isSaving should be false after indexing
+      
       expect(fixtures.cache.isSaving).toBe(false);
 
-      // Clear should work
+      
       const result = await fixtures.cacheClearer.execute();
       expect(result.success).toBe(true);
     });
@@ -141,13 +132,13 @@ describe('CacheClearer', () => {
 
   describe('Concurrent Clear Prevention', () => {
     it('should prevent multiple concurrent clears', async () => {
-      // Index first
+      
       await fixtures.indexer.indexAll(true);
 
-      // Reset the isClearing flag
+      
       fixtures.cacheClearer.isClearing = false;
 
-      // Start multiple concurrent clears
+      
       const promises = [
         fixtures.cacheClearer.execute(),
         fixtures.cacheClearer.execute(),
@@ -156,46 +147,46 @@ describe('CacheClearer', () => {
 
       const results = await Promise.allSettled(promises);
 
-      // Exactly one should succeed
+      
       const successes = results.filter((r) => r.status === 'fulfilled');
       const failures = results.filter((r) => r.status === 'rejected');
 
       expect(successes.length).toBe(1);
       expect(failures.length).toBe(2);
 
-      // Failures should have correct error message
+      
       for (const failure of failures) {
         expect(failure.reason.message).toContain('already in progress');
       }
     });
 
     it('should reset isClearing flag after completion', async () => {
-      // Index first
+      
       await fixtures.indexer.indexAll(true);
 
       expect(fixtures.cacheClearer.isClearing).toBe(false);
 
-      // Clear
+      
       await fixtures.cacheClearer.execute();
 
-      // Flag should be reset
+      
       expect(fixtures.cacheClearer.isClearing).toBe(false);
     });
 
     it('should reset isClearing flag even on error', async () => {
-      // Set up for failure
+      
       fixtures.cache.isSaving = true;
 
       try {
         await fixtures.cacheClearer.execute();
       } catch {
-        // Expected to fail
+        
       }
 
-      // isClearing should not have been set (failed before setting)
+      
       expect(fixtures.cacheClearer.isClearing).toBe(false);
 
-      // Reset
+      
       fixtures.cache.isSaving = false;
     });
   });
@@ -231,7 +222,7 @@ describe('Clear Cache Tool Handler', () => {
 
   describe('Tool Handler', () => {
     it('should return success message on cleared cache', async () => {
-      // Index first
+      
       await fixtures.indexer.indexAll(true);
 
       const request = createMockRequest('c_clear_cache', {});
@@ -242,7 +233,7 @@ describe('Clear Cache Tool Handler', () => {
     });
 
     it('should return error message when indexing is in progress', async () => {
-      // Simulate indexing
+      
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
       fixtures.cache.clearFileHashes();

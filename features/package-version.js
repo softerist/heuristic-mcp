@@ -1,11 +1,6 @@
-/**
- * Package Version Lookup Tool
- *
- * Fetches the latest version of packages from various registries.
- * Supports npm, PyPI, crates.io, Maven, Go, RubyGems, NuGet, Packagist, Hex, pub.dev, and more.
- */
 
-// Registry configurations with their API endpoints and response parsers
+
+
 const REGISTRIES = {
   npm: {
     name: 'npm',
@@ -20,7 +15,7 @@ const REGISTRIES = {
     pattern: /^(?:pip:|pypi:)(.+)$/,
     url: (pkg) => `https://pypi.org/pypi/${encodeURIComponent(pkg)}/json`,
     parse: (data) => data.info.version,
-    detect: () => false, // Requires explicit prefix
+    detect: () => false, 
   },
   crates: {
     name: 'crates.io',
@@ -59,7 +54,7 @@ const REGISTRIES = {
     parse: (data) => {
       const pkgName = Object.keys(data.packages)[0];
       const versions = data.packages[pkgName];
-      // Filter out dev versions and get latest stable
+      
       const stable = versions.find((v) => !v.version.includes('dev'));
       return stable ? stable.version : versions[0].version;
     },
@@ -86,7 +81,7 @@ const REGISTRIES = {
     name: 'Maven Central',
     pattern: /^(?:maven:|java:)(.+)$/,
     url: (pkg) => {
-      // Maven packages are in format group:artifact or group/artifact
+      
       const [group, artifact] = pkg.includes(':') ? pkg.split(':') : pkg.split('/');
       if (!artifact) return null;
       return `https://search.maven.org/solrsearch/select?q=g:${encodeURIComponent(group)}+AND+a:${encodeURIComponent(artifact)}&rows=1&wt=json`;
@@ -114,11 +109,9 @@ const REGISTRIES = {
   },
 };
 
-/**
- * Detect the registry for a package based on its name or prefix
- */
+
 function detectRegistry(packageName) {
-  // Check for explicit prefixes first
+  
   for (const [key, registry] of Object.entries(REGISTRIES)) {
     if (registry.pattern.test(packageName) && key !== 'npm') {
       const match = packageName.match(registry.pattern);
@@ -128,7 +121,7 @@ function detectRegistry(packageName) {
     }
   }
 
-  // Try to detect based on package name patterns
+  
   for (const registry of Object.values(REGISTRIES)) {
     if (registry.detect(packageName)) {
       const match = packageName.match(registry.pattern);
@@ -136,14 +129,12 @@ function detectRegistry(packageName) {
     }
   }
 
-  // Default to npm
+  
   const npmMatch = packageName.match(REGISTRIES.npm.pattern);
   return { registry: REGISTRIES.npm, cleanName: npmMatch ? npmMatch[1] : packageName };
 }
 
-/**
- * Fetch the latest version of a package from its registry
- */
+
 async function fetchPackageVersion(packageName, timeoutMs = 10000) {
   const { registry, cleanName } = detectRegistry(packageName);
 
@@ -220,9 +211,7 @@ async function fetchPackageVersion(packageName, timeoutMs = 10000) {
   }
 }
 
-/**
- * Get supported registries list for help text
- */
+
 function getSupportedRegistries() {
   return Object.entries(REGISTRIES).map(([key, reg]) => ({
     key,
@@ -231,7 +220,7 @@ function getSupportedRegistries() {
   }));
 }
 
-// MCP Tool definition
+
 export function getToolDefinition() {
   return {
     name: 'e_check_package_version',
@@ -253,12 +242,12 @@ export function getToolDefinition() {
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
-      openWorldHint: true, // Makes external network requests
+      openWorldHint: true, 
     },
   };
 }
 
-// Tool handler
+
 export async function handleToolCall(request) {
   const args = request.params?.arguments || {};
   const packageName = args.package;
@@ -298,5 +287,5 @@ export async function handleToolCall(request) {
   }
 }
 
-// Export for testing
+
 export { fetchPackageVersion, detectRegistry, getSupportedRegistries, REGISTRIES };

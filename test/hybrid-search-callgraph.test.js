@@ -21,7 +21,7 @@ describe('HybridSearch Final Coverage', () => {
       });
       const config = {
         annEnabled: false,
-        semanticWeight: 0, // Disable semantic score to isolate exact/partial match
+        semanticWeight: 0, 
         exactMatchBoost: 10,
         recencyBoost: 0,
         callGraphEnabled: false,
@@ -30,10 +30,10 @@ describe('HybridSearch Final Coverage', () => {
       const embedder = async () => ({ data: new Float32Array([0, 0]) });
       const hybrid = new HybridSearch(embedder, cache, config);
 
-      // Query: "is missingword"
-      // "is" -> length 2 (skipped)
-      // "missingword" -> length > 2 (checked, but not in content)
-      // matchedWords should be 0. Score should be 0 (since semanticWeight is 0).
+      
+      
+      
+      
 
       const { results } = await hybrid.search('is missingword', 1);
       expect(results[0].score).toBe(0);
@@ -64,12 +64,12 @@ describe('HybridSearch Final Coverage', () => {
       const embedder = async () => ({ data: new Float32Array([0, 0]) });
       const hybrid = new HybridSearch(embedder, cache, config);
 
-      // Query: "longcontent missing"
-      // Full string "longcontent missing" NOT in content.
-      // "longcontent" -> length > 2 (checked, found)
-      // "missing" -> length > 2 (checked, not found)
-      // matchedWords = 1. Total words = 2.
-      // Score = (1/2) * 0.3 = 0.15
+      
+      
+      
+      
+      
+      
 
       const { results } = await hybrid.search('longcontent missing', 1);
       expect(results[0].score).toBeCloseTo(0.15);
@@ -103,8 +103,8 @@ describe('HybridSearch Final Coverage', () => {
       ];
 
       const relatedMap = new Map();
-      relatedMap.set('related.js', 1); // Boost of 1
-      // unrelated.js is not in the map
+      relatedMap.set('related.js', 1); 
+      
 
       const cache = createHybridSearchCacheStub({
         vectorStore,
@@ -118,27 +118,27 @@ describe('HybridSearch Final Coverage', () => {
         exactMatchBoost: 0,
         recencyBoost: 0,
         callGraphEnabled: true,
-        callGraphBoost: 10, // Large boost to make it obvious
+        callGraphBoost: 10, 
         searchDirectory: '/mock',
       };
 
       const embedder = async () => ({ data: new Float32Array([1, 0]) });
       const hybrid = new HybridSearch(embedder, cache, config);
 
-      // Mock extractSymbolsFromContent to return something so we trigger getRelatedFiles
+      
       vi.spyOn(CallGraph, 'extractSymbolsFromContent').mockReturnValue(['source']);
 
       const { results } = await hybrid.search('query', 3);
 
-      // related.js should have a massive score due to boost
-      // unrelated.js should have normal score
+      
+      
 
       const related = results.find((r) => r.file === 'related.js');
       const unrelated = results.find((r) => r.file === 'unrelated.js');
 
-      // Base score is semantic similarity.
-      // related: 0.9 * 1 = 0.9. Boost: 1 * 10 = 10. Total 10.9
-      // unrelated: 0.8 * 1 = 0.8. Boost: 0. Total 0.8
+      
+      
+      
 
       expect(related.score).toBeGreaterThan(10);
       expect(unrelated.score).toBeLessThan(1);
@@ -200,7 +200,7 @@ describe('HybridSearch Final Coverage', () => {
       const embedder = async () => ({ data: new Float32Array([1]) });
       const hybrid = new HybridSearch(embedder, cache, config);
 
-      // Query 'a' -> length 1. should skip the fallback logic.
+      
       await hybrid.search('a', 2);
     });
 
@@ -214,7 +214,7 @@ describe('HybridSearch Final Coverage', () => {
       });
       const config = {
         annEnabled: true,
-        maxResults: 1, // maxResults is 1, exactMatchCount will be 1
+        maxResults: 1, 
         semanticWeight: 1,
         exactMatchBoost: 1,
         recencyBoost: 0,

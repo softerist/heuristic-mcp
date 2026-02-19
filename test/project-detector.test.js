@@ -1,6 +1,4 @@
-/**
- * Tests for ProjectDetector
- */
+
 
 import { describe, it, expect } from 'vitest';
 import fs from 'fs/promises';
