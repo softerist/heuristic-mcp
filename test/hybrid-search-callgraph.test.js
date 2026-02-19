@@ -29,12 +29,6 @@ describe('HybridSearch Final Coverage', () => {
       };
       const embedder = async () => ({ data: new Float32Array([0, 0]) });
       const hybrid = new HybridSearch(embedder, cache, config);
-
-      
-      
-      
-      
-
       const { results } = await hybrid.search('is missingword', 1);
       expect(results[0].score).toBe(0);
     });
@@ -63,14 +57,6 @@ describe('HybridSearch Final Coverage', () => {
       };
       const embedder = async () => ({ data: new Float32Array([0, 0]) });
       const hybrid = new HybridSearch(embedder, cache, config);
-
-      
-      
-      
-      
-      
-      
-
       const { results } = await hybrid.search('longcontent missing', 1);
       expect(results[0].score).toBeCloseTo(0.15);
     });
@@ -124,22 +110,12 @@ describe('HybridSearch Final Coverage', () => {
 
       const embedder = async () => ({ data: new Float32Array([1, 0]) });
       const hybrid = new HybridSearch(embedder, cache, config);
-
       
       vi.spyOn(CallGraph, 'extractSymbolsFromContent').mockReturnValue(['source']);
 
       const { results } = await hybrid.search('query', 3);
-
-      
-      
-
       const related = results.find((r) => r.file === 'related.js');
       const unrelated = results.find((r) => r.file === 'unrelated.js');
-
-      
-      
-      
-
       expect(related.score).toBeGreaterThan(10);
       expect(unrelated.score).toBeLessThan(1);
     });
