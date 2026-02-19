@@ -314,6 +314,22 @@ async function initialize(workspaceDir) {
     console.info(`[Logs] Writing server logs to ${logPath}`);
     console.info(`[Logs] Log viewer: heuristic-mcp --logs --workspace "${config.searchDirectory}"`);
   }
+  {
+    const resolution = config.workspaceResolution || {};
+    const sourceLabel =
+      resolution.source === 'env' && resolution.envKey
+        ? `env:${resolution.envKey}`
+        : resolution.source || 'unknown';
+    const baseLabel = resolution.baseDirectory || '(unknown)';
+    const searchLabel = resolution.searchDirectory || config.searchDirectory;
+    const overrideLabel = resolution.searchDirectoryFromConfig ? 'yes' : 'no';
+    console.info(
+      `[Server] Workspace resolved: source=${sourceLabel}, base=${baseLabel}, search=${searchLabel}, configOverride=${overrideLabel}`
+    );
+    if (resolution.fromPath) {
+      console.info(`[Server] Workspace resolution origin cwd: ${resolution.fromPath}`);
+    }
+  }
 
   // Log effective configuration for debugging
   console.info(
