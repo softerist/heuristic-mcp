@@ -30,6 +30,7 @@ import os from 'os';
 
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
+import { getWorkspaceCachePath } from './lib/workspace-cache-key.js';
 
 
 const require = createRequire(import.meta.url);
@@ -132,7 +133,12 @@ let cache = null;
 let indexer = null;
 let hybridSearch = null;
 let config = null;
-let configReadyPromise = Promise.resolve();
+let workspaceLockAcquired = true;
+let configReadyResolve = null;
+let configInitError = null;
+let configReadyPromise = new Promise((resolve) => {
+  configReadyResolve = resolve;
+});
 let setWorkspaceFeatureInstance = null;
 let autoWorkspaceSwitchPromise = null;
 
@@ -352,21 +358,40 @@ async function initialize(workspaceDir) {
       config.embeddingProcessPerBatch = true;
     }
   }
-  const lock = await acquireWorkspaceLock({
-    cacheDirectory: config.cacheDirectory,
-    workspaceDir: config.searchDirectory,
-  });
-  if (!lock.acquired) {
+  const resolutionSource = config.workspaceResolution?.source || 'unknown';
+  const isSystemFallbackWorkspace =
+    (resolutionSource === 'cwd' || resolutionSource === 'cwd-root-search') &&
+    isNonProjectDirectory(config.searchDirectory);
+
+  let pidPath = null;
+  let logPath = null;
+  if (isSystemFallbackWorkspace) {
+    workspaceLockAcquired = false;
     console.warn(
-      `[Server] Another heuristic-mcp instance is already running for this workspace (pid ${lock.ownerPid ?? 'unknown'}).`
+      `[Server] System fallback workspace detected (${config.searchDirectory}); running in lightweight read-only mode.`
     );
-    console.warn('[Server] Exiting to avoid duplicate model loads.');
-    process.exit(0);
+    console.warn('[Server] Skipping lock/PID/log file setup for fallback workspace.');
+  } else {
+    const lock = await acquireWorkspaceLock({
+      cacheDirectory: config.cacheDirectory,
+      workspaceDir: config.searchDirectory,
+    });
+    workspaceLockAcquired = lock.acquired;
+    if (!workspaceLockAcquired) {
+      console.warn(
+        `[Server] Another heuristic-mcp instance is already running for this workspace (pid ${lock.ownerPid ?? 'unknown'}).`
+      );
+      console.warn(
+        '[Server] Starting in secondary read-only mode: background indexing and cache writes are disabled for this instance.'
+      );
+    }
+    [pidPath, logPath] = workspaceLockAcquired
+      ? await Promise.all([
+          setupPidFile({ pidFileName: PID_FILE_NAME, cacheDirectory: config.cacheDirectory }),
+          setupFileLogging(config),
+        ])
+      : [null, await setupFileLogging(config)];
   }
-  const [pidPath, logPath] = await Promise.all([
-    setupPidFile({ pidFileName: PID_FILE_NAME, cacheDirectory: config.cacheDirectory }),
-    setupFileLogging(config),
-  ]);
   if (logPath) {
     console.info(`[Logs] Writing server logs to ${logPath}`);
     console.info(`[Logs] Log viewer: heuristic-mcp --logs --workspace "${config.searchDirectory}"`);
@@ -553,11 +578,32 @@ async function initialize(workspaceDir) {
     const isSystemFallback =
       (resolutionSource === 'cwd' || resolutionSource === 'cwd-root-search') &&
       isNonProjectDirectory(config.searchDirectory);
+    const stopStartupMemoryLogger = () => {
+      if (stopStartupMemory) {
+        stopStartupMemory();
+      }
+    };
+
     if (isSystemFallback) {
       console.warn(
         `[Server] Skipping background indexing for detected system workspace: ${config.searchDirectory}`
       );
       console.warn('[Server] Waiting for a proper workspace root (MCP roots or f_set_workspace).');
+      stopStartupMemoryLogger();
+      return;
+    }
+
+    if (!workspaceLockAcquired) {
+      try {
+        console.info('[Server] Secondary instance detected; loading cache in read-only mode.');
+        await cache.load();
+        if (config.verbose) {
+          logMemory('[Server] Memory (after cache load)');
+        }
+      } finally {
+        stopStartupMemoryLogger();
+      }
+      console.info('[Server] Secondary instance ready; skipping background indexing.');
       return;
     }
 
@@ -570,9 +616,7 @@ async function initialize(workspaceDir) {
         logMemory('[Server] Memory (after cache load)');
       }
     } finally {
-      if (stopStartupMemory) {
-        stopStartupMemory();
-      }
+      stopStartupMemoryLogger();
     }
 
     
@@ -628,6 +672,9 @@ server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
 
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   await configReadyPromise;
+  if (configInitError || !config) {
+    throw configInitError ?? new Error('Server configuration is not initialized');
+  }
   return await handleListResources(config);
 });
 
@@ -635,6 +682,9 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
 
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   await configReadyPromise;
+  if (configInitError || !config) {
+    throw configInitError ?? new Error('Server configuration is not initialized');
+  }
   return await handleReadResource(request.params.uri, config);
 });
 
@@ -642,6 +692,9 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   await configReadyPromise;
+  if (configInitError || !config) {
+    throw configInitError ?? new Error('Server configuration is not initialized');
+  }
   const tools = [];
 
   for (const feature of features) {
@@ -656,6 +709,100 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   await configReadyPromise;
+  if (configInitError || !config) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Server initialization failed: ${configInitError?.message || 'configuration not available'}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  if (!workspaceLockAcquired && request.params?.name === 'f_set_workspace') {
+    const args = request.params?.arguments || {};
+    const workspacePath = args.workspacePath;
+    const reindex = args.reindex !== false;
+    if (typeof workspacePath !== 'string' || workspacePath.trim().length === 0) {
+      return {
+        content: [{ type: 'text', text: 'Error: workspacePath is required.' }],
+        isError: true,
+      };
+    }
+    if (reindex) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'This server instance is in secondary read-only mode. Set reindex=false to attach cache only.',
+          },
+        ],
+        isError: true,
+      };
+    }
+    const normalizedPath = path.resolve(workspacePath);
+    try {
+      const stats = await fs.stat(normalizedPath);
+      if (!stats.isDirectory()) {
+        return {
+          content: [{ type: 'text', text: `Error: Path is not a directory: ${normalizedPath}` }],
+          isError: true,
+        };
+      }
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: Cannot access directory ${normalizedPath}: ${err.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    config.searchDirectory = normalizedPath;
+    config.cacheDirectory = getWorkspaceCachePath(normalizedPath, getGlobalCacheDir());
+    try {
+      await fs.mkdir(config.cacheDirectory, { recursive: true });
+      await cache.load();
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Attached in read-only mode to workspace cache: ${normalizedPath}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: Failed to attach cache for ${normalizedPath}: ${err.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  if (
+    !workspaceLockAcquired &&
+    ['b_index_codebase', 'c_clear_cache'].includes(request.params?.name)
+  ) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'This server instance is in secondary read-only mode. Use the primary instance for indexing/cache mutation tools.',
+        },
+      ],
+      isError: true,
+    };
+  }
   await maybeAutoSwitchWorkspace(request);
 
   for (const feature of features) {
@@ -880,26 +1027,35 @@ export async function main(argv = process.argv) {
   
 
   
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.info('[Server] MCP transport connected.');
-
-  
-  
-  const detectedRoot = await new Promise((resolve) => {
+  const detectedRootPromise = new Promise((resolve) => {
     const HANDSHAKE_TIMEOUT_MS = 5000;
+    let settled = false;
+    const resolveOnce = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
     const timer = setTimeout(() => {
       console.warn(`[Server] MCP handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms, proceeding without roots.`);
-      resolve(null);
+      resolveOnce(null);
     }, HANDSHAKE_TIMEOUT_MS);
 
     server.oninitialized = async () => {
       clearTimeout(timer);
       console.info('[Server] MCP handshake complete.');
       const root = await detectWorkspaceFromRoots();
-      resolve(root);
+      resolveOnce(root);
     };
   });
+
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.info('[Server] MCP transport connected.');
+
+  
+  
+  const detectedRoot = await detectedRootPromise;
 
   
   const effectiveWorkspace = detectedRoot || workspaceDir;
@@ -907,15 +1063,13 @@ export async function main(argv = process.argv) {
     console.info(`[Server] Using workspace from MCP roots: ${detectedRoot}`);
   }
   const initPromise = initialize(effectiveWorkspace);
-  configReadyPromise = new Promise((resolve) => {
-    configReadyResolve = resolve;
-  });
   const initWithResolve = initPromise
     .then((result) => {
       configReadyResolve();
       return result;
     })
     .catch((err) => {
+      configInitError = err;
       configReadyResolve();
       throw err;
     });
