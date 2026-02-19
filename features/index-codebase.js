@@ -1034,9 +1034,21 @@ export class CodebaseIndexer {
       return [];
     }
 
+    const makeRetryResults = (files) =>
+      files.map((fileEntry) => ({ file: fileEntry.file, status: 'retry' }));
+
+    if (this.workersDisabledUntil && Date.now() < this.workersDisabledUntil) {
+      if (this.config.verbose) {
+        console.warn(
+          `[Indexer] Workers disabled by circuit breaker; routing ${allowedFiles.length} files to main-thread fallback`
+        );
+      }
+      return makeRetryResults(allowedFiles);
+    }
+
     
     if (this._workerReplacementPromises && this._workerReplacementPromises.size > 0) {
-      await Promise.all(this._workerReplacementPromises.values());
+      await Promise.allSettled(this._workerReplacementPromises.values());
     }
 
     const activeWorkers = this.workers
@@ -1044,9 +1056,12 @@ export class CodebaseIndexer {
       .filter((entry) => entry.worker);
 
     if (activeWorkers.length === 0) {
-      
-      
-      return [];
+      if (this.config.verbose) {
+        console.warn(
+          `[Indexer] No active workers available; routing ${allowedFiles.length} files to main-thread fallback`
+        );
+      }
+      return makeRetryResults(allowedFiles);
     }
 
     const results = [];

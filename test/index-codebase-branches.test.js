@@ -174,6 +174,31 @@ describe('CodebaseIndexer Branch Coverage', () => {
     await promise;
   });
 
+  it('returns retry markers when processFilesWithWorkers has no active workers', async () => {
+    indexer.workers = [];
+    vi.spyOn(indexer, 'isPathInsideWorkspaceReal').mockResolvedValue(true);
+
+    const results = await indexer.processFilesWithWorkers([
+      { file: '/test/a.js' },
+      { file: '/test/b.js' },
+    ]);
+
+    expect(results).toEqual([
+      { file: '/test/a.js', status: 'retry' },
+      { file: '/test/b.js', status: 'retry' },
+    ]);
+  });
+
+  it('skips worker replacement wait when worker circuit is open', async () => {
+    indexer.workersDisabledUntil = Date.now() + 60_000;
+    indexer._workerReplacementPromises = new Map([[0, new Promise(() => {})]]);
+    vi.spyOn(indexer, 'isPathInsideWorkspaceReal').mockResolvedValue(true);
+
+    const results = await indexer.processFilesWithWorkers([{ file: '/test/a.js' }]);
+
+    expect(results).toEqual([{ file: '/test/a.js', status: 'retry' }]);
+  });
+
   it('ignores control responses without pending child requests', () => {
     indexer._embeddingChildQueue = [];
     indexer._embeddingChildBuffer = '';
