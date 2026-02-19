@@ -35,7 +35,7 @@ import { fileURLToPath } from 'url';
 const require = createRequire(import.meta.url);
 const packageJson = require('./package.json');
 
-import { loadConfig, getGlobalCacheDir } from './lib/config.js';
+import { loadConfig, getGlobalCacheDir, isNonProjectDirectory } from './lib/config.js';
 import { clearStaleCaches } from './lib/cache-utils.js';
 import { enableStderrOnlyLogging, setupFileLogging, getLogFilePath } from './lib/logging.js';
 import { parseArgs, printHelp } from './lib/cli.js';
@@ -548,7 +548,18 @@ async function initialize(workspaceDir) {
   server.hybridSearch = hybridSearch;
 
   const startBackgroundTasks = async () => {
-    
+    const resolutionSource = config.workspaceResolution?.source || 'unknown';
+    const isSystemFallback =
+      (resolutionSource === 'cwd' || resolutionSource === 'cwd-root-search') &&
+      isNonProjectDirectory(config.searchDirectory);
+    if (isSystemFallback) {
+      console.warn(
+        `[Server] Skipping background indexing for detected system workspace: ${config.searchDirectory}`
+      );
+      console.warn('[Server] Waiting for a proper workspace root (MCP roots or f_set_workspace).');
+      return;
+    }
+
     void preloadEmbeddingModel();
 
     try {
