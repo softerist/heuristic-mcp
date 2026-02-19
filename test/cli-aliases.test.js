@@ -36,6 +36,10 @@ describe('CLI aliases', () => {
     expect(clearParsed.wantsClearCache).toBe(true);
   });
 
+  it('maps clean command to --clear and keeps cache id argument', () => {
+    expect(normalizeCliArgs(['clean', 'abc123'])).toEqual(['--clear', 'abc123']);
+  });
+
   it('maps mem, version, help aliases', () => {
     expect(parseArgs(['node', 'index.js', 'mem']).wantsMem).toBe(true);
     expect(parseArgs(['node', 'index.js', 'version']).wantsVersion).toBe(true);

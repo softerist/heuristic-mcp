@@ -545,6 +545,32 @@ function formatDateTime(value) {
   return `${date.toLocaleString()} (${date.toISOString()})`;
 }
 
+function parseFileProgressSummary(progressData) {
+  const message = String(progressData?.message || '');
+  if (!message) return null;
+
+  const indexedMatch = message.match(/Indexed\s+(\d+)\s*\/\s*(\d+)\s+files/i);
+  if (indexedMatch) {
+    return {
+      indexed: Number(indexedMatch[1]),
+      total: Number(indexedMatch[2]),
+    };
+  }
+
+  const completeMatch = message.match(/Complete:\s+\d+\s+chunks\s+from\s+(\d+)\s+files/i);
+  if (completeMatch) {
+    const total = Number(completeMatch[1]);
+    return { indexed: total, total };
+  }
+
+  const processingMatch = message.match(/Processing\s+(\d+)\s+changed files/i);
+  if (processingMatch) {
+    return { indexed: null, total: Number(processingMatch[1]) };
+  }
+
+  return null;
+}
+
 async function captureConsoleOutput(fn) {
   const original = {
     info: console.info,
@@ -852,6 +878,19 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
           const cacheDir = path.join(globalCacheRoot, dir);
           const metaFile = path.join(cacheDir, 'meta.json');
           const progressFile = path.join(cacheDir, 'progress.json');
+          let progressData = null;
+          try {
+            progressData = JSON.parse(await fs.readFile(progressFile, 'utf-8'));
+          } catch {
+            
+          }
+          const hasNumericProgress = progressData && typeof progressData.progress === 'number';
+          const isProgressIncomplete =
+            !!hasNumericProgress &&
+            Number.isFinite(progressData.total) &&
+            progressData.total > 0 &&
+            progressData.progress < progressData.total;
+          const fileProgressSummary = parseFileProgressSummary(progressData);
 
           console.info(`${'─'.repeat(60)}`);
           console.info(`📁 Cache: ${dir}`);
@@ -922,13 +961,38 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
               
             }
 
+            const progressAfterSnapshot =
+              hasNumericProgress &&
+              progressData.updatedAt &&
+              metaData.lastSaveTime &&
+              new Date(progressData.updatedAt) > new Date(metaData.lastSaveTime);
+            const isIncrementalUpdateActive = Boolean(
+              hasNumericProgress && (isProgressIncomplete || progressAfterSnapshot)
+            );
+
             
             if (metaData.filesIndexed && metaData.filesIndexed > 0) {
-              console.info(`   Cached index: ✅ COMPLETE (${metaData.filesIndexed} files)`);
+              if (isIncrementalUpdateActive) {
+                console.info(`   Cached snapshot: ✅ COMPLETE (${metaData.filesIndexed} files)`);
+              } else {
+                console.info(`   Cached index: ✅ COMPLETE (${metaData.filesIndexed} files)`);
+              }
             } else if (metaData.filesIndexed === 0) {
               console.info(`   Cached index: ⚠️  NO FILES (check excludePatterns)`);
             } else {
               console.info(`   Cached index: ⚠️  INCOMPLETE`);
+            }
+
+            if (
+              isIncrementalUpdateActive &&
+              Number.isFinite(fileProgressSummary?.total) &&
+              Number.isFinite(metaData.filesIndexed) &&
+              fileProgressSummary.total > metaData.filesIndexed
+            ) {
+              const delta = fileProgressSummary.total - metaData.filesIndexed;
+              console.info(
+                `   Current run target: ${fileProgressSummary.total} files (${delta} more than cached snapshot)`
+              );
             }
           } catch (err) {
             if (err.code === 'ENOENT') {
@@ -949,14 +1013,6 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
             } else {
               console.info(`   Status: ❌ Invalid or corrupted (${err.message})`);
             }
-          }
-
-          
-          let progressData = null;
-          try {
-            progressData = JSON.parse(await fs.readFile(progressFile, 'utf-8'));
-          } catch {
-            
           }
 
           if (progressData && typeof progressData.progress === 'number') {
@@ -1014,7 +1070,7 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
             }
           }
 
-          if (metaData && progressData && typeof progressData.progress === 'number') {
+          if (metaData && isProgressIncomplete) {
             console.info('   Indexing state: Cached snapshot available; incremental update running.');
           } else if (metaData) {
             console.info('   Indexing state: Cached snapshot available; idle.');

@@ -157,7 +157,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     await indexer.initializeWorkers();
 
-    const expectedWorkers = process.platform === 'win32' ? 1 : 2;
+    const expectedWorkers = process.platform === 'win32' ? 0 : 2;
     expect(indexer.workers.length).toBe(expectedWorkers);
   });
 

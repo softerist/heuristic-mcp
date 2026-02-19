@@ -564,14 +564,14 @@ export class CodebaseIndexer {
 
         
         
-        if (process.platform === 'win32' && this.isHeavyEmbeddingModel() && numWorkers > 1) {
+        if (process.platform === 'win32' && this.isHeavyEmbeddingModel() && numWorkers > 0) {
           if (!this._heavyWorkerSafetyLogged) {
             console.warn(
-              '[Indexer] Heavy model worker safety mode: forcing workers=1 on Windows to avoid native multi-worker crashes'
+              '[Indexer] Heavy model worker safety mode: disabling workers on Windows to avoid native worker crashes/timeouts'
             );
             this._heavyWorkerSafetyLogged = true;
           }
-          numWorkers = 1;
+          numWorkers = 0;
         }
 
         
