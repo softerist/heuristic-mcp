@@ -72,15 +72,17 @@ describe('lifecycle', () => {
     setPlatform('win32');
     fsMock.readFile.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }));
     execPromiseMock.mockImplementation(async (cmd) => {
-      if (String(cmd).startsWith('wmic process')) {
-        return { stdout: 'ProcessId=1234\nProcessId=5678\n' };
-      }
       if (
-        String(cmd).startsWith(
-          'powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object'
-        )
+        String(cmd).includes('Select-Object -ExpandProperty ProcessId')
       ) {
         return { stdout: '1234\n5678\n' };
+      }
+      if (String(cmd).includes('Select-Object ProcessId, CommandLine')) {
+        return {
+          stdout:
+            '1234 "node" "C:\\Users\\test\\AppData\\Roaming\\npm\\node_modules\\@softerist\\heuristic-mcp\\index.js"\n' +
+            '5678 "node" "C:\\Users\\test\\AppData\\Roaming\\npm\\node_modules\\@softerist\\heuristic-mcp\\index.js"\n',
+        };
       }
       if (String(cmd).startsWith('taskkill') && String(cmd).includes('/PID 5678')) {
         const err = new Error('Denied');

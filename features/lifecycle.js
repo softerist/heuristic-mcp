@@ -95,28 +95,9 @@ export async function stop() {
         }
       }
 
-      
-      if (pids.length === 0) {
-        try {
-          const { stdout } = await execPromise(
-            `wmic process where "CommandLine like '%heuristic-mcp%'" get ProcessId /FORMAT:LIST`
-          );
-          const matches = stdout.match(/ProcessId=(\d+)/g) || [];
-          for (const match of matches) {
-            const pid = match.replace('ProcessId=', '');
-            if (pid && !isNaN(pid) && parseInt(pid, 10) !== currentPid) {
-              if (!pids.includes(pid)) pids.push(pid);
-            }
-          }
-        } catch (_wmicErr) {
-          
-        }
-      }
-
-      
       try {
         const { stdout } = await execPromise(
-          `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and ($_.CommandLine -like '*heuristic-mcp*' -or $_.CommandLine -like '*heuristic-mcp\\\\index.js*' -or $_.CommandLine -like '*heuristic-mcp/index.js*') } | Select-Object -ExpandProperty ProcessId"`
+          `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^node(\\\\.exe)?$' -and $_.CommandLine -and ($_.CommandLine -like '*heuristic-mcp\\\\index.js*' -or $_.CommandLine -like '*heuristic-mcp/index.js*') } | Select-Object -ExpandProperty ProcessId"`
         );
         const listPids = stdout
           .trim()
@@ -661,7 +642,7 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
         const myPid = process.pid;
         if (process.platform === 'win32') {
           const { stdout } = await execPromise(
-            `powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"CommandLine LIKE '%heuristic-mcp%index.js%'\\" | Select-Object -ExpandProperty ProcessId"`
+            `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^node(\\\\.exe)?$' -and $_.CommandLine -and ($_.CommandLine -like '*heuristic-mcp\\\\index.js*' -or $_.CommandLine -like '*heuristic-mcp/index.js*') } | Select-Object -ExpandProperty ProcessId"`
           );
           const winPids = stdout
             .trim()
