@@ -68,6 +68,7 @@ import {
   MEMORY_LOG_INTERVAL_MS,
   ONNX_THREAD_LIMIT,
   BACKGROUND_INDEX_DELAY_MS,
+  SERVER_KEEP_ALIVE_INTERVAL_MS,
 } from './lib/constants.js';
 const PID_FILE_NAME = '.heuristic-mcp.pid';
 
@@ -1528,6 +1529,15 @@ export async function main(argv = process.argv) {
   void startBackgroundTasks().catch((err) => {
     console.error(`[Server] Background task error: ${err.message}`);
   });
+  // Keep-Alive mechanism: ensure the process stays alive even if StdioServerTransport
+  // temporarily loses its active handle status or during complex async chains.
+  if (isServerMode) {
+    setInterval(() => {
+      // Logic to keep event loop active.
+      // We don't need to do anything, just the presence of the timer is enough.
+    }, SERVER_KEEP_ALIVE_INTERVAL_MS);
+  }
+
   console.info('[Server] MCP server is now fully ready to accept requests.');
 }
 
