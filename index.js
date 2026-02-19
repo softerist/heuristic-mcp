@@ -46,6 +46,7 @@ import {
   registerSignalHandlers,
   setupPidFile,
   acquireWorkspaceLock,
+  stopOtherHeuristicServers,
 } from './lib/server-lifecycle.js';
 
 import { EmbeddingsCache } from './lib/cache.js';
@@ -141,6 +142,8 @@ let configReadyPromise = new Promise((resolve) => {
 });
 let setWorkspaceFeatureInstance = null;
 let autoWorkspaceSwitchPromise = null;
+let rootsCapabilitySupported = null;
+let rootsProbeInFlight = null;
 
 async function resolveWorkspaceFromEnvValue(rawValue) {
   if (!rawValue || rawValue.includes('${')) return null;
@@ -282,50 +285,39 @@ async function maybeAutoSwitchWorkspace(request) {
   const detectedWorkspace = normalizePathForCompare(detected.workspacePath);
   if (detectedWorkspace === currentWorkspace) return;
 
-  if (autoWorkspaceSwitchPromise) {
-    await autoWorkspaceSwitchPromise;
-    return;
-  }
-
-  autoWorkspaceSwitchPromise = (async () => {
-    console.info(
-      `[Server] Auto-switching workspace from ${currentWorkspace} to ${detected.workspacePath} (env ${detected.envKey})`
-    );
-    const result = await setWorkspaceFeatureInstance.execute({
-      workspacePath: detected.workspacePath,
-      reindex: false,
-    });
-    if (!result.success) {
-      console.warn(
-        `[Server] Auto workspace switch failed (env ${detected.envKey}): ${result.error}`
-      );
-    }
-  })();
-
-  try {
-    await autoWorkspaceSwitchPromise;
-  } finally {
-    autoWorkspaceSwitchPromise = null;
-  }
+  await maybeAutoSwitchWorkspaceToPath(detected.workspacePath, {
+    source: `env ${detected.envKey}`,
+    reindex: false,
+  });
 }
 
 
 
-async function detectWorkspaceFromRoots() {
+async function detectWorkspaceFromRoots({ quiet = false } = {}) {
   try {
     const caps = server.getClientCapabilities();
     if (!caps?.roots) {
-      console.info('[Server] Client does not support roots capability, skipping workspace auto-detection.');
+      rootsCapabilitySupported = false;
+      if (!quiet) {
+        console.info(
+          '[Server] Client does not support roots capability, skipping workspace auto-detection.'
+        );
+      }
       return null;
     }
+    rootsCapabilitySupported = true;
 
     const result = await server.listRoots();
     if (!result?.roots?.length) {
-      console.info('[Server] Client returned no roots.');
+      if (!quiet) {
+        console.info('[Server] Client returned no roots.');
+      }
       return null;
     }
 
-    console.info(`[Server] MCP roots received: ${result.roots.map(r => r.uri).join(', ')}`);
+    if (!quiet) {
+      console.info(`[Server] MCP roots received: ${result.roots.map(r => r.uri).join(', ')}`);
+    }
 
     
     const rootPaths = result.roots
@@ -341,14 +333,88 @@ async function detectWorkspaceFromRoots() {
       .filter(Boolean);
 
     if (rootPaths.length === 0) {
-      console.info('[Server] No valid file:// roots found.');
+      if (!quiet) {
+        console.info('[Server] No valid file:// roots found.');
+      }
       return null;
     }
 
     return path.resolve(rootPaths[0]);
   } catch (err) {
-    console.warn(`[Server] MCP roots detection failed (non-fatal): ${err.message}`);
+    if (!quiet) {
+      console.warn(`[Server] MCP roots detection failed (non-fatal): ${err.message}`);
+    }
     return null;
+  }
+}
+
+async function maybeAutoSwitchWorkspaceToPath(targetWorkspacePath, { source, reindex = false } = {}) {
+  if (!setWorkspaceFeatureInstance || !config?.searchDirectory) return;
+  if (!targetWorkspacePath) return;
+  if (isNonProjectDirectory(targetWorkspacePath)) {
+    if (config?.verbose) {
+      console.info(
+        `[Server] Ignoring auto-switch candidate from ${source || 'unknown'}: non-project path ${targetWorkspacePath}`
+      );
+    }
+    return;
+  }
+
+  const currentWorkspace = normalizePathForCompare(config.searchDirectory);
+  const targetWorkspace = normalizePathForCompare(targetWorkspacePath);
+  if (targetWorkspace === currentWorkspace) return;
+
+  if (autoWorkspaceSwitchPromise) {
+    await autoWorkspaceSwitchPromise;
+    return;
+  }
+
+  autoWorkspaceSwitchPromise = (async () => {
+    console.info(
+      `[Server] Auto-switching workspace from ${currentWorkspace} to ${targetWorkspacePath} (${source || 'auto'})`
+    );
+    const result = await setWorkspaceFeatureInstance.execute({
+      workspacePath: targetWorkspacePath,
+      reindex,
+    });
+    if (!result.success) {
+      console.warn(
+        `[Server] Auto workspace switch failed (${source || 'auto'}): ${result.error}`
+      );
+    }
+  })();
+
+  try {
+    await autoWorkspaceSwitchPromise;
+  } finally {
+    autoWorkspaceSwitchPromise = null;
+  }
+}
+
+async function maybeAutoSwitchWorkspaceFromRoots(request) {
+  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return;
+  if (!setWorkspaceFeatureInstance || !config?.searchDirectory) return;
+  if (request?.params?.name === 'f_set_workspace') return;
+  if (rootsCapabilitySupported === false) return;
+
+  if (rootsProbeInFlight) {
+    await rootsProbeInFlight;
+    return;
+  }
+
+  rootsProbeInFlight = (async () => {
+    const rootWorkspace = await detectWorkspaceFromRoots({ quiet: true });
+    if (!rootWorkspace) return;
+    await maybeAutoSwitchWorkspaceToPath(rootWorkspace, {
+      source: 'roots probe',
+      reindex: false,
+    });
+  })();
+
+  try {
+    await rootsProbeInFlight;
+  } finally {
+    rootsProbeInFlight = null;
   }
 }
 
@@ -478,6 +544,28 @@ async function initialize(workspaceDir) {
     );
     console.warn('[Server] Skipping lock/PID/log file setup for fallback workspace.');
   } else {
+    if (config.autoStopOtherServersOnStartup !== false) {
+      const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
+      const { killed, failed } = await stopOtherHeuristicServers({
+        globalCacheRoot,
+        currentCacheDirectory: config.cacheDirectory,
+      });
+      if (killed.length > 0) {
+        const details = killed
+          .map((entry) => `${entry.pid}${entry.workspace ? ` (${entry.workspace})` : ''}`)
+          .join(', ');
+        console.info(`[Server] Auto-stopped ${killed.length} stale heuristic-mcp server(s): ${details}`);
+      }
+      if (failed.length > 0) {
+        const details = failed
+          .map((entry) => `${entry.pid}${entry.workspace ? ` (${entry.workspace})` : ''}`)
+          .join(', ');
+        console.warn(
+          `[Server] Failed to stop ${failed.length} older heuristic-mcp server(s): ${details}`
+        );
+      }
+    }
+
     const lock = await acquireWorkspaceLock({
       cacheDirectory: config.cacheDirectory,
       workspaceDir: config.searchDirectory,
@@ -800,12 +888,11 @@ const server = new Server(
 server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
   console.info('[Server] Received roots/list_changed notification from client.');
   const newRoot = await detectWorkspaceFromRoots();
-  if (newRoot && setWorkspaceFeatureInstance) {
-    const currentWorkspace = path.resolve(config.searchDirectory);
-    if (newRoot.toLowerCase() !== currentWorkspace.toLowerCase()) {
-      console.info(`[Server] Auto-switching workspace to ${newRoot} (roots changed)`);
-      await setWorkspaceFeatureInstance.execute({ workspacePath: newRoot, reindex: true });
-    }
+  if (newRoot) {
+    await maybeAutoSwitchWorkspaceToPath(newRoot, {
+      source: 'roots changed',
+      reindex: true,
+    });
   }
 });
 
@@ -944,6 +1031,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       isError: true,
     };
   }
+  await maybeAutoSwitchWorkspaceFromRoots(request);
   await maybeAutoSwitchWorkspace(request);
 
   for (const feature of features) {
@@ -1193,6 +1281,15 @@ export async function main(argv = process.argv) {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.info('[Server] MCP transport connected.');
+  if (isServerMode) {
+    process.stdin?.on?.('end', () => requestShutdown('stdin-end'));
+    process.stdin?.on?.('close', () => requestShutdown('stdin-close'));
+    process.stdout?.on?.('error', (err) => {
+      if (err?.code === 'EPIPE') {
+        requestShutdown('stdout-epipe');
+      }
+    });
+  }
 
   
   

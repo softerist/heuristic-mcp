@@ -647,6 +647,10 @@
     // Increase to 5000-10000 on slower disks if checkpoint writes feel too frequent.
     "indexCheckpointIntervalMs": 2000,
   },
+  // Server lifecycle controls.
+  // When true, a newly started server instance will terminate older heuristic-mcp server processes.
+  // This helps prevent stale workspace binding after IDE reloads/window switches.
+  "autoStopOtherServersOnStartup": true,
   // Logging and diagnostics.
   "logging": {
     // Enable verbose logging.
