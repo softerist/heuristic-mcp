@@ -1169,7 +1169,7 @@ export async function main(argv = process.argv) {
 
   
   const detectedRootPromise = new Promise((resolve) => {
-    const HANDSHAKE_TIMEOUT_MS = 5000;
+    const HANDSHAKE_TIMEOUT_MS = 1000;
     let settled = false;
     const resolveOnce = (value) => {
       if (settled) return;
