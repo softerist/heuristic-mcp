@@ -879,7 +879,21 @@ async function initialize(workspaceDir) {
         stopStartupMemory();
       }
     };
-    const tryAutoAttachWorkspaceCache = async (reason) => {
+    const handleCorruptCacheAfterLoad = ({ context, canReindex }) => {
+      if (!cache.consumeAutoReindex()) return false;
+      cache.clearInMemoryState();
+      if (canReindex) {
+        console.warn(
+          `[Server] Cache corruption detected while ${context}; in-memory cache was cleared and a full re-index will run.`
+        );
+      } else {
+        console.warn(
+          `[Server] Cache corruption detected while ${context}. This server is secondary read-only and cannot re-index. Reload the IDE window for this workspace or use the primary instance to rebuild the cache.`
+        );
+      }
+      return true;
+    };
+    const tryAutoAttachWorkspaceCache = async (reason, { canReindex = workspaceLockAcquired } = {}) => {
       const candidate = await findAutoAttachWorkspaceCandidate({
         excludeCacheDirectory: config.cacheDirectory,
       });
@@ -897,6 +911,7 @@ async function initialize(workspaceDir) {
         await cleanupStaleBinaryArtifacts(config.cacheDirectory, { logger: console });
       }
       await cache.load();
+      handleCorruptCacheAfterLoad({ context: `auto-attaching workspace cache (${reason})`, canReindex });
       console.info(
         `[Server] Auto-attached workspace cache (${reason}): ${candidate.workspace} via ${candidate.source}`
       );
@@ -916,7 +931,9 @@ async function initialize(workspaceDir) {
         console.warn(
           `[Server] Detected system fallback workspace: ${config.searchDirectory}. Attempting cache auto-attach.`
         );
-        const attached = await tryAutoAttachWorkspaceCache('system-fallback');
+        const attached = await tryAutoAttachWorkspaceCache('system-fallback', {
+          canReindex: workspaceLockAcquired,
+        });
         if (!attached) {
           console.warn(
             '[Server] Waiting for a proper workspace root (MCP roots, env vars, or f_set_workspace).'
@@ -932,8 +949,12 @@ async function initialize(workspaceDir) {
       try {
         console.info('[Server] Secondary instance detected; loading cache in read-only mode.');
         await cache.load();
+        handleCorruptCacheAfterLoad({
+          context: 'loading cache in secondary read-only mode',
+          canReindex: false,
+        });
         if (cache.getStoreSize() === 0) {
-          await tryAutoAttachWorkspaceCache('secondary-empty-cache');
+          await tryAutoAttachWorkspaceCache('secondary-empty-cache', { canReindex: false });
         }
         if (config.verbose) {
           logMemory('[Server] Memory (after cache load)');
@@ -950,6 +971,7 @@ async function initialize(workspaceDir) {
     try {
       console.info('[Server] Loading cache (deferred)...');
       await cache.load();
+      handleCorruptCacheAfterLoad({ context: 'startup cache load', canReindex: true });
       if (config.verbose) {
         logMemory('[Server] Memory (after cache load)');
       }
@@ -1105,6 +1127,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
       await fs.mkdir(config.cacheDirectory, { recursive: true });
       await cache.load();
+      if (cache.consumeAutoReindex()) {
+        cache.clearInMemoryState();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Attached cache for ${normalizedPath}, but it is corrupt. This secondary read-only instance cannot rebuild it. Reload the IDE window for this workspace or run indexing from the primary instance.`,
+            },
+          ],
+          isError: true,
+        };
+      }
       trustWorkspacePath(normalizedPath);
       return {
         content: [

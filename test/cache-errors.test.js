@@ -288,3 +288,39 @@ describe('EmbeddingsCache Error Handling', () => {
     });
   });
 });
+
+describe('EmbeddingsCache corruption flag lifecycle', () => {
+  it('consumeAutoReindex clears the one-shot corruption signal', async () => {
+    const { EmbeddingsCache } = await import('../lib/cache.js');
+    const cache = new EmbeddingsCache({
+      enableCache: true,
+      cacheDirectory: '/mock/cache',
+      fileExtensions: ['js'],
+      embeddingModel: 'test-model',
+      annEnabled: false,
+    });
+
+    cache._corruptionDetected = true;
+    expect(cache.shouldAutoReindex()).toBe(true);
+    expect(cache.consumeAutoReindex()).toBe(true);
+    expect(cache.shouldAutoReindex()).toBe(false);
+    expect(cache.consumeAutoReindex()).toBe(false);
+  });
+
+  it('load() clears stale corruption flag before reading cache data', async () => {
+    const { EmbeddingsCache } = await import('../lib/cache.js');
+    const cache = new EmbeddingsCache({
+      enableCache: true,
+      cacheDirectory: '/mock/cache',
+      fileExtensions: ['js'],
+      embeddingModel: 'test-model',
+      annEnabled: false,
+    });
+
+    cache._corruptionDetected = true;
+    fs.mkdir.mockRejectedValueOnce(new Error('Permission denied'));
+
+    await cache.load();
+    expect(cache.shouldAutoReindex()).toBe(false);
+  });
+});

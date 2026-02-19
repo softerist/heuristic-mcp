@@ -4,6 +4,7 @@ import path from 'path';
 import os from 'os';
 import {
   BinaryVectorStore,
+  BinaryStoreCorruptionError,
   cleanupStaleBinaryArtifacts,
   readBinaryStoreTelemetry,
 } from '../lib/vector-store-binary.js';
@@ -216,4 +217,133 @@ describe('BinaryVectorStore smoke', () => {
       await expect(fs.access(activeTmp)).resolves.toBeUndefined();
     });
   });
+});
+
+describe('BinaryVectorStore integrity checks', () => {
+  it('detects CRC32 payload corruption', async () => {
+    await withTempDir(async (dir) => {
+      const chunks = [
+        {
+          file: path.join(dir, 'a.js'),
+          startLine: 1,
+          endLine: 2,
+          content: 'const a = 1;',
+          vector: new Float32Array([0.1, 0.2, 0.3]),
+        },
+        {
+          file: path.join(dir, 'b.js'),
+          startLine: 3,
+          endLine: 4,
+          content: 'const b = 2;',
+          vector: new Float32Array([0.4, 0.5, 0.6]),
+        },
+      ];
+
+      const store = await BinaryVectorStore.write(dir, chunks);
+      await store.close();
+
+      // Corrupt a byte in the records payload (after the 32-byte header)
+      const recordsPath = path.join(dir, 'records.bin');
+      const recordsData = await fs.readFile(recordsPath);
+      recordsData[33] ^= 0xFF;
+      await fs.writeFile(recordsPath, recordsData);
+
+      await expect(BinaryVectorStore.load(dir)).rejects.toThrow(BinaryStoreCorruptionError);
+      await expect(BinaryVectorStore.load(dir)).rejects.toThrow(/CRC32 mismatch/);
+    });
+  });
+
+  it('detects cross-file writeId mismatch', async () => {
+    await withTempDir(async (dir) => {
+      const chunks = [
+        {
+          file: path.join(dir, 'x.js'),
+          startLine: 1,
+          endLine: 2,
+          content: 'hello',
+          vector: new Float32Array([0.1, 0.2]),
+        },
+      ];
+
+      const store = await BinaryVectorStore.write(dir, chunks);
+      await store.close();
+
+      // Tamper with the writeId in records.bin header (offset 16, 4 bytes LE)
+      const recordsPath = path.join(dir, 'records.bin');
+      const buf = await fs.readFile(recordsPath);
+      const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+      const originalWriteId = view.getUint32(16, true);
+      view.setUint32(16, originalWriteId + 1, true);
+      // Recompute CRC32 so that check passes but writeId mismatch is caught
+      const { crc32 } = await import('zlib');
+      const payload = buf.subarray(32);
+      const newCrc = crc32(payload);
+      view.setUint32(20, newCrc, true);
+      await fs.writeFile(recordsPath, buf);
+
+      await expect(BinaryVectorStore.load(dir)).rejects.toThrow(BinaryStoreCorruptionError);
+      await expect(BinaryVectorStore.load(dir)).rejects.toThrow(/writeId mismatch/);
+    });
+  });
+
+  it('rejects stores with unsupported version gracefully', async () => {
+    await withTempDir(async (dir) => {
+      const chunks = [
+        {
+          file: path.join(dir, 'v.js'),
+          startLine: 1,
+          endLine: 2,
+          content: 'version test',
+          vector: new Float32Array([0.5, 0.5]),
+        },
+      ];
+
+      const store = await BinaryVectorStore.write(dir, chunks);
+      await store.close();
+
+      // Overwrite version to an unsupported value
+      const vectorsPath = path.join(dir, 'vectors.bin');
+      const buf = await fs.readFile(vectorsPath);
+      const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+      view.setUint32(4, 999, true);
+      await fs.writeFile(vectorsPath, buf);
+
+      // Should throw a regular Error (not BinaryStoreCorruptionError) for version mismatch
+      await expect(BinaryVectorStore.load(dir)).rejects.toThrow(/Unsupported binary store version/);
+    });
+  });
+
+  it('detects content CRC32 payload corruption', async () => {
+    await withTempDir(async (dir) => {
+      const chunks = [
+        {
+          file: path.join(dir, 'c1.js'),
+          startLine: 1,
+          endLine: 5,
+          content: 'function hello() { return "world"; }',
+          vector: new Float32Array([0.1, 0.2, 0.3]),
+        },
+        {
+          file: path.join(dir, 'c2.js'),
+          startLine: 1,
+          endLine: 3,
+          content: 'const x = 42;',
+          vector: new Float32Array([0.4, 0.5, 0.6]),
+        },
+      ];
+
+      const store = await BinaryVectorStore.write(dir, chunks);
+      await store.close();
+
+      // Corrupt a byte in content.bin payload (after the 32-byte header)
+      const contentPath = path.join(dir, 'content.bin');
+      const contentData = await fs.readFile(contentPath);
+      contentData[33] ^= 0xFF;
+      await fs.writeFile(contentPath, contentData);
+
+      await expect(BinaryVectorStore.load(dir)).rejects.toThrow(BinaryStoreCorruptionError);
+      await expect(BinaryVectorStore.load(dir)).rejects.toThrow(/content CRC32 mismatch/);
+    });
+  });
+
 });
