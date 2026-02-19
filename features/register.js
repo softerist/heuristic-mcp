@@ -271,7 +271,6 @@ export async function register(filter = null) {
   const serverConfig = {
     command: 'heuristic-mcp',
     args: [],
-    disabled: false,
   };
 
   const configPaths = getConfigPaths();

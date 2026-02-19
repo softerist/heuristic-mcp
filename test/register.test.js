@@ -227,6 +227,28 @@ describe('register', () => {
     const parsed = JSON.parse(writtenText);
     expect(parsed.mcpServers['heuristic-mcp'].command).toBe('heuristic-mcp');
     expect(parsed.mcpServers['heuristic-mcp'].args).toEqual([]);
+    expect(parsed.mcpServers['heuristic-mcp']).not.toHaveProperty('disabled');
+  });
+
+  it('does not write disabled = false in Codex TOML config', async () => {
+    delete process.env.ANTIGRAVITY_AGENT;
+    delete process.env.CURSOR_AGENT;
+    process.env.CODEX_THREAD_ID = 'abc123';
+    setPlatform('win32');
+    fsPromisesMock.access.mockResolvedValue();
+    fsPromisesMock.readFile.mockResolvedValue('');
+
+    const { register } = await import('../features/register.js');
+    await register('codex');
+
+    const codexCall = fsMock.writeFileSync.mock.calls.find(([filePath]) =>
+      String(filePath).toLowerCase().endsWith('\\.codex\\config.toml')
+    );
+    expect(codexCall).toBeDefined();
+    expect(String(codexCall[1])).toContain('[mcp_servers.heuristic-mcp]');
+    expect(String(codexCall[1])).toContain('command = "heuristic-mcp"');
+    expect(String(codexCall[1])).toContain('args = []');
+    expect(String(codexCall[1])).not.toContain('disabled = false');
   });
 
   it('handles existing mcpServers object', async () => {

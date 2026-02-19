@@ -642,6 +642,9 @@
     "maxResults": 5,
     // Enable file watcher for incremental indexing.
     "watchFiles": true,
+    // Save incremental index checkpoints every 2s so interrupted runs can resume with minimal rework.
+    // Increase to 5000-10000 on slower disks if checkpoint writes feel too frequent.
+    "indexCheckpointIntervalMs": 2000,
   },
   // Logging and diagnostics.
   "logging": {
