@@ -273,7 +273,6 @@ describe('index-codebase branch coverage focused', () => {
     const cache = createCache();
     const indexer = new CodebaseIndexer(vi.fn(), cache, { workerThreads: 1 });
 
-    
     let handler;
     const worker = {
       on: (event, fn) => {
@@ -282,7 +281,6 @@ describe('index-codebase branch coverage focused', () => {
       once: () => {},
       off: () => {},
       postMessage: (msg) => {
-        
         handler({ type: 'results', results: [], batchId: msg.batchId });
       },
     };
@@ -485,7 +483,6 @@ describe('index-codebase branch coverage focused', () => {
       .mockResolvedValue([{ file: '/root/a.js', content: 'code', hash: 'h' }]);
     smartChunkMock.mockReturnValueOnce([{ text: 'a', startLine: 1, endLine: 1 }]);
 
-    
     vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue([
       {
         file: '/root/phantom.js',

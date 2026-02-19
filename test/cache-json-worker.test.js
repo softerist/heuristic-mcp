@@ -142,8 +142,6 @@ describe('EmbeddingsCache JSON worker parsing', () => {
   });
 
   it('ignores subsequent events after settlement (covers settled guard)', async () => {
-    
-    
     const Worker = vi.fn(function () {
       const worker = {
         once(event, handler) {
@@ -182,7 +180,7 @@ describe('EmbeddingsCache JSON worker parsing', () => {
 
     const { EmbeddingsCache } = await import('../lib/cache.js');
     const cache = new EmbeddingsCache(baseConfig);
-    
+
     await cache.load();
 
     expect(Worker).toHaveBeenCalled();

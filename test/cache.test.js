@@ -83,7 +83,6 @@ describe('EmbeddingsCache', () => {
       const config = await createConfig(dir);
       const cache = new EmbeddingsCache(config);
 
-      
       const mkdirSpy = vi
         .spyOn(fs, 'mkdir')
         .mockRejectedValue(new Error('Failed to create directory'));
@@ -94,11 +93,9 @@ describe('EmbeddingsCache', () => {
       );
       mkdirSpy.mockRestore();
 
-      
       await cache.save();
       expect(cache.isSaving).toBe(false);
 
-      
       cache.setFileCallData('a.js', { defs: [], calls: [] });
       cache.removeFileFromStore('a.js');
       expect(cache.getFileCallData('a.js')).toBeUndefined();
@@ -197,7 +194,9 @@ describe('EmbeddingsCache', () => {
       cache.setFileHash(filePath, 'hash-system');
       await cache.save();
 
-      await expect(fs.access(path.join(dir, 'meta.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(fs.access(path.join(dir, 'meta.json'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
       expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('Skipping cache save for non-project workspace')
       );
@@ -636,7 +635,7 @@ describe('EmbeddingsCache', () => {
       const cache = new EmbeddingsCache(config);
       const meta = { version: 1, embeddingModel: config.embeddingModel };
       await fs.writeFile(path.join(dir, 'meta.json'), JSON.stringify(meta));
-      
+
       await cache.load();
       expect(cache.getVectorStore()).toEqual([]);
 

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-
 vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
   Server: class MockServer {
     constructor() {
@@ -36,7 +35,6 @@ vi.mock('../features/lifecycle.js', () => ({
   status: vi.fn(),
 }));
 
-
 vi.mock('../lib/config.js', () => ({
   loadConfig: vi.fn().mockResolvedValue({
     verbose: true,
@@ -48,7 +46,6 @@ vi.mock('../lib/config.js', () => ({
   }),
   getGlobalCacheDir: () => '/mock/global',
 }));
-
 
 vi.mock('../lib/cache.js', () => ({
   EmbeddingsCache: class MockCache {
@@ -79,7 +76,6 @@ vi.mock('../lib/cache.js', () => ({
     }
   },
 }));
-
 
 vi.mock('../features/index-codebase.js', async () => {
   return {
@@ -126,7 +122,6 @@ vi.mock('../features/register.js', () => ({
   register: vi.fn(),
 }));
 
-
 vi.mock('fs/promises', async () => {
   return {
     default: {
@@ -157,7 +152,7 @@ describe('Index.js Memory Logging', () => {
     vi.spyOn(console, 'info').mockImplementation(() => {});
 
     // We can't mock process.exit globally easily if not using vitest environment options,
-    
+
     vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('process.exit called');
     });
@@ -174,7 +169,6 @@ describe('Index.js Memory Logging', () => {
   });
 
   it('should log memory usage periodically during startup', async () => {
-    
     vi.spyOn(process, 'memoryUsage').mockReturnValue({
       rss: 1024 * 1024 * 100,
       heapUsed: 1024 * 1024 * 50,
@@ -183,8 +177,7 @@ describe('Index.js Memory Logging', () => {
       arrayBuffers: 0,
     });
 
-    
-    process.argv = ['node', 'index.js']; 
+    process.argv = ['node', 'index.js'];
 
     const fsPromises = await import('fs/promises');
     let accessResolve;
@@ -193,11 +186,9 @@ describe('Index.js Memory Logging', () => {
     });
     fsPromises.default.access.mockReturnValueOnce(accessPromise);
 
-    
     const { main } = await import('../index.js');
     const importPromise = main();
 
-    
     await vi.waitFor(
       () => {
         const calls = console.info.mock.calls
@@ -208,24 +199,16 @@ describe('Index.js Memory Logging', () => {
       { timeout: 1000, interval: 10 }
     );
 
-    
     await vi.advanceTimersByTimeAsync(16000);
     accessResolve();
     await importPromise;
 
-    
-    
-    
     const calls = console.info.mock.calls
       .map((c) => c[0])
       .filter((msg) => msg && msg.includes('[Server] Memory'));
     const startupCalls = calls.filter((msg) => msg.includes('Memory (startup)'));
 
-    
     expect(calls.length).toBeGreaterThanOrEqual(2);
     expect(startupCalls.length).toBeGreaterThanOrEqual(2);
-
-    
-    
   });
 });

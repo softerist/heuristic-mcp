@@ -1,6 +1,3 @@
-
-
-
 const REGISTRIES = {
   npm: {
     name: 'npm',
@@ -15,7 +12,7 @@ const REGISTRIES = {
     pattern: /^(?:pip:|pypi:)(.+)$/,
     url: (pkg) => `https://pypi.org/pypi/${encodeURIComponent(pkg)}/json`,
     parse: (data) => data.info.version,
-    detect: () => false, 
+    detect: () => false,
   },
   crates: {
     name: 'crates.io',
@@ -54,7 +51,7 @@ const REGISTRIES = {
     parse: (data) => {
       const pkgName = Object.keys(data.packages)[0];
       const versions = data.packages[pkgName];
-      
+
       const stable = versions.find((v) => !v.version.includes('dev'));
       return stable ? stable.version : versions[0].version;
     },
@@ -81,7 +78,6 @@ const REGISTRIES = {
     name: 'Maven Central',
     pattern: /^(?:maven:|java:)(.+)$/,
     url: (pkg) => {
-      
       const [group, artifact] = pkg.includes(':') ? pkg.split(':') : pkg.split('/');
       if (!artifact) return null;
       return `https://search.maven.org/solrsearch/select?q=g:${encodeURIComponent(group)}+AND+a:${encodeURIComponent(artifact)}&rows=1&wt=json`;
@@ -102,16 +98,13 @@ const REGISTRIES = {
   conda: {
     name: 'Conda',
     pattern: /^(?:conda:)(.+)$/,
-    url: (pkg) =>
-      `https://api.anaconda.org/package/conda-forge/${encodeURIComponent(pkg)}`,
+    url: (pkg) => `https://api.anaconda.org/package/conda-forge/${encodeURIComponent(pkg)}`,
     parse: (data) => data.latest_version,
     detect: () => false,
   },
 };
 
-
 function detectRegistry(packageName) {
-  
   for (const [key, registry] of Object.entries(REGISTRIES)) {
     if (registry.pattern.test(packageName) && key !== 'npm') {
       const match = packageName.match(registry.pattern);
@@ -121,7 +114,6 @@ function detectRegistry(packageName) {
     }
   }
 
-  
   for (const registry of Object.values(REGISTRIES)) {
     if (registry.detect(packageName)) {
       const match = packageName.match(registry.pattern);
@@ -129,11 +121,9 @@ function detectRegistry(packageName) {
     }
   }
 
-  
   const npmMatch = packageName.match(REGISTRIES.npm.pattern);
   return { registry: REGISTRIES.npm, cleanName: npmMatch ? npmMatch[1] : packageName };
 }
-
 
 async function fetchPackageVersion(packageName, timeoutMs = 10000) {
   const { registry, cleanName } = detectRegistry(packageName);
@@ -211,7 +201,6 @@ async function fetchPackageVersion(packageName, timeoutMs = 10000) {
   }
 }
 
-
 function getSupportedRegistries() {
   return Object.entries(REGISTRIES).map(([key, reg]) => ({
     key,
@@ -219,7 +208,6 @@ function getSupportedRegistries() {
     prefix: reg.pattern.source.match(/\?:([^)]+)\)/)?.[1] || key + ':',
   }));
 }
-
 
 export function getToolDefinition() {
   return {
@@ -242,11 +230,10 @@ export function getToolDefinition() {
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
-      openWorldHint: true, 
+      openWorldHint: true,
     },
   };
 }
-
 
 export async function handleToolCall(request) {
   const args = request.params?.arguments || {};
@@ -286,6 +273,5 @@ export async function handleToolCall(request) {
     };
   }
 }
-
 
 export { fetchPackageVersion, detectRegistry, getSupportedRegistries, REGISTRIES };

@@ -1,10 +1,14 @@
-
-
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { loadConfig, getGlobalCacheDir, getConfig, DEFAULT_CONFIG, isNonProjectDirectory } from '../lib/config.js';
+import {
+  loadConfig,
+  getGlobalCacheDir,
+  getConfig,
+  DEFAULT_CONFIG,
+  isNonProjectDirectory,
+} from '../lib/config.js';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -28,7 +32,7 @@ async function withTempDir(testFn) {
 
 afterEach(() => {
   resetEnv();
-  vi.restoreAllMocks(); 
+  vi.restoreAllMocks();
 });
 
 describe('Configuration Loading', () => {
@@ -68,7 +72,7 @@ describe('Configuration Loading', () => {
     await withTempDir(async (dir) => {
       const configData = {
         smartIndexing: false,
-        
+
         clearCacheAfterIndex: false,
         incrementalMemoryProfile: false,
         recycleServerOnHighRssThresholdMb: 3000,
@@ -120,7 +124,7 @@ describe('Configuration Loading', () => {
     await withTempDir(async (dir) => {
       const configData = {
         smartIndexing: false,
-        
+
         workerThreads: 0,
         embeddingProcessNumThreads: 4,
         vectorStoreLoadMode: 'memory',
@@ -494,7 +498,6 @@ describe('Configuration Loading', () => {
 
   it('ignores invalid boolean environment overrides and empty strings', async () => {
     await withTempDir(async (dir) => {
-      
       await fs.writeFile(
         path.join(dir, 'config.json'),
         JSON.stringify({
@@ -515,7 +518,7 @@ describe('Configuration Loading', () => {
 
       const config = await loadConfig(dir);
 
-      expect(config.verbose).toBe(true); 
+      expect(config.verbose).toBe(true);
       expect(config.smartIndexing).toBe(false);
       expect(config.watchFiles).toBe(false);
       expect(config.embeddingModel).toBe(DEFAULT_CONFIG.embeddingModel);
@@ -686,7 +689,9 @@ describe('isNonProjectDirectory', () => {
   });
 
   it('detects AppData/Roaming directories', () => {
-    expect(isNonProjectDirectory('C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules')).toBe(true);
+    expect(isNonProjectDirectory('C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules')).toBe(
+      true
+    );
   });
 
   it('detects macOS application directories', () => {

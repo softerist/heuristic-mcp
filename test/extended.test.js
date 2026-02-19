@@ -20,19 +20,16 @@ describe('Coverage Gaps', () => {
       const detector = new ProjectDetector('/root');
       vi.mocked(fs.readdir).mockResolvedValue([{ name: 'dir1', isDirectory: () => true }]);
 
-      
-      
       await detector.detectProjectTypes();
-      
     });
 
     it('handles missing ignore pattern for detected type', () => {
       const detector = new ProjectDetector('/root');
-      
+
       detector.detectedTypes.add('mystery-project');
       const patterns = detector.getSmartIgnorePatterns();
       expect(patterns).toBeDefined();
-      expect(patterns.length).toBeGreaterThan(0); 
+      expect(patterns.length).toBeGreaterThan(0);
     });
   });
 
@@ -49,14 +46,10 @@ describe('Coverage Gaps', () => {
           })
           .mockReturnValue(true),
       };
-      
-      
-      
 
       const cache = new EmbeddingsCache({ annMetric: 'l2' });
       cache.vectorStore = [{ vector: [1, 2] }];
 
-      
       const HierarchicalNSW = vi.fn(function () {
         return mockIndex;
       });
@@ -83,9 +76,9 @@ describe('Coverage Gaps', () => {
 
     it('covers getRelatedFiles missing graph path', async () => {
       const cache = new EmbeddingsCache({ callGraphEnabled: true });
-      
+
       cache.setFileCallData('f.js', { definitions: [], calls: [] });
-      
+
       cache.callGraph = null;
 
       const result = await cache.getRelatedFiles(['sym']);

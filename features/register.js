@@ -16,9 +16,7 @@ function getUserHomeDir() {
   return os.homedir();
 }
 
-
 function detectCurrentIDE() {
-  
   if (process.env.ANTIGRAVITY_AGENT) {
     return 'Antigravity';
   }
@@ -46,10 +44,8 @@ function detectCurrentIDE() {
     return 'Windsurf';
   }
 
-  
   return null;
 }
-
 
 function getConfigPaths() {
   const platform = process.platform;
@@ -57,7 +53,6 @@ function getConfigPaths() {
   const currentIDE = detectCurrentIDE();
   const allPaths = [];
 
-  
   allPaths.push({
     name: 'Antigravity',
     path: path.join(home, '.gemini', 'antigravity', 'mcp_config.json'),
@@ -65,7 +60,6 @@ function getConfigPaths() {
     canCreate: true,
   });
 
-  
   allPaths.push({
     name: 'Codex',
     path: path.join(home, '.codex', 'config.toml'),
@@ -73,7 +67,6 @@ function getConfigPaths() {
     canCreate: true,
   });
 
-  
   if (platform === 'darwin') {
     allPaths.push({
       name: 'Claude Desktop',
@@ -96,7 +89,6 @@ function getConfigPaths() {
     });
   }
 
-  
   if (platform === 'darwin') {
     allPaths.push({
       name: 'Cursor',
@@ -138,7 +130,6 @@ function getConfigPaths() {
     preferredContainerKey: 'mcpServers',
   });
 
-  
   allPaths.push({
     name: 'Warp',
     path: path.join(home, '.warp', 'mcp_settings.json'),
@@ -155,8 +146,7 @@ function getConfigPaths() {
       preferredContainerKey: 'mcpServers',
     });
   }
-  
-  
+
   if (platform === 'darwin') {
     allPaths.push({
       name: 'VS Code',
@@ -211,14 +201,11 @@ function getConfigPaths() {
     });
   }
 
-  
-  
   return allPaths.map((entry) => ({
     ...entry,
     canCreate: entry.canCreate || entry.name === currentIDE,
   }));
 }
-
 
 function forceLog(message) {
   try {
@@ -304,7 +291,6 @@ export async function register(filter = null) {
     }
 
     try {
-      
       let fileExists = true;
 
       try {
@@ -312,7 +298,6 @@ export async function register(filter = null) {
       } catch {
         fileExists = false;
 
-        
         if (canCreate) {
           try {
             await fs.mkdir(path.dirname(configPath), { recursive: true });
@@ -324,7 +309,6 @@ export async function register(filter = null) {
             continue;
           }
         } else {
-          
           continue;
         }
       }
@@ -360,7 +344,6 @@ export async function register(filter = null) {
         continue;
       }
 
-      
       writeFileSync(configPath, updated);
 
       forceLog(`\x1b[32m[Auto-Register] ✅ Successfully registered with ${name}\x1b[0m`);
@@ -380,12 +363,10 @@ export async function register(filter = null) {
       `[Auto-Register] Manual Config:\n${JSON.stringify({ mcpServers: { 'heuristic-mcp': manualServerConfig } }, null, 2)}`
     );
   } else {
-    
     forceLog('\n\x1b[36m' + '='.repeat(60));
     forceLog('   🚀 Heuristic MCP Installed & Configured!   ');
     forceLog('='.repeat(60) + '\x1b[0m');
 
-    
     const home = getUserHomeDir();
     const cacheRoot =
       process.platform === 'win32'

@@ -73,9 +73,7 @@ describe('lifecycle', () => {
     setPlatform('win32');
     fsMock.readFile.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }));
     execPromiseMock.mockImplementation(async (cmd) => {
-      if (
-        String(cmd).includes('Select-Object -ExpandProperty ProcessId')
-      ) {
+      if (String(cmd).includes('Select-Object -ExpandProperty ProcessId')) {
         return { stdout: '1234\n5678\n' };
       }
       if (String(cmd).includes('Select-Object ProcessId, CommandLine')) {
@@ -287,8 +285,7 @@ describe('lifecycle', () => {
     ).toBe(true);
     expect(
       consoleInfo.mock.calls.some(
-        (call) =>
-          typeof call[0] === 'string' && call[0].includes('Last corruption event:')
+        (call) => typeof call[0] === 'string' && call[0].includes('Last corruption event:')
       )
     ).toBe(true);
   });
@@ -380,7 +377,8 @@ describe('lifecycle', () => {
 
     expect(consoleInfo).toHaveBeenCalledWith('[Lifecycle] Workspace: /runtime/workspace');
     const callerCwdWorkspaceCall = consoleInfo.mock.calls.some(
-      (call) => typeof call[0] === 'string' && call[0].includes(`[Lifecycle] Workspace: ${process.cwd()}`)
+      (call) =>
+        typeof call[0] === 'string' && call[0].includes(`[Lifecycle] Workspace: ${process.cwd()}`)
     );
     expect(callerCwdWorkspaceCall).toBe(false);
   });
@@ -577,9 +575,7 @@ describe('lifecycle', () => {
 
     await status();
 
-    expect(consoleInfo).toHaveBeenCalledWith(
-      expect.stringContaining('[Status] Cache:')
-    );
+    expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('[Status] Cache:'));
     expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('(not found)'));
   });
 

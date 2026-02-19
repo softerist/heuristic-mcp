@@ -1,5 +1,3 @@
-
-
 import { loadConfig } from '../lib/config.js';
 import { EmbeddingsCache } from '../lib/cache.js';
 import { CodebaseIndexer } from '../features/index-codebase.js';
@@ -11,11 +9,9 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 
-
 let sharedEmbedder = null;
 
 const DEFAULT_MOCK_DIMENSIONS = 64;
-
 
 export async function getEmbedder(config) {
   if (!sharedEmbedder) {
@@ -81,9 +77,7 @@ function createMockEmbedder({ dimensions = DEFAULT_MOCK_DIMENSIONS } = {}) {
   };
 }
 
-
 export async function createTestFixtures(options = {}) {
-  
   const sessionId = crypto.randomBytes(6).toString('hex');
   const tempRootDir = path.join(os.tmpdir(), `heuristic-mcp-test-${sessionId}`);
   const searchDir = path.join(tempRootDir, 'project');
@@ -92,8 +86,6 @@ export async function createTestFixtures(options = {}) {
   await fs.mkdir(searchDir, { recursive: true });
   await fs.mkdir(cacheDir, { recursive: true });
 
-  
-  
   await fs.writeFile(
     path.join(searchDir, 'test.js'),
     'function hello() {\n  console.info("hello world");\n}\n\n// embedder CodebaseIndexer test fixture\nmodule.exports = { hello };'
@@ -104,14 +96,11 @@ export async function createTestFixtures(options = {}) {
   );
   await fs.writeFile(path.join(searchDir, 'README.md'), '# Test Project\n\nThis is a test.');
 
-  
   const config = await loadConfig();
 
-  
   config.searchDirectory = searchDir;
   config.cacheDirectory = cacheDir;
 
-  
   if (options.verbose !== undefined) config.verbose = options.verbose;
   if (options.workerThreads !== undefined) config.workerThreads = options.workerThreads;
   if (isVitest() && options.forceWorkers !== true) config.workerThreads = 0;
@@ -120,15 +109,12 @@ export async function createTestFixtures(options = {}) {
   } else {
     config.clearCacheAfterIndex = false;
   }
-  
-  
-  
+
   if (isVitest() && options.forceEmbeddingProcessPerBatch !== true) {
     config.embeddingProcessPerBatch = false;
     config.autoEmbeddingProcessPerBatch = false;
   }
 
-  
   config.unloadModelAfterSearch = false;
 
   const useRealEmbedder = options.useRealEmbedder === true;
@@ -156,7 +142,6 @@ export async function createTestFixtures(options = {}) {
   };
 }
 
-
 export async function cleanupFixtures(fixtures) {
   if (fixtures.indexer) {
     fixtures.indexer.terminateWorkers();
@@ -165,25 +150,18 @@ export async function cleanupFixtures(fixtures) {
     }
   }
 
-  
   if (fixtures.tempRootDir) {
     try {
       await fs.rm(fixtures.tempRootDir, { recursive: true, force: true });
-    } catch (err) {
-      
-    }
+    } catch (err) {}
   }
 }
-
 
 export async function clearTestCache(config) {
   try {
     await fs.rm(config.cacheDirectory, { recursive: true, force: true });
-  } catch (err) {
-    
-  }
+  } catch (err) {}
 }
-
 
 export function createMockRequest(toolName, args = {}) {
   return {
@@ -193,7 +171,6 @@ export function createMockRequest(toolName, args = {}) {
     },
   };
 }
-
 
 export function createHybridSearchCacheStub({ vectorStore = [], ...overrides } = {}) {
   let store = vectorStore;
@@ -228,7 +205,6 @@ export function createHybridSearchCacheStub({ vectorStore = [], ...overrides } =
   return { ...base, ...overrides };
 }
 
-
 export async function waitFor(condition, timeout = 5000, interval = 100) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
@@ -237,7 +213,6 @@ export async function waitFor(condition, timeout = 5000, interval = 100) {
   }
   return false;
 }
-
 
 export async function measureTime(fn) {
   const start = Date.now();

@@ -26,12 +26,16 @@ describe('verify fixes', () => {
 
   it('does not use workers in test env', async () => {
     await withTempDir(async (dir) => {
-      const indexer = new CodebaseIndexer({}, {}, {
-        workerThreads: 2,
-        embeddingProcessPerBatch: false,
-        excludePatterns: [],
-        searchDirectory: dir,
-      });
+      const indexer = new CodebaseIndexer(
+        {},
+        {},
+        {
+          workerThreads: 2,
+          embeddingProcessPerBatch: false,
+          excludePatterns: [],
+          searchDirectory: dir,
+        }
+      );
       expect(indexer.shouldUseWorkers()).toBe(false);
     });
   });
@@ -39,12 +43,16 @@ describe('verify fixes', () => {
   it('respects .gitignore rules in searchDirectory', async () => {
     await withTempDir(async (dir) => {
       await fs.writeFile(path.join(dir, '.gitignore'), 'secret_folder/\n*.secret', 'utf8');
-      const indexer = new CodebaseIndexer({}, {}, {
-        workerThreads: 0,
-        embeddingProcessPerBatch: false,
-        excludePatterns: [],
-        searchDirectory: dir,
-      });
+      const indexer = new CodebaseIndexer(
+        {},
+        {},
+        {
+          workerThreads: 0,
+          embeddingProcessPerBatch: false,
+          excludePatterns: [],
+          searchDirectory: dir,
+        }
+      );
       await indexer.loadGitignore();
 
       expect(indexer.isExcluded('secret_folder/file.txt')).toBe(true);

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EmbeddingsCache } from '../lib/cache.js';
 
-
 const { mockWorker } = vi.hoisted(() => {
   const worker = {
     on: vi.fn(),
@@ -14,9 +13,7 @@ const { mockWorker } = vi.hoisted(() => {
   return { mockWorker: worker };
 });
 
-
 let terminateCatchCalled = false;
-
 
 vi.mock('fs/promises', async () => {
   return {
@@ -32,7 +29,6 @@ vi.mock('fs/promises', async () => {
     },
   };
 });
-
 
 vi.mock('worker_threads', () => {
   return {
@@ -57,11 +53,9 @@ describe('Cache Worker Termination', () => {
     vi.clearAllMocks();
     terminateCatchCalled = false;
 
-    
     mockWorker.once.mockImplementation((event, handler) => {
       if (event === 'message') {
         setTimeout(() => {
-          
           handler({ ok: true, data: [] });
         }, 10);
       }
@@ -73,15 +67,12 @@ describe('Cache Worker Termination', () => {
       }
     });
 
-    
     mockWorker.terminate.mockResolvedValue(undefined);
 
     cache = new EmbeddingsCache(config);
   });
 
   it('should handle worker termination errors (line 29 coverage)', async () => {
-    
-    
     const fakePromise = {
       catch: (cb) => {
         terminateCatchCalled = true;

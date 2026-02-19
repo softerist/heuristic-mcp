@@ -1,16 +1,12 @@
-
-
 import path from 'path';
 import fs from 'fs/promises';
 import { acquireWorkspaceLock, releaseWorkspaceLock } from '../lib/server-lifecycle.js';
 import { getWorkspaceCachePath } from '../lib/workspace-cache-key.js';
 import { cleanupStaleBinaryArtifacts } from '../lib/vector-store-binary.js';
 
-
 function getWorkspaceCacheDir(workspacePath, globalCacheDir) {
   return getWorkspaceCachePath(workspacePath, globalCacheDir);
 }
-
 
 export function getToolDefinition() {
   return {
@@ -42,7 +38,6 @@ export function getToolDefinition() {
   };
 }
 
-
 export class SetWorkspaceFeature {
   constructor(config, cache, indexer, getGlobalCacheDir) {
     this.config = config;
@@ -52,7 +47,6 @@ export class SetWorkspaceFeature {
   }
 
   async execute({ workspacePath, reindex = true }) {
-    
     if (!workspacePath || typeof workspacePath !== 'string') {
       return {
         success: false,
@@ -62,7 +56,6 @@ export class SetWorkspaceFeature {
 
     const normalizedPath = path.resolve(workspacePath);
 
-    
     try {
       const stat = await fs.stat(normalizedPath);
       if (!stat.isDirectory()) {
@@ -81,30 +74,23 @@ export class SetWorkspaceFeature {
     const previousWorkspace = this.config.searchDirectory;
     const previousCache = this.config.cacheDirectory;
 
-    
     this.config.searchDirectory = normalizedPath;
 
-    
     const globalCacheDir = this.getGlobalCacheDir();
     let newCacheDir = getWorkspaceCacheDir(normalizedPath, globalCacheDir);
 
-    
     const legacyPath = path.join(normalizedPath, '.smart-coding-cache');
     try {
       const legacyStats = await fs.stat(legacyPath);
       if (legacyStats.isDirectory()) {
         newCacheDir = legacyPath;
       }
-    } catch {
-      
-    }
+    } catch {}
     this.config.cacheDirectory = newCacheDir;
 
-    
     try {
       await fs.mkdir(newCacheDir, { recursive: true });
     } catch (err) {
-      
       this.config.searchDirectory = previousWorkspace;
       this.config.cacheDirectory = previousCache;
       return {
@@ -113,13 +99,11 @@ export class SetWorkspaceFeature {
       };
     }
 
-    
     const lock = await acquireWorkspaceLock({
       cacheDirectory: newCacheDir,
       workspaceDir: normalizedPath,
     });
     if (!lock.acquired) {
-      
       this.config.searchDirectory = previousWorkspace;
       this.config.cacheDirectory = previousCache;
       return {
@@ -129,7 +113,6 @@ export class SetWorkspaceFeature {
     }
     let indexerUpdateError = null;
 
-    
     if (this.indexer) {
       if (typeof this.indexer.terminateWorkers === 'function') {
         try {
@@ -143,7 +126,7 @@ export class SetWorkspaceFeature {
           await this.indexer.updateWorkspaceState({ restartWatcher: true });
         } else {
           this.indexer.workspaceRoot = normalizedPath;
-          this.indexer.workspaceRootReal = null; 
+          this.indexer.workspaceRootReal = null;
           if (this.config.watchFiles && typeof this.indexer.setupFileWatcher === 'function') {
             await this.indexer.setupFileWatcher();
           }
@@ -154,7 +137,6 @@ export class SetWorkspaceFeature {
     }
 
     if (indexerUpdateError) {
-      
       this.config.searchDirectory = previousWorkspace;
       this.config.cacheDirectory = previousCache;
       await releaseWorkspaceLock({ cacheDirectory: newCacheDir });
@@ -170,9 +152,7 @@ export class SetWorkspaceFeature {
             }
           }
         } catch (rollbackErr) {
-          console.warn(
-            `[SetWorkspace] Failed to rollback indexer state: ${rollbackErr.message}`
-          );
+          console.warn(`[SetWorkspace] Failed to rollback indexer state: ${rollbackErr.message}`);
         }
       }
       return {
@@ -181,12 +161,10 @@ export class SetWorkspaceFeature {
       };
     }
 
-    
     if (previousCache) {
       await releaseWorkspaceLock({ cacheDirectory: previousCache });
     }
 
-    
     if (this.cache && typeof this.cache.load === 'function') {
       try {
         if (this.config.vectorStoreFormat === 'binary') {
@@ -198,11 +176,9 @@ export class SetWorkspaceFeature {
       }
     }
 
-    
     let reindexStatus = null;
     if (reindex && this.indexer && typeof this.indexer.indexAll === 'function') {
       try {
-        
         this.indexer.indexAll().catch((err) => {
           console.warn(`[SetWorkspace] Reindex failed: ${err.message}`);
         });
@@ -224,7 +200,6 @@ export class SetWorkspaceFeature {
   }
 }
 
-
 export function createHandleToolCall(featureInstance) {
   return async (request) => {
     const args = request.params?.arguments || {};
@@ -232,7 +207,7 @@ export function createHandleToolCall(featureInstance) {
 
     const result = await featureInstance.execute({
       workspacePath,
-      reindex: reindex !== false, 
+      reindex: reindex !== false,
     });
 
     if (result.success) {
@@ -252,6 +227,5 @@ export function createHandleToolCall(featureInstance) {
     }
   };
 }
-
 
 export { getWorkspaceCacheDir };

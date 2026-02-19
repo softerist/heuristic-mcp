@@ -45,7 +45,6 @@ describe('embedding-worker coverage', () => {
   });
 
   it('converts plain arrays to Float32Array (line 11 coverage)', async () => {
-    
     pipeline.mockResolvedValue(async () => ({
       data: [1, 2, 3],
     }));
@@ -65,7 +64,6 @@ describe('embedding-worker coverage', () => {
     expect(resultsCall).toBeDefined();
     const result = resultsCall[0].results[0];
 
-    
     expect(result.vector).toBeInstanceOf(Float32Array);
     expect(Array.from(result.vector)).toEqual([1, 2, 3]);
   });
@@ -78,8 +76,6 @@ describe('embedding-worker coverage', () => {
     await import('../lib/embedding-worker.js');
     await tick();
 
-    
-    
     const chunks = Array.from({ length: 30 }, (_, i) => ({
       file: `file${i}.js`,
       startLine: 1,
@@ -93,86 +89,34 @@ describe('embedding-worker coverage', () => {
       batchId: 'batch-large',
     });
 
-    
     const resultCalls = parentPort.postMessage.mock.calls.filter(
       (call) => call[0]?.type === 'results'
     );
 
-    
     expect(resultCalls.length).toBeGreaterThanOrEqual(2);
 
     const firstCall = resultCalls[0][0];
-    expect(firstCall.done).toBe(false); 
-    expect(firstCall.results.length).toBe(25); 
+    expect(firstCall.done).toBe(false);
+    expect(firstCall.results.length).toBe(25);
 
     const lastCall = resultCalls[resultCalls.length - 1][0];
-    expect(lastCall.done).toBe(true); 
-    expect(lastCall.results.length).toBe(5); 
+    expect(lastCall.done).toBe(true);
+    expect(lastCall.results.length).toBe(5);
   });
 
   it('handles vectors without buffers gracefully (line 77 coverage)', async () => {
-    
-    
-    
-    
-    
-
-    
-    
-    
-    
-
-    
-    
-    
-
-    
-    
-
-    
-    
-
-    
-    
-    
-
-    
-    
-    
-
-    
     pipeline.mockRejectedValueOnce(new Error('Critical failure'));
-
-    
-    
-    
-
-    
-    
 
     await import('../lib/embedding-worker.js');
     await tick();
-
-    
-    
-    
-
-    
-    
-
-    
-    
-    
 
     pipeline.mockRejectedValue(new Error('Init failed permanently'));
 
-    
     vi.resetModules();
-    
+
     await import('../lib/embedding-worker.js');
     await tick();
 
-    
     await messageHandler({
       type: 'process',
       chunks: [],

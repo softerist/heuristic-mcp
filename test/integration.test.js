@@ -1,5 +1,3 @@
-
-
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import {
   createTestFixtures,
@@ -23,53 +21,41 @@ describe('Concurrent Indexing', () => {
   });
 
   beforeEach(async () => {
-    
     fixtures.indexer.isIndexing = false;
-    
+
     await clearTestCache(fixtures.config);
     fixtures.cache.setVectorStore([]);
     fixtures.cache.clearFileHashes();
-    
+
     vi.restoreAllMocks();
   });
 
   it('should only run one indexer at a time', async () => {
-    
     let resolveDiscovery;
     const discoveryBarrier = new Promise((resolve) => {
       resolveDiscovery = resolve;
     });
 
-    
     const discoverSpy = vi.spyOn(fixtures.indexer, 'discoverFiles').mockImplementation(async () => {
       await discoveryBarrier;
-      return []; 
+      return [];
     });
 
     const request1 = createMockRequest('b_index_codebase', { force: true });
     const request2 = createMockRequest('b_index_codebase', { force: false });
 
-    
     const promise1 = IndexCodebaseFeature.handleToolCall(request1, fixtures.indexer);
 
-    
     expect(fixtures.indexer.isIndexing).toBe(true);
 
-    
     const promise2 = IndexCodebaseFeature.handleToolCall(request2, fixtures.indexer);
 
-    
     resolveDiscovery();
 
-    
     const [result1, result2] = await Promise.all([promise1, promise2]);
 
-    
-    
-    
     expect(result1.content[0].text).not.toContain('Indexing skipped');
 
-    
     expect(result2.content[0].text).toContain('Indexing skipped');
     expect(result2.content[0].text).toContain('already in progress');
 
@@ -77,7 +63,6 @@ describe('Concurrent Indexing', () => {
   });
 
   it('should set isIndexing flag during indexing', async () => {
-    
     let resolveDiscovery;
     const discoveryBarrier = new Promise((resolve) => {
       resolveDiscovery = resolve;
@@ -88,24 +73,18 @@ describe('Concurrent Indexing', () => {
       return [];
     });
 
-    
     const promise = fixtures.indexer.indexAll(true);
 
-    
     expect(fixtures.indexer.isIndexing).toBe(true);
 
-    
     resolveDiscovery();
 
-    
     await promise;
 
-    
     expect(fixtures.indexer.isIndexing).toBe(false);
   });
 
   it('should skip concurrent indexing calls gracefully', async () => {
-    
     let resolveDiscovery;
     const discoveryBarrier = new Promise((resolve) => {
       resolveDiscovery = resolve;
@@ -116,16 +95,12 @@ describe('Concurrent Indexing', () => {
       return [];
     });
 
-    
     const promise1 = fixtures.indexer.indexAll(true);
 
-    
     const { result, duration } = await measureTime(() => fixtures.indexer.indexAll(false));
 
-    
     expect(duration).toBeLessThan(1000);
 
-    
     expect(result.skipped).toBe(true);
     expect(result.reason).toContain('already in progress');
 
@@ -151,7 +126,6 @@ describe('Clear Cache Operations', () => {
   });
 
   it('should prevent clear cache while indexing', async () => {
-    
     let resolveDiscovery;
     const discoveryBarrier = new Promise((resolve) => {
       resolveDiscovery = resolve;
@@ -162,17 +136,13 @@ describe('Clear Cache Operations', () => {
       return [];
     });
 
-    
     const indexPromise = fixtures.indexer.indexAll(true);
 
-    
     expect(fixtures.indexer.isIndexing).toBe(true);
 
-    
     const request = createMockRequest('c_clear_cache', {});
     const result = await ClearCacheFeature.handleToolCall(request, fixtures.cacheClearer);
 
-    
     expect(result.content[0].text).toContain('indexing is in progress');
 
     resolveDiscovery();
@@ -180,31 +150,24 @@ describe('Clear Cache Operations', () => {
   });
 
   it('should allow clear cache after indexing completes', async () => {
-    
     const discoverSpy = vi.spyOn(fixtures.indexer, 'discoverFiles').mockResolvedValue([]);
 
     await fixtures.indexer.indexAll(true);
 
-    
     expect(fixtures.indexer.isIndexing).toBe(false);
 
-    
     const request = createMockRequest('c_clear_cache', {});
     const result = await ClearCacheFeature.handleToolCall(request, fixtures.cacheClearer);
 
-    
     expect(result.content[0].text).toMatch(/Cache cleared successfully|Failed to clear cache/);
   });
 
   it('should handle multiple concurrent clear cache calls', async () => {
-    
     const discoverSpy = vi.spyOn(fixtures.indexer, 'discoverFiles').mockResolvedValue([]);
     await fixtures.indexer.indexAll(true);
 
-    
     fixtures.cacheClearer.isClearing = false;
 
-    
     const promises = [
       fixtures.cacheClearer.execute(),
       fixtures.cacheClearer.execute(),
@@ -213,14 +176,12 @@ describe('Clear Cache Operations', () => {
 
     const results = await Promise.allSettled(promises);
 
-    
     const successes = results.filter((r) => r.status === 'fulfilled');
     const failures = results.filter((r) => r.status === 'rejected');
 
     expect(successes.length).toBe(1);
     expect(failures.length).toBe(2);
 
-    
     for (const failure of failures) {
       expect(failure.reason.message).toContain('already in progress');
     }
@@ -243,7 +204,6 @@ describe('Tool Handler Response Quality', () => {
   });
 
   it('should return meaningful response when indexing is skipped', async () => {
-    
     let resolveDiscovery;
     const discoveryBarrier = new Promise((resolve) => {
       resolveDiscovery = resolve;
@@ -254,17 +214,14 @@ describe('Tool Handler Response Quality', () => {
       return [];
     });
 
-    
     const promise1 = fixtures.indexer.indexAll(true);
 
-    
     const request = createMockRequest('b_index_codebase', { force: false });
     const result = await IndexCodebaseFeature.handleToolCall(request, fixtures.indexer);
 
     resolveDiscovery();
     await promise1;
 
-    
     expect(result.content[0].text).toContain('Indexing skipped');
     expect(result.content[0].text).toContain('already in progress');
     expect(result.content[0].text).toContain('Please wait');

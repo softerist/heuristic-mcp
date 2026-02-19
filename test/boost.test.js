@@ -5,13 +5,11 @@ import fs from 'fs/promises';
 import { Worker } from 'worker_threads';
 import EventEmitter from 'events';
 
-
 vi.mock('worker_threads', () => {
   return {
     Worker: vi.fn(),
   };
 });
-
 
 vi.mock('fs/promises', () => {
   return {
@@ -39,19 +37,16 @@ describe('Final Coverage Boost', () => {
     };
 
     beforeEach(() => {
-      
       fs.stat.mockResolvedValue({ size: 100 });
       fs.readFile.mockResolvedValue('{}');
     });
 
     it('should handle worker double-settling guard', { timeout: 1000 }, async () => {
-      
       fs.stat.mockImplementation(async (path) => {
         if (path && path.includes('embeddings.json')) return { size: 6 * 1024 * 1024 };
         return { size: 100 };
       });
 
-      
       fs.readFile.mockImplementation(async (path) => {
         if (path.includes('meta.json'))
           return JSON.stringify({ version: 1, embeddingModel: 'test-model' });
@@ -68,7 +63,6 @@ describe('Final Coverage Boost', () => {
 
       const cache = new EmbeddingsCache(config);
 
-      
       const workerListenerReady = new Promise((resolve) => {
         mockWorker.on('newListener', (event) => {
           if (event === 'message') resolve();
@@ -79,15 +73,12 @@ describe('Final Coverage Boost', () => {
 
       await workerListenerReady;
 
-      
       mockWorker.emit('message', { ok: true, data: [] });
 
-      
       mockWorker.emit('exit', 0);
 
       await loadPromise;
 
-      
       expect(mockWorker.removeAllListeners).toHaveBeenCalled();
     });
 
@@ -96,8 +87,7 @@ describe('Final Coverage Boost', () => {
       fs.stat.mockImplementation(async (path) => {
         if (path && path.includes('embeddings.json')) {
           embeddingsStatCalls++;
-          
-          
+
           if (embeddingsStatCalls === 1) return { size: 6 * 1024 * 1024 };
           return { size: 100 };
         }
@@ -195,19 +185,13 @@ describe('Final Coverage Boost', () => {
       };
 
       fs.mkdir.mockResolvedValue(undefined);
-      
-      
+
       fs.readFile.mockImplementation(async (path) => {
         if (path.endsWith('call-graph.json')) {
           return JSON.stringify({ 'file.js': { definitions: [], calls: [] } });
         }
-        return null; 
-        
+        return null;
       });
-
-      
-      
-      
 
       fs.readFile.mockImplementation(async (filePath) => {
         if (filePath.endsWith('meta.json')) {
@@ -221,7 +205,6 @@ describe('Final Coverage Boost', () => {
         return null;
       });
 
-      
       fs.stat.mockResolvedValue({ size: 100 });
 
       const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -251,7 +234,6 @@ describe('Final Coverage Boost', () => {
       const fileCallData = new Map();
       fileCallData.set('file1.js', { definitions: ['CommonFunc'], calls: ['SharedTarget'] });
       fileCallData.set('file2.js', { definitions: ['CommonFunc'], calls: ['SharedTarget'] });
-      
 
       const graph = callGraph.buildCallGraph(fileCallData);
 

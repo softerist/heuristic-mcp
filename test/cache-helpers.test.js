@@ -4,7 +4,6 @@ import fs from 'fs/promises';
 
 vi.mock('fs/promises');
 
-
 const mockIndex = {
   setEf: vi.fn(),
   efConstruction: 200,
@@ -30,7 +29,6 @@ describe('EmbeddingsCache Helper Methods', () => {
     };
     cache = new EmbeddingsCache(config);
 
-    
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -96,7 +94,7 @@ describe('EmbeddingsCache Helper Methods', () => {
 
       cache.setFileCallData(file, data);
       expect(cache.getFileCallData(file)).toBe(data);
-      expect(cache.callGraph).toBeNull(); 
+      expect(cache.callGraph).toBeNull();
 
       cache.removeFileCallData(file);
       expect(cache.getFileCallData(file)).toBeUndefined();
@@ -133,9 +131,7 @@ describe('EmbeddingsCache Helper Methods', () => {
   describe('Call Graph Lazy Loading', () => {
     beforeEach(() => {
       vi.resetModules();
-      
-      
-      
+
       const fakeGraph = { defines: new Map(), calledBy: new Map() };
       vi.doMock('../lib/call-graph.js', () => ({
         buildCallGraph: vi.fn(() => fakeGraph),
@@ -144,19 +140,15 @@ describe('EmbeddingsCache Helper Methods', () => {
     });
 
     it('rebuildCallGraph should handle import and build', async () => {
-      
       const { EmbeddingsCache } = await import('../lib/cache.js');
       const cache = new EmbeddingsCache({ ...config, verbose: true });
 
       cache.setFileCallData('f.js', {});
 
-      
       const logSpy = vi.spyOn(console, 'info');
 
-      
       await cache.rebuildCallGraph();
 
-      
       await new Promise((r) => setTimeout(r, 10));
 
       expect(cache.callGraph).toBeDefined();
@@ -187,17 +179,16 @@ describe('EmbeddingsCache Helper Methods', () => {
 
       const result = await cache.getRelatedFiles(['sym']);
 
-      expect(result.size).toBe(1); 
+      expect(result.size).toBe(1);
       expect(cache.callGraph).toBeDefined();
     });
 
     it('getRelatedFiles should return empty if disabled or empty', async () => {
       const { EmbeddingsCache } = await import('../lib/cache.js');
-      
+
       let c = new EmbeddingsCache({ ...config, callGraphEnabled: false });
       expect((await c.getRelatedFiles(['s'])).size).toBe(0);
 
-      
       c = new EmbeddingsCache(config);
       expect((await c.getRelatedFiles([])).size).toBe(0);
     });

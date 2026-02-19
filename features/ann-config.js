@@ -1,12 +1,9 @@
-
-
 export class AnnConfigTool {
   constructor(cache, config) {
     this.cache = cache;
     this.config = config;
   }
 
-  
   async execute(args) {
     const action = args.action || 'stats';
 
@@ -27,7 +24,6 @@ export class AnnConfigTool {
 
     if (action === 'rebuild') {
       try {
-        
         this.cache.invalidateAnnIndex();
         const index = await this.cache.ensureAnnIndex();
         if (!index) {
@@ -60,7 +56,6 @@ export class AnnConfigTool {
     }
 
     if (result.enabled !== undefined) {
-      
       let output = '## ANN Index Statistics\n\n';
       output += `- **Enabled**: ${result.enabled}\n`;
       output += `- **Index Loaded**: ${result.indexLoaded}\n`;
@@ -83,11 +78,9 @@ export class AnnConfigTool {
       return output;
     }
 
-    
     return JSON.stringify(result, null, 2);
   }
 }
-
 
 export function getToolDefinition() {
   return {
@@ -122,7 +115,6 @@ export function getToolDefinition() {
     },
   };
 }
-
 
 export async function handleToolCall(request, annConfigTool) {
   const args = request.params.arguments || {};

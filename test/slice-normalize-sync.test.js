@@ -1,10 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { sliceAndNormalize } from '../lib/slice-normalize.js';
 
-
-
 describe('sliceAndNormalize synchronization', () => {
-  
   function workerSliceAndNormalize(vector, targetDim) {
     if (!targetDim || targetDim >= vector.length) {
       return vector;
@@ -28,7 +25,7 @@ describe('sliceAndNormalize synchronization', () => {
       { vector: new Float32Array([1, 2, 3, 4, 5]), targetDim: 3 },
       { vector: new Float32Array([0.1, 0.2, 0.3, 0.4]), targetDim: 2 },
       { vector: new Float32Array([1, 0, 0, 0]), targetDim: 2 },
-      { vector: new Float32Array([0, 0, 0, 0]), targetDim: 2 }, 
+      { vector: new Float32Array([0, 0, 0, 0]), targetDim: 2 },
       { vector: new Float32Array([0.5, -0.5, 0.5, -0.5]), targetDim: 3 },
     ];
 
@@ -45,7 +42,7 @@ describe('sliceAndNormalize synchronization', () => {
 
   it('should return original vector when targetDim is null or >= vector length', () => {
     const vector = new Float32Array([1, 2, 3]);
-    
+
     const libResult1 = sliceAndNormalize(vector, null);
     const workerResult1 = workerSliceAndNormalize(vector, null);
     expect(libResult1).toBe(vector);
@@ -64,7 +61,6 @@ describe('sliceAndNormalize synchronization', () => {
     const libResult = sliceAndNormalize(vector, targetDim);
     const workerResult = workerSliceAndNormalize(vector, targetDim);
 
-    
     const libMagnitude = Math.sqrt(libResult[0] ** 2 + libResult[1] ** 2);
     const workerMagnitude = Math.sqrt(workerResult[0] ** 2 + workerResult[1] ** 2);
 
@@ -75,7 +71,7 @@ describe('sliceAndNormalize synchronization', () => {
   it('should handle zero vector without NaN', () => {
     const vector = new Float32Array([0, 0, 0, 0]);
     const result = sliceAndNormalize(vector, 2);
-    expect(result.every(v => !Number.isNaN(v))).toBe(true);
-    expect(result.every(v => v === 0)).toBe(true);
+    expect(result.every((v) => !Number.isNaN(v))).toBe(true);
+    expect(result.every((v) => v === 0)).toBe(true);
   });
 });

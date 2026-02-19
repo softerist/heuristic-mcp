@@ -1,5 +1,3 @@
-
-
 import { describe, it, expect } from 'vitest';
 import { smartChunk, MODEL_TOKEN_LIMITS } from '../lib/utils.js';
 
@@ -25,27 +23,16 @@ describe('smartChunk', () => {
   });
 
   it('splits large content respecting boundaries and overlap', () => {
-    
     const lines = [];
     for (let i = 0; i < 500; i++) {
       lines.push(`function function_${i}() { return ${i}; }`);
     }
     const content = lines.join('\n');
 
-    
-    
-    
-    
-
     const config = { embeddingModel: 'test-model' };
     const chunks = smartChunk(content, 'test.js', config);
 
     expect(chunks.length).toBeGreaterThan(1);
-    
-    if (chunks.length > 1) {
-      
-      
-    }
   });
 
   it('handles complex syntax state tracking', () => {
@@ -73,7 +60,6 @@ describe('smartChunk', () => {
     `;
     const config = { embeddingModel: 'test-model' };
     smartChunk(content, 'test.js', config);
-    
   });
 
   it('splits chunks when target token budget is exceeded', () => {
@@ -112,7 +98,7 @@ describe('Similarity Metrics', () => {
   it('dotSimilarity calculates correct dot product', () => {
     const a = [1, 2, 3];
     const b = [4, 5, 6];
-    
+
     expect(dotSimilarity(a, b)).toBe(32);
   });
 });
@@ -122,8 +108,8 @@ describe('Hashing', () => {
     const content = 'hello world';
     const hash = hashContent(content);
     expect(typeof hash).toBe('string');
-    expect(hash).toHaveLength(32); 
-    expect(hash).toBe(hashContent(content)); 
+    expect(hash).toHaveLength(32);
+    expect(hash).toBe(hashContent(content));
     expect(hash).not.toBe(hashContent('goodbye'));
   });
 });

@@ -14,8 +14,8 @@ export class HybridSearch {
     this.embedder = embedder;
     this.cache = cache;
     this.config = config;
-    this.fileModTimes = new Map(); 
-    this._lastAccess = new Map(); 
+    this.fileModTimes = new Map();
+    this._lastAccess = new Map();
   }
 
   async getChunkContent(chunkOrIndex) {
@@ -41,16 +41,15 @@ export class HybridSearch {
 
     for (const file of uniqueFiles) {
       if (!this.fileModTimes.has(file)) {
-        
         const meta = this.cache.getFileMeta(file);
         if (meta && typeof meta.mtimeMs === 'number') {
           this.fileModTimes.set(file, meta.mtimeMs);
-          this._lastAccess.set(file, Date.now()); 
+          this._lastAccess.set(file, Date.now());
         } else {
           missing.push(file);
         }
       } else {
-        this._lastAccess.set(file, Date.now()); 
+        this._lastAccess.set(file, Date.now());
       }
     }
 
@@ -58,8 +57,6 @@ export class HybridSearch {
       return;
     }
 
-    
-    
     const workerCount = Math.min(STAT_CONCURRENCY_LIMIT, missing.length);
 
     const worker = async (startIdx) => {
@@ -77,16 +74,14 @@ export class HybridSearch {
 
     await Promise.all(Array.from({ length: workerCount }, (_, i) => worker(i)));
 
-    
     const lruMaxEntries = this.config.lruMaxEntries ?? 5000;
     const lruTargetEntries = this.config.lruTargetEntries ?? 4000;
     if (this.fileModTimes.size > lruMaxEntries) {
-      
       const entries = [...this.fileModTimes.keys()].map((k) => ({
         key: k,
         lastAccess: this._lastAccess?.get(k) ?? 0,
       }));
-      entries.sort((a, b) => a.lastAccess - b.lastAccess); 
+      entries.sort((a, b) => a.lastAccess - b.lastAccess);
       const toEvict = entries.slice(0, entries.length - lruTargetEntries);
       for (const { key } of toEvict) {
         this.fileModTimes.delete(key);
@@ -95,12 +90,10 @@ export class HybridSearch {
     }
   }
 
-  
   clearFileModTime(file) {
     this.fileModTimes.delete(file);
   }
 
-  
   async search(query, maxResults) {
     try {
       if (typeof this.cache.ensureLoaded === 'function') {
@@ -117,19 +110,15 @@ export class HybridSearch {
         };
       }
 
-      
       if (this.config.verbose) {
         console.info(`[Search] Query: "${query}"`);
       }
-      
+
       let queryVector;
-      
-      
-      
+
       if (this.config.unloadModelAfterSearch) {
         queryVector = await embedQueryInChildProcess(query, this.config);
       } else {
-        
         const queryEmbed = await this.embedder(query, {
           pooling: 'mean',
           normalize: true,
@@ -141,14 +130,12 @@ export class HybridSearch {
           if (typeof queryEmbed.dispose === 'function') {
             try {
               queryEmbed.dispose();
-            } catch {
-              
-            }
+            } catch {}
           }
         }
       }
 
-      let candidateIndices = null; 
+      let candidateIndices = null;
       let usedAnn = false;
 
       if (this.config.annEnabled) {
@@ -159,7 +146,7 @@ export class HybridSearch {
           if (this.config.verbose) {
             console.info(`[Search] Using ANN index (${annLabels.length} candidates)`);
           }
-          candidateIndices = Array.from(new Set(annLabels)); 
+          candidateIndices = Array.from(new Set(annLabels));
         }
       }
 
@@ -175,7 +162,7 @@ export class HybridSearch {
             `[Search] ANN returned fewer results (${candidateIndices.length}) than requested (${maxResults}), augmenting with full scan...`
           );
         }
-        candidateIndices = null; 
+        candidateIndices = null;
         usedAnn = false;
       }
 
@@ -194,38 +181,29 @@ export class HybridSearch {
         }
 
         if (exactMatchCount < maxResults) {
-          
-          
-          
           const MAX_FULL_SCAN_SIZE = this.config.fullScanThreshold ?? 2000;
 
           if (storeSize <= MAX_FULL_SCAN_SIZE) {
             const seen = new Set(candidateIndices);
 
-            
-            
             const FALLBACK_BATCH = 100;
             let additionalMatches = 0;
             const targetMatches = maxResults - exactMatchCount;
-            
-            outerLoop:
-            for (let i = 0; i < storeSize; i += FALLBACK_BATCH) {
-              if (i > 0) await new Promise((r) => setTimeout(r, 0)); 
+
+            outerLoop: for (let i = 0; i < storeSize; i += FALLBACK_BATCH) {
+              if (i > 0) await new Promise((r) => setTimeout(r, 0));
 
               const limit = Math.min(storeSize, i + FALLBACK_BATCH);
-              
-              
+
               const batchIndices = [];
               for (let j = i; j < limit; j++) {
                 if (!seen.has(j)) batchIndices.push(j);
               }
-              
-              
+
               const contents = await Promise.all(
-                batchIndices.map(idx => this.getChunkContent(idx))
+                batchIndices.map((idx) => this.getChunkContent(idx))
               );
-              
-              
+
               for (let k = 0; k < batchIndices.length; k++) {
                 const content = contents[k];
                 if (content && content.toLowerCase().includes(lowerQuery)) {
@@ -233,7 +211,7 @@ export class HybridSearch {
                   seen.add(idx);
                   candidateIndices.push(idx);
                   additionalMatches++;
-                  
+
                   if (additionalMatches >= targetMatches) break outerLoop;
                 }
               }
@@ -246,7 +224,6 @@ export class HybridSearch {
         }
       }
 
-      
       let recencyBoostEnabled = this.config.recencyBoost > 0;
       let now = Date.now();
       let recencyDecayMs = (this.config.recencyDecayDays || 30) * 24 * 60 * 60 * 1000;
@@ -258,13 +235,10 @@ export class HybridSearch {
         const candidates = candidateIndices
           ? candidateIndices.map((idx) => this.cache.getChunk(idx)).filter(Boolean)
           : Array.from({ length: storeSize }, (_, i) => this.cache.getChunk(i)).filter(Boolean);
-        
-        
-        
+
         if (candidates.length <= 1000) {
           await this.populateFileModTimes(candidates.map((chunk) => chunk.file));
         } else {
-          
           for (const chunk of candidates) {
             if (!this.fileModTimes.has(chunk.file)) {
               const meta = this.cache.getFileMeta(chunk.file);
@@ -276,11 +250,8 @@ export class HybridSearch {
         }
       }
 
-      
       const scoredChunks = [];
 
-      
-      
       const totalCandidates = candidateIndices ? candidateIndices.length : storeSize;
       const textMatchMaxCandidates = Number.isInteger(this.config.textMatchMaxCandidates)
         ? this.config.textMatchMaxCandidates
@@ -289,7 +260,6 @@ export class HybridSearch {
       const deferTextMatch = shouldApplyTextMatch && totalCandidates > textMatchMaxCandidates;
 
       for (let i = 0; i < totalCandidates; i += SEARCH_BATCH_SIZE) {
-        
         if (i > 0) {
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
@@ -299,25 +269,18 @@ export class HybridSearch {
         for (let j = i; j < limit; j++) {
           const idx = candidateIndices ? candidateIndices[j] : j;
 
-          
-          
-          
           const chunkInfo = this.cache.getChunk(idx);
           if (!chunkInfo) {
-            
             continue;
           }
 
-          
           const vector = this.cache.getChunkVector(chunkInfo, idx);
           if (!vector) continue;
 
-          
           let score;
           try {
             score = dotSimilarity(queryVector, vector) * semanticWeight;
           } catch (err) {
-            
             if (this.config.verbose) {
               console.warn(`[Search] ${err.message} at index ${idx}`);
             }
@@ -332,7 +295,6 @@ export class HybridSearch {
             if (lowerContent && lowerContent.includes(lowerQuery)) {
               score += exactMatchBoost;
             } else if (lowerContent && queryWordCount > 0) {
-              
               let matchedWords = 0;
               for (let k = 0; k < queryWordCount; k++) {
                 if (lowerContent.includes(queryWords[k])) matchedWords++;
@@ -341,7 +303,6 @@ export class HybridSearch {
             }
           }
 
-          
           if (recencyBoostEnabled) {
             const mtime = this.fileModTimes.get(chunkInfo.file);
             if (typeof mtime === 'number') {
@@ -359,10 +320,8 @@ export class HybridSearch {
         }
       }
 
-      
       scoredChunks.sort((a, b) => b.score - a.score);
 
-      
       if (deferTextMatch) {
         const textMatchCount = Math.min(textMatchMaxCandidates, scoredChunks.length);
         for (let i = 0; i < textMatchCount; i++) {
@@ -387,9 +346,7 @@ export class HybridSearch {
         scoredChunks.sort((a, b) => b.score - a.score);
       }
 
-      
       if (this.config.callGraphEnabled && this.config.callGraphBoost > 0) {
-        
         const topN = Math.min(5, scoredChunks.length);
         const symbolsFromTop = new Set();
         for (let i = 0; i < topN; i++) {
@@ -401,22 +358,19 @@ export class HybridSearch {
         }
 
         if (symbolsFromTop.size > 0) {
-          
           const relatedFiles = await this.cache.getRelatedFiles(Array.from(symbolsFromTop));
 
-          
           for (const chunk of scoredChunks) {
             const proximity = relatedFiles.get(chunk.file);
             if (proximity) {
               chunk.score += proximity * this.config.callGraphBoost;
             }
           }
-          
+
           scoredChunks.sort((a, b) => b.score - a.score);
         }
       }
 
-      
       const results = await Promise.all(
         scoredChunks.slice(0, maxResults).map(async (chunk) => {
           if (chunk.content === undefined || chunk.content === null) {
@@ -470,7 +424,6 @@ export class HybridSearch {
   }
 }
 
-
 export function getToolDefinition(config) {
   return {
     name: 'a_semantic_search',
@@ -502,19 +455,17 @@ export function getToolDefinition(config) {
   };
 }
 
-
 export async function handleToolCall(request, hybridSearch) {
   const args = request.params?.arguments || {};
   const query = args.query;
-  
-  
+
   if (typeof query !== 'string' || query.trim().length === 0) {
     return {
       content: [{ type: 'text', text: 'Error: A non-empty query string is required.' }],
       isError: true,
     };
   }
-  
+
   const maxResults =
     typeof args.maxResults === 'number' && args.maxResults > 0
       ? args.maxResults

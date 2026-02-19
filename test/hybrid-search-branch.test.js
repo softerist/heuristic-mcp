@@ -22,7 +22,6 @@ describe('HybridSearch Branch Coverage', () => {
     });
     const hybrid = new HybridSearch(embedder, cache, config);
 
-    
     const statSpy = vi.spyOn(fs, 'stat').mockImplementation(async (path) => {
       if (path === 'fail.js') {
         throw new Error('stat failed');
@@ -76,18 +75,17 @@ describe('HybridSearch Branch Coverage', () => {
     const embedder = async () => ({ data: new Float32Array([1, 0]) });
     const hybrid = new HybridSearch(embedder, cache, config);
 
-    
     hybrid.fileModTimes.set('null-mtime.js', null);
 
     const { results } = await hybrid.search('query', 1);
-    expect(results[0].score).toBe(1); 
+    expect(results[0].score).toBe(1);
   });
 
   it('should skip call graph boost if no symbols from top results', async () => {
     const vectorStore = [
       {
         file: 'no-symbols.js',
-        content: '', 
+        content: '',
         vector: [1, 0],
         startLine: 1,
         endLine: 1,
@@ -143,13 +141,6 @@ describe('HybridSearch Branch Coverage', () => {
     const embedder = async () => ({ data: new Float32Array([1, 0]) });
     const hybrid = new HybridSearch(embedder, cache, config);
 
-    
-    
-    
-    
-    
-    
-    
     const { results } = await hybrid.search('target', 2);
     expect(results).toHaveLength(1);
   });
@@ -183,17 +174,6 @@ describe('HybridSearch Branch Coverage', () => {
     const embedder = async () => ({ data: new Float32Array([1, 0]) });
     const hybrid = new HybridSearch(embedder, cache, config);
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     const { results } = await hybrid.search('target', 2);
     expect(results).toHaveLength(1);
     expect(results[0].file).toBe('match.js');

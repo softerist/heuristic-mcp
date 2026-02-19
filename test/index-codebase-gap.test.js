@@ -3,9 +3,7 @@ import { CodebaseIndexer } from '../features/index-codebase.js';
 import * as utils from '../lib/utils.js';
 import fs from 'fs/promises';
 
-
 vi.mock('fs/promises');
-
 
 vi.mock('../lib/utils.js', async () => {
   const actual = await vi.importActual('../lib/utils.js');
@@ -16,13 +14,11 @@ vi.mock('../lib/utils.js', async () => {
   };
 });
 
-
 vi.mock('os', async () => ({
   default: {
     cpus: () => [{}],
   },
 }));
-
 
 const mockWatcher = {
   on: vi.fn().mockReturnThis(),
@@ -44,7 +40,6 @@ describe('CodebaseIndexer Gap Coverage', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
 
-    
     mockEmbedder = vi.fn().mockResolvedValue({ data: [0.1] });
 
     mockCache = {
@@ -72,9 +67,9 @@ describe('CodebaseIndexer Gap Coverage', () => {
       fileExtensions: ['js'],
       fileNames: [],
       excludePatterns: [],
-      maxFileSize: 1024, 
+      maxFileSize: 1024,
       batchSize: 10,
-      verbose: true, 
+      verbose: true,
       callGraphEnabled: false,
       watchFiles: true,
       workerThreads: 1,
@@ -89,14 +84,12 @@ describe('CodebaseIndexer Gap Coverage', () => {
 
     indexer = new CodebaseIndexer(mockEmbedder, mockCache, mockConfig, mockServer);
 
-    
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
   });
 
-  
   it('logs verbose message and skips when content provided is too large', async () => {
-    const largeContent = 'x'.repeat(2048); 
+    const largeContent = 'x'.repeat(2048);
 
     indexer.discoverFiles = vi.fn().mockResolvedValue(['/test/large.js']);
     indexer.preFilterFiles = vi
@@ -114,7 +107,7 @@ describe('CodebaseIndexer Gap Coverage', () => {
 
   it('logs verbose message when fs.stat fails (if content not provided)', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['/test/error.js']);
-    
+
     indexer.preFilterFiles = vi
       .fn()
       .mockResolvedValue([
@@ -130,7 +123,6 @@ describe('CodebaseIndexer Gap Coverage', () => {
     );
   });
 
-  
   it('logs verbose message when stat result is invalid', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['/test/weird.js']);
     indexer.preFilterFiles = vi
@@ -139,7 +131,6 @@ describe('CodebaseIndexer Gap Coverage', () => {
         { file: '/test/weird.js', content: undefined, hash: undefined, force: false },
       ]);
 
-    
     vi.spyOn(fs, 'stat').mockResolvedValue(null);
 
     await indexer.indexAll();
@@ -149,7 +140,6 @@ describe('CodebaseIndexer Gap Coverage', () => {
     );
   });
 
-  
   it('logs verbose message when file is too large via stat', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['/test/large_stat.js']);
     indexer.preFilterFiles = vi
@@ -160,7 +150,7 @@ describe('CodebaseIndexer Gap Coverage', () => {
 
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => false,
-      size: 2048, 
+      size: 2048,
       mtimeMs: 123,
     });
 
@@ -193,7 +183,6 @@ describe('CodebaseIndexer Gap Coverage', () => {
     );
   });
 
-  
   it('logs verbose message when file is unchanged (hash match)', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['/test/same.js']);
     indexer.preFilterFiles = vi
@@ -219,20 +208,15 @@ describe('CodebaseIndexer Gap Coverage', () => {
     );
   });
 
-  
   it('logs verbose messages when queuing watch events during indexing', async () => {
-    
     await indexer.setupFileWatcher();
 
-    
     const addHandler = mockWatcher.on.mock.calls.find((c) => c[0] === 'add')[1];
     const changeHandler = mockWatcher.on.mock.calls.find((c) => c[0] === 'change')[1];
     const unlinkHandler = mockWatcher.on.mock.calls.find((c) => c[0] === 'unlink')[1];
 
-    
     indexer.isIndexing = true;
 
-    
     await addHandler('new.js');
     expect(console.info).toHaveBeenCalledWith(
       expect.stringContaining('Queued add event during indexing')

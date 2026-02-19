@@ -17,9 +17,7 @@ describe('embedding-process getEmbedder', () => {
     const { pipeline } = await import('@huggingface/transformers');
     pipeline.mockResolvedValueOnce({}).mockResolvedValueOnce({});
 
-    const { getEmbedder, resetEmbeddingProcessState } = await import(
-      '../lib/embedding-process.js'
-    );
+    const { getEmbedder, resetEmbeddingProcessState } = await import('../lib/embedding-process.js');
 
     resetEmbeddingProcessState();
     await getEmbedder('model-a', 1);

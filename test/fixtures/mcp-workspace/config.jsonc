@@ -8,5 +8,5 @@
   "callGraphEnabled": false,
   "chunkSize": 4,
   "chunkOverlap": 0,
-  "maxResults": 3
+  "maxResults": 3,
 }

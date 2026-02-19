@@ -112,21 +112,21 @@ export class CodebaseIndexer {
     this._lastIncrementalGcAt = 0;
     this._autoEmbeddingProcessLogged = false;
     this._heavyWorkerSafetyLogged = false;
-    
+
     this._watcherDebounceTimers = new Map();
-    
+
     this._watcherInProgress = new Map();
-    
+
     this._watcherPendingReindex = new Map();
-    
+
     this._watcherDebounceMs = Number.isInteger(this.config.watchDebounceMs)
       ? this.config.watchDebounceMs
       : 300;
-    
+
     this._watcherWriteStabilityMs = Number.isInteger(this.config.watchWriteStabilityMs)
       ? this.config.watchWriteStabilityMs
       : 1500;
-    
+
     this._embeddingProcessSessionActive = false;
     this._embeddingChild = null;
     this._embeddingChildBuffer = '';
@@ -318,7 +318,6 @@ export class CodebaseIndexer {
       const rel = path.relative(normalizedBase, normalizedTarget);
       return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
     } catch {
-      
       return this.isPathInsideWorkspace(filePath);
     }
   }
@@ -368,7 +367,7 @@ export class CodebaseIndexer {
         ? this.config.embeddingBatchSize
         : null;
     if (configured) return Math.min(configured, 256);
-    
+
     if (this.isHeavyEmbeddingModel() && Number.isInteger(numWorkers) && numWorkers > 1) return 1;
     return null;
   }
@@ -485,13 +484,16 @@ export class CodebaseIndexer {
 
   async runPostIncrementalCleanup(reason = 'watch update') {
     if (this.config.clearCacheAfterIndex) {
-      await this.traceIncrementalMemoryPhase(`incremental.dropInMemoryVectors (${reason})`, async () => {
-        await this.cache.dropInMemoryVectors();
-      });
+      await this.traceIncrementalMemoryPhase(
+        `incremental.dropInMemoryVectors (${reason})`,
+        async () => {
+          await this.cache.dropInMemoryVectors();
+        }
+      );
       if (this.config.verbose) {
         console.info(`[Cache] Cleared in-memory vectors after ${reason}`);
       }
-      
+
       await this.traceIncrementalMemoryPhase(`incremental.explicitGc (${reason})`, async () => {
         this.runExplicitGc({ force: true });
       });
@@ -545,13 +547,10 @@ export class CodebaseIndexer {
     }
   }
 
-  
   async initializeWorkers() {
-    
     const activeWorkers = this.workers.filter((w) => w !== null);
     if (activeWorkers.length > 0) return;
 
-    
     if (this.workers.length > 0) {
       this.workers = [];
       this.workerReady = [];
@@ -563,13 +562,11 @@ export class CodebaseIndexer {
       try {
         let numWorkers =
           this.config.workerThreads === 'auto'
-            ? Math.min(2, Math.max(1, os.cpus().length - 1)) 
+            ? Math.min(2, Math.max(1, os.cpus().length - 1))
             : typeof this.config.workerThreads === 'number'
               ? this.config.workerThreads
               : 1;
 
-        
-        
         if (this.shouldDisableHeavyModelWorkersOnWindows() && numWorkers > 0) {
           if (!this._heavyWorkerSafetyLogged) {
             console.warn(
@@ -580,8 +577,6 @@ export class CodebaseIndexer {
           numWorkers = 0;
         }
 
-        
-        
         if (numWorkers > 1 && !isTestEnv() && typeof os.freemem === 'function') {
           const freeMemGb = os.freemem() / 1024 / 1024 / 1024;
           const isHeavyModel = this.isHeavyEmbeddingModel();
@@ -598,13 +593,12 @@ export class CodebaseIndexer {
           }
         }
 
-        
         if (!isTestEnv() && typeof os.totalmem === 'function') {
           const totalMemGb = os.totalmem() / 1024 / 1024 / 1024;
           const rssGb = process.memoryUsage().rss / 1024 / 1024 / 1024;
           const isHeavyModel = this.isHeavyEmbeddingModel();
           const memPerWorker = isHeavyModel ? 8.0 : 0.8;
-          const projectedGb = rssGb + numWorkers * memPerWorker + 0.5; 
+          const projectedGb = rssGb + numWorkers * memPerWorker + 0.5;
           const ceilingGb = totalMemGb * 0.85;
           if (numWorkers > 0 && projectedGb > ceilingGb) {
             if (this.config.verbose) {
@@ -616,7 +610,6 @@ export class CodebaseIndexer {
           }
         }
 
-        
         if (numWorkers < 1) {
           console.info(
             '[Indexer] No workers configured, using main thread (warning: higher RAM usage)'
@@ -630,7 +623,6 @@ export class CodebaseIndexer {
           );
         }
 
-        
         const threadsPerWorker = 1;
 
         console.info(
@@ -639,9 +631,7 @@ export class CodebaseIndexer {
 
         const workerInferenceBatchSize = this.getWorkerInferenceBatchSize({ numWorkers });
         if (this.config.verbose && Number.isInteger(workerInferenceBatchSize)) {
-          console.info(
-            `[Indexer] Worker inference batch size: ${workerInferenceBatchSize}`
-          );
+          console.info(`[Indexer] Worker inference batch size: ${workerInferenceBatchSize}`);
         }
 
         for (let i = 0; i < numWorkers; i++) {
@@ -693,7 +683,6 @@ export class CodebaseIndexer {
           }
         }
 
-        
         try {
           await Promise.all(this.workerReady);
           console.info(`[Indexer] ${this.workers.length} workers ready`);
@@ -713,15 +702,12 @@ export class CodebaseIndexer {
     return this.initWorkerPromise;
   }
 
-  
   async terminateWorkers() {
     const WORKER_SHUTDOWN_TIMEOUT = isTestEnv() ? 50 : 5000;
     const terminations = this.workers.filter(Boolean).map((worker) => {
       try {
         worker.postMessage({ type: 'shutdown' });
-      } catch {
-        
-      }
+      } catch {}
 
       let exited = false;
       const exitPromise = new Promise((resolve) => {
@@ -745,7 +731,6 @@ export class CodebaseIndexer {
     this.workerReady = [];
   }
 
-  
   async unloadWorkersModels() {
     if (this.workers.length === 0) return { unloaded: 0 };
 
@@ -793,7 +778,6 @@ export class CodebaseIndexer {
     return { unloaded: unloadedCount };
   }
 
-  
   async unloadEmbeddingChildModel() {
     const child = this._embeddingChild;
     if (!child) return { success: true, wasLoaded: false };
@@ -818,9 +802,7 @@ export class CodebaseIndexer {
               return;
             }
           }
-        } catch {
-          
-        }
+        } catch {}
       };
 
       child.stdout.on('data', onData);
@@ -838,14 +820,10 @@ export class CodebaseIndexer {
     });
   }
 
-  
   async unloadEmbeddingModels() {
     const results = { workers: 0, childUnloaded: false };
 
-    
     if (this.workers.length > 0) {
-      
-      
       if (this.config.verbose) {
         console.info(`[Indexer] Terminating ${this.workers.length} workers to free model memory`);
       }
@@ -853,7 +831,6 @@ export class CodebaseIndexer {
       results.workers = this.workers.length;
     }
 
-    
     if (this._embeddingChild) {
       const childResult = await this.unloadEmbeddingChildModel();
       results.childUnloaded = childResult?.wasLoaded || false;
@@ -862,7 +839,6 @@ export class CodebaseIndexer {
       }
     }
 
-    
     if (this.isExplicitGcEnabled()) {
       const before = process.memoryUsage();
       this.runExplicitGc({ force: true });
@@ -877,7 +853,6 @@ export class CodebaseIndexer {
     return results;
   }
 
-
   async loadGitignore() {
     if (!this.config.searchDirectory) {
       this.gitignore = ignore();
@@ -889,7 +864,6 @@ export class CodebaseIndexer {
       this.gitignore = ignore().add(content);
       if (this.config.verbose) console.info('[Indexer] Loaded .gitignore rules');
     } catch (_e) {
-      
       this.gitignore = ignore();
     }
   }
@@ -931,7 +905,6 @@ export class CodebaseIndexer {
   async replaceDeadWorker(index) {
     if (this.config.verbose) console.info(`[Indexer] Replacing dead worker at index ${index}...`);
 
-    
     const threadsPerWorker = 1;
     const activeWorkerCount = this.workers.filter(Boolean).length || 1;
     const workerInferenceBatchSize = this.getWorkerInferenceBatchSize({
@@ -953,7 +926,6 @@ export class CodebaseIndexer {
       },
     });
 
-    
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('Timeout')), 30000);
       newWorker.once('message', (msg) => {
@@ -972,7 +944,6 @@ export class CodebaseIndexer {
     if (this.config.verbose) console.info(`[Indexer] Worker ${index} respawned successfully`);
   }
 
-  
   sendProgress(progress, total, message) {
     if (this.server) {
       try {
@@ -982,9 +953,7 @@ export class CodebaseIndexer {
           total,
           message,
         });
-      } catch (_err) {
-        
-      }
+      } catch (_err) {}
     }
     this.writeProgressFile(progress, total, message).catch(() => null);
   }
@@ -1019,9 +988,7 @@ export class CodebaseIndexer {
       await fs.mkdir(this.config.cacheDirectory, { recursive: true });
       const progressPath = path.join(this.config.cacheDirectory, 'progress.json');
       await fs.writeFile(progressPath, JSON.stringify(payload), 'utf-8');
-    } catch {
-      
-    }
+    } catch {}
   }
 
   async processFilesWithWorkers(allFiles) {
@@ -1052,7 +1019,6 @@ export class CodebaseIndexer {
       return makeRetryResults(allowedFiles);
     }
 
-    
     if (this._workerReplacementPromises && this._workerReplacementPromises.size > 0) {
       await Promise.allSettled(this._workerReplacementPromises.values());
     }
@@ -1090,24 +1056,20 @@ export class CodebaseIndexer {
       const promise = new Promise((resolve) => {
         const batchId = `file-batch-${i}-${Date.now()}`;
         const batchResults = [];
-        let workerKilled = false; 
+        let workerKilled = false;
 
         const killWorker = async () => {
-          
           if (workerKilled || this.workers[workerIndex] === null) return;
           workerKilled = true;
-          this.workers[workerIndex] = null; 
+          this.workers[workerIndex] = null;
           try {
             await worker.terminate?.();
-          } catch (_err) {
-            
-          }
-          
+          } catch (_err) {}
+
           if (!this._workerReplacementPromises) {
             this._workerReplacementPromises = new Map();
           }
           if (!this._workerReplacementPromises.has(workerIndex)) {
-            
             const replacement = (async () => {
               try {
                 await this.replaceDeadWorker(workerIndex);
@@ -1128,7 +1090,6 @@ export class CodebaseIndexer {
         };
 
         const handleTimeout = () => {
-          
           void killWorker();
           worker.off('message', handler);
           worker.off('error', errorHandler);
@@ -1196,7 +1157,6 @@ export class CodebaseIndexer {
 
     const workerResults = await Promise.all(workerPromises.map((p) => p.promise));
 
-    
     const failedFiles = [];
     for (let i = 0; i < workerResults.length; i++) {
       if (workerResults[i].length > 0) {
@@ -1206,14 +1166,13 @@ export class CodebaseIndexer {
       }
     }
 
-    
     if (failedFiles.length > 0) {
       if (this.config.verbose) {
         console.warn(
           `[Indexer] ${failedFiles.length} files failed in workers, falling back to main thread`
         );
       }
-      
+
       for (const f of failedFiles) {
         results.push({ file: f.file, status: 'retry' });
       }
@@ -1222,14 +1181,12 @@ export class CodebaseIndexer {
     return results;
   }
 
-  
   async processChunksWithWorkers(allChunks) {
     const activeWorkers = this.workers
       .map((worker, index) => ({ worker, index }))
       .filter((entry) => entry.worker);
 
     if (activeWorkers.length === 0) {
-      
       return this.processChunksSingleThreaded(allChunks);
     }
 
@@ -1240,7 +1197,7 @@ export class CodebaseIndexer {
     const configuredTimeout = Number.isInteger(this.config.workerBatchTimeoutMs)
       ? this.config.workerBatchTimeoutMs
       : 300000;
-    const WORKER_TIMEOUT = isTestEnv() ? 1000 : configuredTimeout; 
+    const WORKER_TIMEOUT = isTestEnv() ? 1000 : configuredTimeout;
 
     if (this.config.verbose) {
       console.info(
@@ -1260,21 +1217,16 @@ export class CodebaseIndexer {
       const promise = new Promise((resolve, _reject) => {
         const batchId = `batch-${i}-${Date.now()}`;
         const batchResults = [];
-        let workerKilled = false; 
+        let workerKilled = false;
 
-        
         const killWorker = async () => {
-          
           if (workerKilled || this.workers[workerIndex] === null) return;
           workerKilled = true;
-          this.workers[workerIndex] = null; 
+          this.workers[workerIndex] = null;
           try {
             await worker.terminate?.();
-          } catch {
-            
-          }
+          } catch {}
 
-          
           if (!this._workerReplacementPromises) {
             this._workerReplacementPromises = new Map();
           }
@@ -1291,14 +1243,13 @@ export class CodebaseIndexer {
         };
 
         const handleTimeout = (label) => {
-          
           void killWorker();
           worker.off('message', handler);
           worker.off('error', errorHandler);
           if (exitHandler) worker.off('exit', exitHandler);
           console.warn(`[Indexer] Worker ${workerIndex} timed out, ${label}`);
           this.recordWorkerFailure(`timeout (batch ${batchId})`);
-          
+
           resolve([]);
         };
 
@@ -1339,17 +1290,16 @@ export class CodebaseIndexer {
               finalize(batchResults);
             } else if (msg.type === 'error') {
               console.warn(`[Indexer] Worker ${workerIndex} error: ${msg.error}`);
-              finalize([]); 
+              finalize([]);
             }
           }
         };
 
-        
         const errorHandler = (err) => {
           console.warn(`[Indexer] Worker ${workerIndex} crashed: ${err.message}`);
           this.recordWorkerFailure(`crash (${err.message})`);
           void killWorker();
-          finalize([]); 
+          finalize([]);
         };
         worker.once('error', errorHandler);
 
@@ -1375,21 +1325,17 @@ export class CodebaseIndexer {
       workerPromises.push({ promise, chunks: workerChunks });
     }
 
-    
     const workerResults = await Promise.all(workerPromises.map((p) => p.promise));
 
-    
     const failedChunks = [];
     for (let i = 0; i < workerResults.length; i++) {
       if (workerResults[i].length > 0) {
         results.push(...workerResults[i]);
       } else if (workerPromises[i].chunks.length > 0) {
-        
         failedChunks.push(...workerPromises[i].chunks);
       }
     }
 
-    
     if (failedChunks.length > 0 && allowSingleThreadFallback) {
       console.warn(
         `[Indexer] Retrying ${failedChunks.length} chunks with single-threaded fallback...`
@@ -1558,16 +1504,12 @@ export class CodebaseIndexer {
     }
     try {
       child.stdin.write(`${JSON.stringify({ type: 'shutdown' })}\n`);
-    } catch {
-      
-    }
+    } catch {}
     await new Promise((resolve) => {
       const timeout = setTimeout(() => {
         try {
           child.kill('SIGKILL');
-        } catch {
-          
-        }
+        } catch {}
         resolve();
       }, 5000);
       child.once('exit', () => {
@@ -1598,7 +1540,7 @@ export class CodebaseIndexer {
     this._embeddingChild = null;
     this._embeddingProcessSessionActive = false;
     this._embeddingChildStopping = false;
-    
+
     this._embeddingChildBuffer = '';
     this._embeddingChildQueue = [];
     if (!preserveStats) {
@@ -1668,9 +1610,7 @@ export class CodebaseIndexer {
         this.recordWorkerFailure('child process timeout');
         try {
           child.kill('SIGKILL');
-        } catch {
-          
-        }
+        } catch {}
         resolve([]);
       }, timeoutMs);
 
@@ -1753,9 +1693,7 @@ export class CodebaseIndexer {
       const timeout = setTimeout(() => {
         try {
           child.kill('SIGKILL');
-        } catch {
-          
-        }
+        } catch {}
         if (this.config.verbose && !closed) {
           const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
           console.warn(
@@ -1800,12 +1738,11 @@ export class CodebaseIndexer {
         }
         try {
           const parsed = JSON.parse(stdout);
-          
+
           stdout = '';
           stderr = '';
           resolve(this.applyEmbeddingDimensionToResults(parsed?.results || []));
         } catch (err) {
-          
           stdout = '';
           stderr = '';
           this.recordWorkerFailure(`child process parse error (${err.message})`);
@@ -1817,15 +1754,12 @@ export class CodebaseIndexer {
     });
   }
 
-  
   async processChunksSingleThreaded(chunks) {
     const results = [];
 
-    
     let processedSinceGc = 0;
 
     for (const chunk of chunks) {
-      
       await delay(0);
 
       try {
@@ -1833,18 +1767,16 @@ export class CodebaseIndexer {
           pooling: 'mean',
           normalize: true,
         });
-        
+
         let vector = toFloat32Array(output.data);
         if (this.config.embeddingDimension) {
           vector = sliceAndNormalize(vector, this.config.embeddingDimension);
         }
-        
+
         if (typeof output.dispose === 'function') {
           try {
             output.dispose();
-          } catch {
-            
-          }
+          } catch {}
         }
         results.push({
           file: chunk.file,
@@ -1855,7 +1787,6 @@ export class CodebaseIndexer {
           success: true,
         });
 
-        
         processedSinceGc++;
         if (processedSinceGc >= 100) {
           this.runExplicitGc({ minIntervalMs: 5000 });
@@ -1898,10 +1829,8 @@ export class CodebaseIndexer {
     }
 
     try {
-      
       const stats = await fs.stat(file);
 
-      
       if (stats.isDirectory()) {
         return 0;
       }
@@ -1918,14 +1847,13 @@ export class CodebaseIndexer {
       const content = await fs.readFile(file, 'utf-8');
       const hash = hashContent(content);
 
-      
       const cachedHash =
         typeof this.cache.getFileHash === 'function' ? this.cache.getFileHash(file) : null;
       if (cachedHash === hash) {
         if (this.config.verbose) {
           console.info(`[Indexer] Skipped ${fileName} (unchanged)`);
         }
-        
+
         this.cache.setFileHash(file, hash, stats);
         return 0;
       }
@@ -1934,7 +1862,6 @@ export class CodebaseIndexer {
         console.info(`[Indexer] Indexing ${fileName}...`);
       }
 
-      
       let callData = null;
       if (this.config.callGraphEnabled) {
         try {
@@ -1953,7 +1880,6 @@ export class CodebaseIndexer {
       let failedChunks = 0;
       const newChunks = [];
 
-      
       let useWorkers = this.shouldUseWorkers();
       if (useWorkers && this.workers.length === 0) {
         await this.initializeWorkers();
@@ -2048,17 +1974,14 @@ export class CodebaseIndexer {
     }
   }
 
-  
   async discoverFiles() {
     const startTime = Date.now();
 
-    
     const extensions = new Set(
       this.config.fileExtensions.map((ext) => `.${String(ext).toLowerCase()}`)
     );
     const allowedFileNames = new Set(this.config.fileNames || []);
 
-    
     await this.loadGitignore();
 
     if (!this.config.searchDirectory) {
@@ -2068,18 +1991,15 @@ export class CodebaseIndexer {
     const api = new fdir()
       .withFullPaths()
       .exclude((dirName, dirPath) => {
-        
         if (dirName === 'node_modules' || dirName === '.git' || dirName === '.smart-coding-cache')
           return true;
 
-        
         const fullPath = path.join(dirPath, dirName);
         return this.isExcluded(fullPath);
       })
       .filter((filePath) => {
         if (this.isExcluded(filePath)) return false;
 
-        
         const base = path.basename(filePath);
         const ext = path.extname(filePath).toLowerCase();
         return extensions.has(ext) || allowedFileNames.has(base);
@@ -2092,22 +2012,18 @@ export class CodebaseIndexer {
     return files;
   }
 
-  
   async preFilterFiles(files) {
     const startTime = Date.now();
     const filesToProcess = [];
     const skippedCount = { unchanged: 0, tooLarge: 0, error: 0 };
 
-    
-    
     const STAT_BATCH_SIZE = Math.min(100, this.config.batchSize || 100);
-    
+
     const MAX_READ_BATCH_BYTES = 50 * 1024 * 1024;
 
     for (let i = 0; i < files.length; i += STAT_BATCH_SIZE) {
       const batchFiles = files.slice(i, i + STAT_BATCH_SIZE);
 
-      
       const fileStats = await Promise.all(
         batchFiles.map(async (file) => {
           try {
@@ -2130,7 +2046,6 @@ export class CodebaseIndexer {
         })
       );
 
-      
       let currentReadBatch = [];
       let currentReadBytes = 0;
 
@@ -2142,7 +2057,6 @@ export class CodebaseIndexer {
       const processReadBatch = async (batch) => {
         const results = await Promise.all(
           batch.map(async ({ file, size, mtimeMs }) => {
-            
             const cachedHash =
               typeof this.cache.getFileHash === 'function' ? this.cache.getFileHash(file) : null;
             const cachedMeta = this.cache.getFileMeta ? this.cache.getFileMeta(file) : null;
@@ -2155,19 +2069,14 @@ export class CodebaseIndexer {
               Number.isFinite(cachedMeta.size) &&
               cachedMeta.size === size;
             if (metaMatches) {
-              
               const now = Date.now();
               const isRecent = Math.abs(now - mtimeMs) <= mtimeSafeWindowMs;
               if (!isRecent) {
-                
                 skippedCount.unchanged++;
                 return null;
               }
             }
 
-            
-            
-            
             return { file, hash: null, expectedHash: cachedHash, force: false, size, mtimeMs };
           })
         );
@@ -2194,7 +2103,6 @@ export class CodebaseIndexer {
         await processReadBatch(currentReadBatch);
       }
 
-      
       if (this.server && this.server.hybridSearch && this.server.hybridSearch.fileModTimes) {
         for (const stat of fileStats) {
           if (stat && stat.file && typeof stat.mtimeMs === 'number') {
@@ -2265,7 +2173,6 @@ export class CodebaseIndexer {
       this.sendProgress(0, 100, 'Indexing started');
       console.info(`[Indexer] Starting optimized indexing in ${this.config.searchDirectory}...`);
 
-      
       const files = await this.discoverFiles();
 
       if (files.length === 0) {
@@ -2279,12 +2186,10 @@ export class CodebaseIndexer {
         };
       }
 
-      
       this.sendProgress(5, 100, `Discovered ${files.length} files`);
 
       const currentFilesSet = new Set(files);
 
-      
       if (!force) {
         const cachedFiles =
           typeof this.cache.getFileHashKeys === 'function' ? this.cache.getFileHashKeys() : [];
@@ -2302,7 +2207,6 @@ export class CodebaseIndexer {
           if (this.config.verbose) {
             console.info(`[Indexer] Pruned ${prunedCount} deleted/excluded files from index`);
           }
-          
         }
 
         const prunedCallGraph = this.cache.pruneCallGraphData(currentFilesSet);
@@ -2311,12 +2215,10 @@ export class CodebaseIndexer {
         }
       }
 
-      
       const filesToProcess = await this.preFilterFiles(files);
       const filesToProcessSet = new Set(filesToProcess.map((entry) => entry.file));
       const filesToProcessByFile = new Map(filesToProcess.map((entry) => [entry.file, entry]));
 
-      
       if (this.config.callGraphEnabled && this.cache.getVectorStore().length > 0) {
         const cachedFiles = new Set(this.cache.getVectorStore().map((c) => c.file));
         const callDataFiles = new Set(this.cache.getFileCallDataKeys());
@@ -2390,12 +2292,9 @@ export class CodebaseIndexer {
         };
       }
 
-      
       console.info(`[Indexer] Processing ${filesToProcess.length} changed files`);
       this.sendProgress(10, 100, `Processing ${filesToProcess.length} changed files`);
 
-      
-      
       let adaptiveBatchSize = 10;
       if (files.length > 500) adaptiveBatchSize = 50;
       if (files.length > 1000) adaptiveBatchSize = 100;
@@ -2407,7 +2306,6 @@ export class CodebaseIndexer {
         );
       }
 
-      
       const allowSingleThreadFallback =
         this.config.allowSingleThreadFallback !== false ||
         this.config.workerThreads === 0 ||
@@ -2426,7 +2324,6 @@ export class CodebaseIndexer {
       const useEmbeddingProcessPerBatch = this.shouldUseEmbeddingProcessPerBatch(useWorkers);
       let embeddingRuntimeSummary = '';
       if (useWorkers && this.workers.length > 0) {
-        
         const workerInferenceBatchSize =
           this.getWorkerInferenceBatchSize({ numWorkers: this.workers.length }) ?? 'default';
         embeddingRuntimeSummary =
@@ -2478,7 +2375,6 @@ export class CodebaseIndexer {
         `[Indexer] Embedding pass started: ${filesToProcess.length} files using ${this.config.embeddingModel}`
       );
 
-      
       for (let i = 0; i < filesToProcess.length; i += adaptiveBatchSize) {
         const batch = filesToProcess.slice(i, i + adaptiveBatchSize);
 
@@ -2488,7 +2384,6 @@ export class CodebaseIndexer {
         const callDataByFile = new Map();
         const filesForWorkers = [];
 
-        
         const mem = process.memoryUsage();
         if (mem.rss > 2048 * 1024 * 1024) {
           this.runExplicitGc({ minIntervalMs: 5000 });
@@ -2516,15 +2411,12 @@ export class CodebaseIndexer {
             (typeof this.cache.getFileHash === 'function' ? this.cache.getFileHash(file) : null);
 
           if (useWorkersForBatch && (content === undefined || content === null)) {
-            
-            
             filesForWorkers.push({ file, content: null, force, expectedHash });
-            
+
             fileStats.set(file, { hash: null, totalChunks: 0, successChunks: 0, size, mtimeMs });
             continue;
           }
 
-          
           if (content === undefined || content === null) {
             let stats = null;
             try {
@@ -2565,7 +2457,6 @@ export class CodebaseIndexer {
             if (typeof content !== 'string') content = String(content);
             if (!liveHash) liveHash = hashContent(content);
             if (!Number.isFinite(size)) {
-              
               size = content.length;
             }
             if (size > this.config.maxFileSize) {
@@ -2589,7 +2480,7 @@ export class CodebaseIndexer {
 
           if (useWorkersForBatch) {
             filesForWorkers.push({ file, content, force, expectedHash });
-            
+
             fileStats.set(file, {
               hash: liveHash,
               totalChunks: 0,
@@ -2600,7 +2491,6 @@ export class CodebaseIndexer {
             continue;
           }
 
-          
           if (this.config.callGraphEnabled) {
             try {
               const callData = extractCallData(content, file);
@@ -2634,7 +2524,6 @@ export class CodebaseIndexer {
           }
         }
 
-        
         if (filesForWorkers.length > 0) {
           const results = await this.processFilesWithWorkers(filesForWorkers);
 
@@ -2643,7 +2532,7 @@ export class CodebaseIndexer {
             if (res.status === 'indexed' && stats) {
               stats.totalChunks = res.results.length;
               stats.successChunks = res.results.length;
-              if (res.hash) stats.hash = res.hash; 
+              if (res.hash) stats.hash = res.hash;
               if (res.callData) callDataByFile.set(res.file, res.callData);
 
               const chunks = res.results.map((r) => ({
@@ -2655,8 +2544,7 @@ export class CodebaseIndexer {
               }));
               newChunksByFile.set(res.file, chunks);
             } else if (res.status === 'unchanged' && stats) {
-              
-              stats.totalChunks = 0; 
+              stats.totalChunks = 0;
               stats.successChunks = 0;
               stats.hash = res.hash;
               this.cache.setFileHash(res.file, res.hash, { size: res.size, mtimeMs: res.mtimeMs });
@@ -2664,7 +2552,6 @@ export class CodebaseIndexer {
                 this.cache.setFileCallData(res.file, res.callData);
               }
             } else if ((res.status === 'retry' || res.status === 'error') && stats) {
-              
               const original = filesForWorkers.find((f) => f.file === res.file);
               if (original) {
                 if (this.config.verbose)
@@ -2735,15 +2622,12 @@ export class CodebaseIndexer {
           }
         }
 
-        
         if (allChunks.length > 0) {
           const chunksToProcess = allChunks.slice();
           let results = [];
           if (useEmbeddingProcessPerBatch) {
             results = await this.processChunksInChildProcess(chunksToProcess);
           } else {
-            
-            
             results = await this.processChunksSingleThreaded(chunksToProcess);
           }
 
@@ -2764,7 +2648,6 @@ export class CodebaseIndexer {
           }
         }
 
-        
         for (const [file, stats] of fileStats) {
           if (stats.totalChunks > 0 && stats.successChunks === stats.totalChunks) {
             this.cache.removeFileFromStore(file);
@@ -2774,20 +2657,29 @@ export class CodebaseIndexer {
               totalChunks++;
             }
             if (typeof stats.hash === 'string' && stats.hash.length > 0) {
-              this.cache.setFileHash(file, stats.hash, { size: stats.size, mtimeMs: stats.mtimeMs });
+              this.cache.setFileHash(file, stats.hash, {
+                size: stats.size,
+                mtimeMs: stats.mtimeMs,
+              });
             } else if (this.config.verbose) {
-              console.warn(`[Indexer] Skipped hash update for ${path.basename(file)} (missing hash)`);
+              console.warn(
+                `[Indexer] Skipped hash update for ${path.basename(file)} (missing hash)`
+              );
             }
             const callData = callDataByFile.get(file);
             if (callData && this.config.callGraphEnabled) {
               this.cache.setFileCallData(file, callData);
             }
           } else if (stats.totalChunks === 0) {
-            
             if (typeof stats.hash === 'string' && stats.hash.length > 0) {
-              this.cache.setFileHash(file, stats.hash, { size: stats.size, mtimeMs: stats.mtimeMs });
+              this.cache.setFileHash(file, stats.hash, {
+                size: stats.size,
+                mtimeMs: stats.mtimeMs,
+              });
             } else if (this.config.verbose) {
-              console.warn(`[Indexer] Skipped hash update for ${path.basename(file)} (missing hash)`);
+              console.warn(
+                `[Indexer] Skipped hash update for ${path.basename(file)} (missing hash)`
+              );
             }
             const callData = callDataByFile.get(file);
             if (callData && this.config.callGraphEnabled) {
@@ -2821,7 +2713,6 @@ export class CodebaseIndexer {
           }
         }
 
-        
         if (
           processedFiles % (adaptiveBatchSize * 2) === 0 ||
           processedFiles === filesToProcess.length
@@ -2840,7 +2731,6 @@ export class CodebaseIndexer {
           );
         }
 
-        
         allChunks.length = 0;
         filesForWorkers.length = 0;
         fileStats.clear();
@@ -2849,7 +2739,6 @@ export class CodebaseIndexer {
         await delay(0);
       }
 
-      
       if (this.workers.length > 0) {
         await this.terminateWorkers();
       }
@@ -2861,7 +2750,6 @@ export class CodebaseIndexer {
         `[Indexer] Embedding pass complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
       );
 
-      
       this.sendProgress(
         95,
         100,
@@ -2903,7 +2791,6 @@ export class CodebaseIndexer {
         }
       }
 
-      
       if (this.config.unloadModelAfterIndex) {
         console.info(
           '[Indexer] unloadModelAfterIndex enabled; embedding model will be reloaded on next query'
@@ -2912,7 +2799,6 @@ export class CodebaseIndexer {
       }
       this.maybeShutdownQueryEmbeddingPool('full index');
 
-      
       if (this.config.callGraphEnabled) {
         this.cache.rebuildCallGraph();
       }
@@ -2952,13 +2838,12 @@ export class CodebaseIndexer {
   }
 
   enqueueWatchEvent(type, filePath) {
-    
     if (this.pendingWatchEvents.size >= MAX_PENDING_WATCH_EVENTS) {
       console.warn(
         `[Indexer] pendingWatchEvents limit reached (${MAX_PENDING_WATCH_EVENTS}), ` +
-        `trimming oldest ${this.pendingWatchEvents.size - PENDING_WATCH_EVENTS_TRIM_SIZE} events`
+          `trimming oldest ${this.pendingWatchEvents.size - PENDING_WATCH_EVENTS_TRIM_SIZE} events`
       );
-      
+
       const toRemove = this.pendingWatchEvents.size - PENDING_WATCH_EVENTS_TRIM_SIZE;
       let count = 0;
       for (const key of this.pendingWatchEvents.keys()) {
@@ -2967,13 +2852,11 @@ export class CodebaseIndexer {
       }
     }
 
-    
     if (type === 'unlink') {
       this.pendingWatchEvents.set(filePath, 'unlink');
       return;
     }
 
-    
     this.pendingWatchEvents.set(filePath, type);
   }
 
@@ -3020,17 +2903,13 @@ export class CodebaseIndexer {
     }
   }
 
-  
   debouncedWatchIndexFile(fullPath, eventType) {
-    
     const existingTimer = this._watcherDebounceTimers.get(fullPath);
     if (existingTimer) {
       clearTimeout(existingTimer);
     }
 
-    
     if (this._watcherInProgress.has(fullPath)) {
-      
       this._watcherPendingReindex.set(fullPath, eventType);
       if (this.config.verbose) {
         console.info(
@@ -3040,14 +2919,11 @@ export class CodebaseIndexer {
       return;
     }
 
-    
     const timer = setTimeout(async () => {
       this._watcherDebounceTimers.delete(fullPath);
 
-      
       const indexPromise = (async () => {
         try {
-          
           if (this.server && this.server.hybridSearch) {
             this.server.hybridSearch.clearFileModTime(fullPath);
           }
@@ -3086,7 +2962,6 @@ export class CodebaseIndexer {
   async setupFileWatcher() {
     if (!this.config.watchFiles) return;
 
-    
     if (this.watcher) {
       await this.watcher.close();
       this.watcher = null;
@@ -3142,7 +3017,6 @@ export class CodebaseIndexer {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.info(`[Indexer] New file detected: ${filePath}`);
 
-        
         if (this.server && this.server.hybridSearch) {
           this.server.hybridSearch.clearFileModTime(fullPath);
         }
@@ -3155,14 +3029,12 @@ export class CodebaseIndexer {
           return;
         }
 
-        
         this.debouncedWatchIndexFile(fullPath, 'add');
       })
       .on('change', (filePath) => {
         const fullPath = path.join(this.config.searchDirectory, filePath);
         console.info(`[Indexer] File changed: ${filePath}`);
 
-        
         if (this.server && this.server.hybridSearch) {
           this.server.hybridSearch.clearFileModTime(fullPath);
         }
@@ -3175,7 +3047,6 @@ export class CodebaseIndexer {
           return;
         }
 
-        
         this.debouncedWatchIndexFile(fullPath, 'change');
       })
       .on('unlink', async (filePath) => {
@@ -3190,16 +3061,18 @@ export class CodebaseIndexer {
           return;
         }
 
-        
         if (this.server && this.server.hybridSearch) {
           this.server.hybridSearch.clearFileModTime(fullPath);
         }
 
         if (typeof this.cache.ensureLoaded === 'function') {
           const preferDisk = this.shouldPreferDiskCacheLoad();
-          await this.traceIncrementalMemoryPhase(`watchUnlink.ensureLoaded (${filePath})`, async () => {
-            await this.cache.ensureLoaded({ preferDisk });
-          });
+          await this.traceIncrementalMemoryPhase(
+            `watchUnlink.ensureLoaded (${filePath})`,
+            async () => {
+              await this.cache.ensureLoaded({ preferDisk });
+            }
+          );
         }
         await this.cache.removeFileFromStore(fullPath);
         this.cache.deleteFileHash(fullPath);
@@ -3238,7 +3111,6 @@ export class CodebaseIndexer {
   }
 }
 
-
 export function getToolDefinition() {
   return {
     name: 'b_index_codebase',
@@ -3264,12 +3136,10 @@ export function getToolDefinition() {
   };
 }
 
-
 export async function handleToolCall(request, indexer) {
   const force = request.params.arguments?.force || false;
   const result = await indexer.indexAll(force);
 
-  
   if (result?.skipped) {
     return {
       content: [
@@ -3281,7 +3151,6 @@ export async function handleToolCall(request, indexer) {
     };
   }
 
-  
   const vectorStore = indexer.cache.getVectorStore();
   const stats = {
     totalChunks: result?.totalChunks ?? vectorStore.length,

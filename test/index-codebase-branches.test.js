@@ -1,7 +1,6 @@
 import { vi } from 'vitest';
 import os from 'os';
 
-
 vi.mock('os', async () => {
   const actual = await vi.importActual('os');
   return {
@@ -11,7 +10,6 @@ vi.mock('os', async () => {
 });
 
 let workerMode = 'ready';
-
 
 vi.mock('worker_threads', () => {
   class MockWorker {
@@ -44,7 +42,6 @@ import fs from 'fs/promises';
 import path from 'path';
 import { Worker } from 'worker_threads';
 
-
 const handlers = {};
 const mockWatcher = {
   on: vi.fn((event, handler) => {
@@ -53,7 +50,6 @@ const mockWatcher = {
   }),
   close: vi.fn().mockResolvedValue(undefined),
 };
-
 
 vi.mock('fs/promises');
 vi.mock('chokidar', () => ({
@@ -70,7 +66,6 @@ describe('CodebaseIndexer Branch Coverage', () => {
   let mockServer;
 
   beforeEach(() => {
-    
     vi.useRealTimers();
     workerMode = 'ready';
 
@@ -180,10 +175,8 @@ describe('CodebaseIndexer Branch Coverage', () => {
     indexer.config.workerThreads = 2;
     const promise = indexer.initializeWorkers();
 
-    
     vi.advanceTimersByTime(130000);
 
-    
     await promise;
   });
 
@@ -304,14 +297,14 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     const handler = mockWorker.on.mock.calls.find((call) => call[0] === 'message')[1];
 
-    handler({ batchId: 'wrong' }); 
+    handler({ batchId: 'wrong' });
 
     const batchId = mockWorker.postMessage.mock.calls[0][0].batchId;
-    handler({ batchId, type: 'unknown' }); 
-    handler({ batchId, type: 'error', error: 'fail' }); 
+    handler({ batchId, type: 'unknown' });
+    handler({ batchId, type: 'error', error: 'fail' });
 
     const results = await promise;
-    expect(results).toHaveLength(1); 
+    expect(results).toHaveLength(1);
   });
 
   it('falls back to single-threaded execution on worker error', async () => {
@@ -409,11 +402,9 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     const promise = indexer.processChunksWithWorkers([{ file: 'a.js', text: 'c' }]);
 
-    
     const errorHandler = mockWorker.once.mock.calls.find((c) => c[0] === 'error')[1];
     errorHandler(new Error('crash'));
 
-    
     const promise2 = indexer.processChunksWithWorkers([{ file: 'b.js', text: 'c' }]);
     vi.advanceTimersByTime(310000);
 
@@ -535,7 +526,6 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     await indexer.indexAll();
 
-    
     await new Promise((resolve) => setImmediate(resolve));
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Skipped hash update'));
     expect(console.warn).toHaveBeenCalledWith(
@@ -587,19 +577,17 @@ describe('CodebaseIndexer Branch Coverage', () => {
     await indexer.setupFileWatcher();
     await indexer.setupFileWatcher();
 
-    
     await handlers['add']('file.js');
     await handlers['change']('file.js');
     await handlers['unlink']('file.js');
 
-    
     indexer.server = null;
     await handlers['add']('file.js');
   });
 
   it('skips files provided with content if too large', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['file-large-content.js']);
-    
+
     indexer.preFilterFiles = vi.fn().mockResolvedValue([
       {
         file: 'file-large-content.js',
@@ -678,24 +666,22 @@ describe('CodebaseIndexer Branch Coverage', () => {
     indexer.terminateWorkers = vi.fn().mockResolvedValue(undefined);
 
     indexer.discoverFiles = vi.fn().mockResolvedValue(['/test/retry.js']);
-    indexer.preFilterFiles = vi.fn().mockResolvedValue([
-      { file: '/test/retry.js', force: false, size: 20, mtimeMs: 10 },
-    ]);
+    indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: '/test/retry.js', force: false, size: 20, mtimeMs: 10 }]);
     indexer.processFilesWithWorkers = vi
       .fn()
       .mockResolvedValue([{ file: '/test/retry.js', status: 'retry' }]);
-    indexer.processChunksSingleThreaded = vi
-      .fn()
-      .mockResolvedValue([
-        {
-          success: true,
-          file: '/test/retry.js',
-          startLine: 1,
-          endLine: 1,
-          content: 'const x = 1;',
-          vector: [0.1],
-        },
-      ]);
+    indexer.processChunksSingleThreaded = vi.fn().mockResolvedValue([
+      {
+        success: true,
+        file: '/test/retry.js',
+        startLine: 1,
+        endLine: 1,
+        content: 'const x = 1;',
+        vector: [0.1],
+      },
+    ]);
 
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => false,
@@ -884,24 +870,20 @@ describe('CodebaseIndexer Branch Coverage', () => {
   it('queues watch events when indexing is in progress', async () => {
     await indexer.setupFileWatcher();
 
-    
     indexer.isIndexing = true;
 
-    
     await handlers['add']('added.js');
     expect(indexer.pendingWatchEvents.get(path.join('/test', 'added.js'))).toBe('add');
     expect(console.info).toHaveBeenCalledWith(
       expect.stringContaining('Queued add event during indexing')
     );
 
-    
     await handlers['change']('changed.js');
     expect(indexer.pendingWatchEvents.get(path.join('/test', 'changed.js'))).toBe('change');
     expect(console.info).toHaveBeenCalledWith(
       expect.stringContaining('Queued change event during indexing')
     );
 
-    
     await handlers['unlink']('deleted.js');
     expect(indexer.pendingWatchEvents.get(path.join('/test', 'deleted.js'))).toBe('unlink');
     expect(console.info).toHaveBeenCalledWith(

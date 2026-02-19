@@ -23,17 +23,17 @@ describe('HybridSearch coverage', () => {
 
     const cache = createHybridSearchCacheStub({
       vectorStore,
-      
+
       queryAnn: async () => [0],
     });
 
     const config = {
       annEnabled: true,
-      
+
       annMinCandidates: 0,
       annMaxCandidates: 10,
       annCandidateMultiplier: 1,
-      
+
       maxResults: 5,
       semanticWeight: 1,
       exactMatchBoost: 1,
@@ -45,14 +45,6 @@ describe('HybridSearch coverage', () => {
     const embedder = async () => ({ data: new Float32Array([1, 0]) });
 
     const hybridSearch = new HybridSearch(embedder, cache, config);
-
-    
-    
-    
-    
-    
-    
-    
 
     const { results } = await hybridSearch.search('exact match', 5);
 

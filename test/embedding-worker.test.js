@@ -163,10 +163,9 @@ describe('embedding-worker', () => {
 
     const files = Array.from({ length: 10 }, (_, i) => ({
       file: `cross-${i}.js`,
-      content: Array.from(
-        { length: 40 },
-        (_, line) => `const value_${i}_${line} = ${line};`
-      ).join('\n'),
+      content: Array.from({ length: 40 }, (_, line) => `const value_${i}_${line} = ${line};`).join(
+        '\n'
+      ),
       force: true,
     }));
 
@@ -236,7 +235,6 @@ describe('embedding-worker', () => {
 
     await messageHandler({ type: 'unknown' });
 
-    
     expect(parentPort.postMessage).toHaveBeenCalledTimes(2);
     expect(parentPort.postMessage).toHaveBeenCalledWith({ type: 'ready' });
     expect(parentPort.postMessage).toHaveBeenCalledWith({

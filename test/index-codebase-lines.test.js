@@ -2,19 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { CodebaseIndexer } from '../features/index-codebase.js';
 import path from 'path';
 
-
-
-
-
-
 describe('CodebaseIndexer Glob Coverage', () => {
   it('should handle single star glob patterns correctly', () => {
-    
-    
-
-    
-    
-
     const config = {
       excludePatterns: ['*.log', 'src/*.js'],
       fileExtensions: ['js'],
@@ -22,23 +11,19 @@ describe('CodebaseIndexer Glob Coverage', () => {
       verbose: true,
     };
 
-    
     const embedder = vi.fn();
     const cache = { load: vi.fn() };
 
     const indexer = new CodebaseIndexer(embedder, cache, config);
 
-    
     expect(indexer.isExcluded('error.log')).toBe(true);
     expect(indexer.isExcluded('src/utils.js')).toBe(true);
     expect(indexer.isExcluded('src/utils.test.js')).toBe(true);
-    expect(indexer.isExcluded('src/sub/utils.js')).toBe(false); 
+    expect(indexer.isExcluded('src/sub/utils.js')).toBe(false);
     expect(indexer.isExcluded('other.js')).toBe(false);
   });
 
   it('should handle question mark glob patterns', () => {
-    
-
     const config = {
       excludePatterns: ['test?.js'],
 
@@ -57,10 +42,6 @@ describe('CodebaseIndexer Glob Coverage', () => {
   });
 
   it('should handle double star not followed by slash', () => {
-    
-
-    
-
     const config = {
       excludePatterns: ['dir/foo**bar'],
 
@@ -71,13 +52,9 @@ describe('CodebaseIndexer Glob Coverage', () => {
 
     const indexer = new CodebaseIndexer(vi.fn(), {}, config);
 
-    
-
     expect(indexer.isExcluded('dir/fooxyzbar')).toBe(true);
 
     expect(indexer.isExcluded('dir/foobar')).toBe(true);
-
-    
 
     expect(indexer.isExcluded('dir/foo/nested/bar')).toBe(true);
   });
@@ -85,14 +62,6 @@ describe('CodebaseIndexer Glob Coverage', () => {
 
 describe('CodebaseIndexer Worker Chunking', () => {
   it('should handle fewer chunks than workers (Line 222 coverage)', async () => {
-    
-
-    
-
-    
-
-    
-
     vi.mock('os', async () => {
       const actual = await vi.importActual('os');
 
@@ -102,8 +71,6 @@ describe('CodebaseIndexer Worker Chunking', () => {
         cpus: () => [{}, {}, {}, {}],
       };
     });
-
-    
 
     vi.mock('worker_threads', async () => {
       const { EventEmitter } = await import('events');
@@ -130,7 +97,7 @@ describe('CodebaseIndexer Worker Chunking', () => {
 
     const { CodebaseIndexer } = await import('../features/index-codebase.js');
 
-    const config = { workerThreads: 2, verbose: true }; 
+    const config = { workerThreads: 2, verbose: true };
 
     const indexer = new CodebaseIndexer(
       vi.fn(),
@@ -139,8 +106,6 @@ describe('CodebaseIndexer Worker Chunking', () => {
     );
 
     await indexer.initializeWorkers();
-
-    
 
     await indexer.processChunksWithWorkers([{ text: 'abc', file: 'f.js' }]);
 

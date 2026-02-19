@@ -108,8 +108,7 @@ describe('BinaryVectorStore smoke', () => {
       const renameSpy = vi.spyOn(fs, 'rename').mockImplementation(async (source, target) => {
         const from = String(source);
         const to = String(target);
-        const isTempToLiveVectors =
-          from.includes('.tmp-') && to.endsWith(`${path.sep}vectors.bin`);
+        const isTempToLiveVectors = from.includes('.tmp-') && to.endsWith(`${path.sep}vectors.bin`);
         if (!injected && isTempToLiveVectors) {
           injected = true;
           const err = new Error('simulated non-retryable failure');
@@ -246,7 +245,7 @@ describe('BinaryVectorStore integrity checks', () => {
       // Corrupt a byte in the records payload (after the 32-byte header)
       const recordsPath = path.join(dir, 'records.bin');
       const recordsData = await fs.readFile(recordsPath);
-      recordsData[33] ^= 0xFF;
+      recordsData[33] ^= 0xff;
       await fs.writeFile(recordsPath, recordsData);
 
       await expect(BinaryVectorStore.load(dir)).rejects.toThrow(BinaryStoreCorruptionError);
@@ -339,7 +338,7 @@ describe('BinaryVectorStore integrity checks', () => {
       // Corrupt a byte in content.bin payload (after the 32-byte header)
       const contentPath = path.join(dir, 'content.bin');
       const contentData = await fs.readFile(contentPath);
-      contentData[33] ^= 0xFF;
+      contentData[33] ^= 0xff;
       await fs.writeFile(contentPath, contentData);
 
       await expect(BinaryVectorStore.load(dir)).rejects.toThrow(BinaryStoreCorruptionError);
@@ -365,15 +364,15 @@ describe('BinaryVectorStore integrity checks', () => {
       // Corrupt vectors payload (after 32-byte header)
       const vectorsPath = path.join(dir, 'vectors.bin');
       const vectorsData = await fs.readFile(vectorsPath);
-      vectorsData[33] ^= 0xFF;
+      vectorsData[33] ^= 0xff;
       await fs.writeFile(vectorsPath, vectorsData);
 
-      await expect(
-        BinaryVectorStore.load(dir, { vectorLoadMode: 'disk' })
-      ).rejects.toThrow(BinaryStoreCorruptionError);
-      await expect(
-        BinaryVectorStore.load(dir, { vectorLoadMode: 'disk' })
-      ).rejects.toThrow(/vectors CRC32 mismatch/);
+      await expect(BinaryVectorStore.load(dir, { vectorLoadMode: 'disk' })).rejects.toThrow(
+        BinaryStoreCorruptionError
+      );
+      await expect(BinaryVectorStore.load(dir, { vectorLoadMode: 'disk' })).rejects.toThrow(
+        /vectors CRC32 mismatch/
+      );
     });
   });
 
@@ -401,5 +400,4 @@ describe('BinaryVectorStore integrity checks', () => {
       expect(telemetry?.lastCorruption?.context).toBe('secondary attach');
     });
   });
-
 });

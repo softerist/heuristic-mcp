@@ -1,8 +1,3 @@
-
-
-
-
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fsPromisesMock = {};
@@ -279,11 +274,10 @@ describe('register', () => {
   });
 
   it('handles missing LOCALAPPDATA on Windows', async () => {
-    
     process.env.ANTIGRAVITY_AGENT = '1';
     setPlatform('win32');
     delete process.env.LOCALAPPDATA;
-    
+
     fsPromisesMock.access.mockResolvedValue();
     fsPromisesMock.readFile.mockResolvedValue('{}');
 
@@ -324,9 +318,10 @@ describe('register', () => {
     const { register } = await import('../features/register.js');
     await register('cursor');
 
-    const cursorGlobalCall = fsMock.writeFileSync.mock.calls.find(([filePath]) =>
-      String(filePath).toLowerCase().includes('.cursor') &&
-      String(filePath).toLowerCase().endsWith('mcp.json')
+    const cursorGlobalCall = fsMock.writeFileSync.mock.calls.find(
+      ([filePath]) =>
+        String(filePath).toLowerCase().includes('.cursor') &&
+        String(filePath).toLowerCase().endsWith('mcp.json')
     );
     expect(cursorGlobalCall).toBeDefined();
   });
@@ -341,10 +336,11 @@ describe('register', () => {
     const { register } = await import('../features/register.js');
     await register('windsurf');
 
-    const windsurfCall = fsMock.writeFileSync.mock.calls.find(([filePath]) =>
-      String(filePath).toLowerCase().includes('.codeium') &&
-      String(filePath).toLowerCase().includes('windsurf') &&
-      String(filePath).toLowerCase().endsWith('mcp_config.json')
+    const windsurfCall = fsMock.writeFileSync.mock.calls.find(
+      ([filePath]) =>
+        String(filePath).toLowerCase().includes('.codeium') &&
+        String(filePath).toLowerCase().includes('windsurf') &&
+        String(filePath).toLowerCase().endsWith('mcp_config.json')
     );
     expect(windsurfCall).toBeDefined();
   });
@@ -360,9 +356,10 @@ describe('register', () => {
     const { register } = await import('../features/register.js');
     await register('warp');
 
-    const warpCall = fsMock.writeFileSync.mock.calls.find(([filePath]) =>
-      String(filePath).toLowerCase().includes('.warp') &&
-      String(filePath).toLowerCase().endsWith('mcp_settings.json')
+    const warpCall = fsMock.writeFileSync.mock.calls.find(
+      ([filePath]) =>
+        String(filePath).toLowerCase().includes('.warp') &&
+        String(filePath).toLowerCase().endsWith('mcp_settings.json')
     );
     expect(warpCall).toBeDefined();
   });

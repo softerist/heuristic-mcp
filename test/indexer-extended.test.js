@@ -13,13 +13,11 @@ vi.mock('chokidar', () => ({
   },
 }));
 
-
 class MockWorker extends EventEmitter {
   constructor() {
     super();
     this.postMessage = vi.fn((msg) => {
       if (msg.type === 'process') {
-        
         setTimeout(() => {
           this.emit('message', {
             type: 'results',
@@ -80,7 +78,7 @@ describe('CodebaseIndexer Detailed Coverage', () => {
       indexer.config.fileNames = ['config.json'];
       await indexer.setupFileWatcher();
       expect(indexer.watcher).toBeDefined();
-      await indexer.terminateWorkers(); 
+      await indexer.terminateWorkers();
     });
   });
 
@@ -112,17 +110,15 @@ describe('CodebaseIndexer Detailed Coverage', () => {
     });
 
     it('covers worker creation and ready flow (lines 110-143)', async () => {
-      
       vi.doMock('os', () => ({
         default: { cpus: () => [{}, {}, {}, {}] },
         cpus: () => [{}, {}, {}, {}],
       }));
 
-      
       vi.doMock('worker_threads', () => ({
         Worker: vi.fn(function () {
           const w = new MockWorker();
-          
+
           setTimeout(() => w.emit('message', { type: 'ready' }), 10);
           return w;
         }),
@@ -140,7 +136,7 @@ describe('CodebaseIndexer Detailed Coverage', () => {
 
     it('covers worker processing with recovery (lines 197-283)', async () => {
       const worker = new MockWorker();
-      
+
       indexer.workers = [worker];
       const chunks = [{ file: 'a.js', text: 'code' }];
 
@@ -153,7 +149,7 @@ describe('CodebaseIndexer Detailed Coverage', () => {
       vi.doMock('worker_threads', () => ({
         Worker: vi.fn(function () {
           const w = new MockWorker();
-          
+
           setTimeout(() => w.emit('error', new Error('Init fail')), 10);
           return w;
         }),
@@ -163,7 +159,7 @@ describe('CodebaseIndexer Detailed Coverage', () => {
       const localIndexer = new CodebaseIndexer(mockEmbedder, mockCache, {
         ...config,
         workerThreads: 1,
-      }); 
+      });
       localIndexer.config.workerThreads = 2;
 
       await localIndexer.initializeWorkers();

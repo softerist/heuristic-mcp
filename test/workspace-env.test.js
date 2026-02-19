@@ -72,7 +72,8 @@ describe('workspace-env', () => {
   it('excludes known bad dynamic keys even when dynamic discovery is enabled', () => {
     const env = {
       HEURISTIC_MCP_ENABLE_DYNAMIC_WORKSPACE_ENV: 'true',
-      ANTIGRAVITY_EDITOR_APP_ROOT: 'C:\\Users\\user\\AppData\\Local\\Programs\\Antigravity\\resources\\app',
+      ANTIGRAVITY_EDITOR_APP_ROOT:
+        'C:\\Users\\user\\AppData\\Local\\Programs\\Antigravity\\resources\\app',
       ANTIGRAVITY_WORKSPACE_ROOT: 'C:\\heuristic-mcp',
     };
 

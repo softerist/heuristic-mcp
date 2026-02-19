@@ -1,5 +1,3 @@
-
-
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import {
   createTestFixtures,
@@ -17,7 +15,6 @@ describe('HybridSearch', () => {
   beforeAll(async () => {
     fixtures = await createTestFixtures({ workerThreads: 1, verbose: true });
 
-    
     await clearTestCache(fixtures.config);
     fixtures.cache.setVectorStore([]);
     fixtures.cache.clearFileHashes();
@@ -30,13 +27,11 @@ describe('HybridSearch', () => {
 
   describe('Search Functionality', () => {
     it('should find relevant code for semantic queries', async () => {
-      
       const { results, message } = await fixtures.hybridSearch.search('embedding model', 5);
 
       expect(message).toBeNull();
       expect(results.length).toBeGreaterThan(0);
 
-      
       for (const result of results) {
         expect(result).toHaveProperty('file');
         expect(result).toHaveProperty('content');
@@ -52,7 +47,6 @@ describe('HybridSearch', () => {
 
       expect(results.length).toBeGreaterThan(1);
 
-      
       for (let i = 1; i < results.length; i++) {
         expect(results[i - 1].score).toBeGreaterThanOrEqual(results[i].score);
       }
@@ -66,10 +60,8 @@ describe('HybridSearch', () => {
     });
 
     it('should boost exact matches', async () => {
-      
       const { results: exactResults } = await fixtures.hybridSearch.search('embedder', 5);
 
-      
       const hasExactMatch = exactResults.some((r) => r.content.toLowerCase().includes('embedder'));
 
       expect(hasExactMatch).toBe(true);
@@ -87,7 +79,6 @@ describe('HybridSearch', () => {
 
   describe('Empty Index Handling', () => {
     it('should return helpful message when index is empty', async () => {
-      
       const emptyCache = createHybridSearchCacheStub({
         vectorStore: [],
         getVector: () => null,
@@ -107,7 +98,6 @@ describe('HybridSearch', () => {
       const { results } = await fixtures.hybridSearch.search('function', 3);
       const formatted = await fixtures.hybridSearch.formatResults(results);
 
-      
       expect(formatted).toContain('## Result');
       expect(formatted).toContain('**File:**');
       expect(formatted).toContain('**Lines:**');
@@ -125,18 +115,15 @@ describe('HybridSearch', () => {
       const { results } = await fixtures.hybridSearch.search('export', 1);
       const formatted = await fixtures.hybridSearch.formatResults(results);
 
-      
       expect(formatted).not.toContain(fixtures.config.searchDirectory);
     });
   });
 
   describe('Score Calculation', () => {
     it('should give higher scores to more relevant results', async () => {
-      
       const { results } = await fixtures.hybridSearch.search('CodebaseIndexer', 5);
 
       if (results.length > 0) {
-        
         expect(results[0].score).toBeGreaterThan(0.3);
       }
     });
@@ -144,7 +131,6 @@ describe('HybridSearch', () => {
     it('should apply semantic weight from config', async () => {
       const { results } = await fixtures.hybridSearch.search('async function', 5);
 
-      
       for (const result of results) {
         expect(result.score).toBeGreaterThan(0);
       }
@@ -324,18 +310,6 @@ describe('HybridSearch', () => {
     });
 
     it('should add exact matches missed by ANN and avoid duplicates (lines 110, 113 coverage)', async () => {
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
       const vectorStore = [
         {
           file: 'a.js',
@@ -554,7 +528,6 @@ describe('Hybrid Search Tool Handler', () => {
   beforeAll(async () => {
     fixtures = await createTestFixtures({ workerThreads: 1 });
 
-    
     await fixtures.indexer.indexAll(false);
   });
 
@@ -600,7 +573,6 @@ describe('Hybrid Search Tool Handler', () => {
 
       const result = await HybridSearchFeature.handleToolCall(request, fixtures.hybridSearch);
 
-      
       expect(result.content[0].text.length).toBeGreaterThan(0);
     });
 
@@ -612,7 +584,6 @@ describe('Hybrid Search Tool Handler', () => {
 
       const result = await HybridSearchFeature.handleToolCall(request, fixtures.hybridSearch);
 
-      
       const resultCount = (result.content[0].text.match(/## Result/g) || []).length;
       expect(resultCount).toBeLessThanOrEqual(2);
     });
@@ -624,7 +595,6 @@ describe('Hybrid Search Tool Handler', () => {
 
       const result = await HybridSearchFeature.handleToolCall(request, fixtures.hybridSearch);
 
-      
       expect(result.content[0].text.length).toBeGreaterThan(0);
     });
 

@@ -1,5 +1,3 @@
-
-
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import {
   createTestFixtures,
@@ -23,7 +21,6 @@ describe('CacheClearer', () => {
   });
 
   beforeEach(async () => {
-    
     fixtures.indexer.isIndexing = false;
     fixtures.cache.isSaving = false;
     fixtures.cacheClearer.isClearing = false;
@@ -33,13 +30,10 @@ describe('CacheClearer', () => {
     it('should clear cache successfully', async () => {
       expect(fixtures.cacheClearer).toBeInstanceOf(CacheClearer);
 
-      
       await fixtures.indexer.indexAll(true);
 
-      
       expect(fixtures.cache.getVectorStore().length).toBeGreaterThan(0);
 
-      
       const result = await fixtures.cacheClearer.execute();
 
       expect(result.success).toBe(true);
@@ -48,35 +42,27 @@ describe('CacheClearer', () => {
     });
 
     it('should empty vectorStore and fileHashes', async () => {
-      
       await fixtures.indexer.indexAll(true);
 
-      
       await fixtures.cacheClearer.execute();
 
-      
       expect(fixtures.cache.getVectorStore().length).toBe(0);
       expect(fixtures.cache.getFileHashCount()).toBe(0);
     });
 
     it('should delete cache directory', async () => {
-      
       await fixtures.indexer.indexAll(true);
 
-      
       await expect(fs.access(fixtures.config.cacheDirectory)).resolves.not.toThrow();
 
-      
       await fixtures.cacheClearer.execute();
 
-      
       await expect(fs.access(fixtures.config.cacheDirectory)).rejects.toThrow();
     });
   });
 
   describe('Protection During Indexing', () => {
     it('should prevent clear while indexing is in progress', async () => {
-      
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
       fixtures.cache.clearFileHashes();
@@ -84,7 +70,6 @@ describe('CacheClearer', () => {
       const indexPromise = fixtures.indexer.indexAll(true);
       expect(fixtures.indexer.isIndexing).toBe(true);
 
-      
       await expect(fixtures.cacheClearer.execute()).rejects.toThrow(
         'Cannot clear cache while indexing is in progress'
       );
@@ -93,11 +78,9 @@ describe('CacheClearer', () => {
     });
 
     it('should allow clear after indexing completes', async () => {
-      
       await fixtures.indexer.indexAll(true);
       expect(fixtures.indexer.isIndexing).toBe(false);
 
-      
       const result = await fixtures.cacheClearer.execute();
       expect(result.success).toBe(true);
     });
@@ -105,26 +88,20 @@ describe('CacheClearer', () => {
 
   describe('Protection During Save', () => {
     it('should prevent clear while cache is being saved', async () => {
-      
       fixtures.cache.isSaving = true;
 
-      
       await expect(fixtures.cacheClearer.execute()).rejects.toThrow(
         'Cannot clear cache while cache is being saved'
       );
 
-      
       fixtures.cache.isSaving = false;
     });
 
     it('should allow clear after save completes', async () => {
-      
       await fixtures.indexer.indexAll(true);
 
-      
       expect(fixtures.cache.isSaving).toBe(false);
 
-      
       const result = await fixtures.cacheClearer.execute();
       expect(result.success).toBe(true);
     });
@@ -132,13 +109,10 @@ describe('CacheClearer', () => {
 
   describe('Concurrent Clear Prevention', () => {
     it('should prevent multiple concurrent clears', async () => {
-      
       await fixtures.indexer.indexAll(true);
 
-      
       fixtures.cacheClearer.isClearing = false;
 
-      
       const promises = [
         fixtures.cacheClearer.execute(),
         fixtures.cacheClearer.execute(),
@@ -147,46 +121,36 @@ describe('CacheClearer', () => {
 
       const results = await Promise.allSettled(promises);
 
-      
       const successes = results.filter((r) => r.status === 'fulfilled');
       const failures = results.filter((r) => r.status === 'rejected');
 
       expect(successes.length).toBe(1);
       expect(failures.length).toBe(2);
 
-      
       for (const failure of failures) {
         expect(failure.reason.message).toContain('already in progress');
       }
     });
 
     it('should reset isClearing flag after completion', async () => {
-      
       await fixtures.indexer.indexAll(true);
 
       expect(fixtures.cacheClearer.isClearing).toBe(false);
 
-      
       await fixtures.cacheClearer.execute();
 
-      
       expect(fixtures.cacheClearer.isClearing).toBe(false);
     });
 
     it('should reset isClearing flag even on error', async () => {
-      
       fixtures.cache.isSaving = true;
 
       try {
         await fixtures.cacheClearer.execute();
-      } catch {
-        
-      }
+      } catch {}
 
-      
       expect(fixtures.cacheClearer.isClearing).toBe(false);
 
-      
       fixtures.cache.isSaving = false;
     });
   });
@@ -222,7 +186,6 @@ describe('Clear Cache Tool Handler', () => {
 
   describe('Tool Handler', () => {
     it('should return success message on cleared cache', async () => {
-      
       await fixtures.indexer.indexAll(true);
 
       const request = createMockRequest('c_clear_cache', {});
@@ -233,7 +196,6 @@ describe('Clear Cache Tool Handler', () => {
     });
 
     it('should return error message when indexing is in progress', async () => {
-      
       await clearTestCache(fixtures.config);
       fixtures.cache.setVectorStore([]);
       fixtures.cache.clearFileHashes();

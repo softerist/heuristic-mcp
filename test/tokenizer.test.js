@@ -1,5 +1,3 @@
-
-
 import { describe, it, expect } from 'vitest';
 import {
   estimateTokens,
@@ -17,9 +15,8 @@ describe('Token Estimation', () => {
     });
 
     it('should count simple words correctly', () => {
-      
       const result = estimateTokens('hello world');
-      expect(result).toBeGreaterThanOrEqual(4); 
+      expect(result).toBeGreaterThanOrEqual(4);
       expect(result).toBeLessThanOrEqual(6);
     });
 
@@ -27,7 +24,6 @@ describe('Token Estimation', () => {
       const shortWord = estimateTokens('cat');
       const longWord = estimateTokens('internationalization');
 
-      
       expect(longWord).toBeGreaterThan(shortWord);
     });
 
@@ -35,7 +31,6 @@ describe('Token Estimation', () => {
       const withoutSpecial = estimateTokens('hello world');
       const withSpecial = estimateTokens('hello(); world{}');
 
-      
       expect(withSpecial).toBeGreaterThan(withoutSpecial);
     });
 
@@ -49,7 +44,6 @@ describe('Token Estimation', () => {
 
       const tokens = estimateTokens(code);
 
-      
       expect(tokens).toBeGreaterThan(10);
       expect(tokens).toBeLessThan(100);
     });
@@ -109,15 +103,14 @@ describe('Chunking Parameters', () => {
       const params = getChunkingParams('jinaai/jina-embeddings-v2-base-code');
 
       expect(params.maxTokens).toBe(512);
-      expect(params.targetTokens).toBeLessThan(512); 
+      expect(params.targetTokens).toBeLessThan(512);
       expect(params.targetTokens).toBeGreaterThan(400);
       expect(params.overlapTokens).toBeLessThan(params.targetTokens);
     });
 
     it('should calculate ~85% for target tokens', () => {
-      const params = getChunkingParams('jinaai/jina-embeddings-v2-base-code'); 
+      const params = getChunkingParams('jinaai/jina-embeddings-v2-base-code');
 
-      
       expect(params.targetTokens).toBe(Math.floor(512 * 0.85));
     });
 
@@ -165,13 +158,11 @@ describe('Integration: Token Estimation Accuracy', () => {
 
     const tokens = estimateTokens(typicalCodeChunk);
 
-    
     expect(tokens).toBeGreaterThan(30);
     expect(tokens).toBeLessThan(200);
   });
 
   it('should keep small code chunks under model limits', () => {
-    
     const safeChunk = 'const x = 1;\n'.repeat(10);
     const limit = getModelTokenLimit('jinaai/jina-embeddings-v2-base-code');
     expect(estimateTokens(safeChunk)).toBeLessThanOrEqual(limit);

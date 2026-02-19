@@ -166,6 +166,7 @@ For faster search with smaller embeddings, switch to an MRL-compatible model:
 ```
 
 **MRL-compatible models:**
+
 - `nomic-ai/nomic-embed-text-v1.5` — recommended for 128d/256d
 - Other models explicitly trained with Matryoshka loss
 
@@ -239,6 +240,7 @@ The vectors and content are stored in `vectors.sqlite` in your cache directory. 
 `vectorStore.vectorStoreContentMode` and `vectorStore.vectorStoreLoadMode` are respected for SQLite (use `vectorStore.vectorStoreLoadMode=disk` to avoid loading vectors into memory).
 
 **Tradeoffs vs Binary:**
+
 - Slightly higher read overhead (SQL queries vs direct memory access)
 - Better write reliability (transactions)
 - Easier debugging (standard SQLite file)
@@ -266,24 +268,31 @@ Note: On small repos, disk mode may be slightly slower and show noisy RSS deltas
 ## MCP Tools Reference
 
 ### `a_semantic_search`
+
 Find code by meaning. Ideal for natural language queries like "authentication logic" or "database queries".
 
 ### `b_index_codebase`
+
 Manually trigger a full reindex. Useful after large code changes.
 
 ### `c_clear_cache`
+
 Clear the embeddings cache and force reindex.
 
 ### `d_ann_config`
+
 Configure the ANN (Approximate Nearest Neighbor) index. Actions: `stats`, `set_ef_search`, `rebuild`.
 
 ### `d_find_similar_code`
+
 Find similar code patterns given a snippet. Useful for finding duplicates or refactoring opportunities.
 
 ### `e_check_package_version`
+
 Fetch the latest version of a package from its official registry.
 
 **Supported registries:**
+
 - **npm** (default): `lodash`, `@types/node`
 - **PyPI**: `pip:requests`, `pypi:django`
 - **crates.io**: `cargo:serde`, `rust:tokio`
@@ -298,11 +307,13 @@ Fetch the latest version of a package from its official registry.
 - **Conda**: `conda:numpy`
 
 ### `f_set_workspace`
+
 Change the workspace directory at runtime. Updates search directory, cache location, and optionally triggers reindex.
 
 The server also attempts this automatically before each tool call when it detects a new workspace path from environment variables (for example `CODEX_WORKSPACE`, `CODEX_PROJECT_ROOT`, `WORKSPACE_FOLDER`).
 
 **Parameters:**
+
 - `workspacePath` (required): Absolute path to the new workspace
 - `reindex` (optional, default: `true`): Whether to trigger a full reindex
 

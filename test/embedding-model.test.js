@@ -1,5 +1,3 @@
-
-
 import { describe, it, expect, beforeAll } from 'vitest';
 import { pipeline } from '@huggingface/transformers';
 import { dotSimilarity } from '../lib/utils.js';
@@ -18,14 +16,10 @@ describe('Local Embedding Model', () => {
       embedder = await pipeline('feature-extraction', config.embeddingModel);
       console.info('[Test] Embedding model loaded successfully');
     } else {
-      
-      
       embedder = async (text, options = {}) => {
         const input = String(text ?? '').toLowerCase();
         const vector = new Float32Array(mockDimensions).fill(0);
 
-        
-        
         const concepts = {
           login: 0,
           auth: 0,
@@ -41,29 +35,24 @@ describe('Local Embedding Model', () => {
           require: 3,
           module: 3,
           react: 3,
-          vue: 3, 
+          vue: 3,
           weather: 4,
           sun: 4,
           pizza: 5,
           food: 5,
         };
 
-        
-        
         for (const word of input.split(/\W+/)) {
           if (!word) continue;
 
-          
           if (word in concepts) {
             const dim = concepts[word];
             vector[dim] += 1.0;
           }
 
-          
-          
           for (let i = 0; i < word.length; i++) {
             const charCode = word.charCodeAt(i);
-            
+
             vector[charCode % mockDimensions] += 0.1;
           }
         }
@@ -106,7 +95,6 @@ describe('Local Embedding Model', () => {
       const vector = Array.from(output.data);
 
       if (useRealEmbedder) {
-        
         expect(vector.length).toBe(768);
       } else {
         expect(vector.length).toBe(mockDimensions);
@@ -118,7 +106,6 @@ describe('Local Embedding Model', () => {
       const output = await embedder(text, { pooling: 'mean', normalize: true });
       const vector = Array.from(output.data);
 
-      
       const magnitude = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
       expect(magnitude).toBeCloseTo(1, 4);
     });
@@ -136,7 +123,6 @@ describe('Local Embedding Model', () => {
       const vector1 = Array.from(output1.data);
       const vector2 = Array.from(output2.data);
 
-      
       const areSame = vector1.every((v, i) => Math.abs(v - vector2[i]) < 0.0001);
       expect(areSame).toBe(false);
     });
@@ -193,7 +179,6 @@ describe('Local Embedding Model', () => {
 
       const similarity = dotSimilarity(vector1, vector2);
 
-      
       expect(similarity).toBeGreaterThan(0.9);
     });
 
@@ -212,8 +197,7 @@ describe('Local Embedding Model', () => {
 
       const similarity = dotSimilarity(vector1, vector2);
 
-      
-      expect(similarity).toBeLessThan(0.7); 
+      expect(similarity).toBeLessThan(0.7);
     });
 
     it('should capture code semantic similarity', async () => {
@@ -234,10 +218,9 @@ describe('Local Embedding Model', () => {
       const v2 = Array.from(output2.data);
       const v3 = Array.from(output3.data);
 
-      const sim12 = dotSimilarity(v1, v2); 
-      const sim13 = dotSimilarity(v1, v3); 
+      const sim12 = dotSimilarity(v1, v2);
+      const sim13 = dotSimilarity(v1, v3);
 
-      
       expect(sim12).toBeGreaterThan(sim13);
     });
 
@@ -259,10 +242,9 @@ describe('Local Embedding Model', () => {
       const v2 = Array.from(output2.data);
       const v3 = Array.from(output3.data);
 
-      const sim12 = dotSimilarity(v1, v2); 
-      const sim13 = dotSimilarity(v1, v3); 
+      const sim12 = dotSimilarity(v1, v2);
+      const sim13 = dotSimilarity(v1, v3);
 
-      
       expect(sim12).toBeGreaterThan(sim13);
     });
   });
@@ -275,7 +257,6 @@ describe('Local Embedding Model', () => {
       await embedder(text, { pooling: 'mean', normalize: true });
       const duration = Date.now() - start;
 
-      
       expect(duration).toBeLessThan(1500);
     });
 
@@ -294,7 +275,6 @@ describe('Local Embedding Model', () => {
       }
       const duration = Date.now() - start;
 
-      
       expect(duration).toBeLessThan(6000);
       console.info(
         `[Test] 5 embeddings generated in ${duration}ms (${(duration / 5).toFixed(0)}ms avg)`

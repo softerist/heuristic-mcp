@@ -21,7 +21,7 @@ describe('HybridSearch Final Coverage', () => {
       });
       const config = {
         annEnabled: false,
-        semanticWeight: 0, 
+        semanticWeight: 0,
         exactMatchBoost: 10,
         recencyBoost: 0,
         callGraphEnabled: false,
@@ -89,8 +89,7 @@ describe('HybridSearch Final Coverage', () => {
       ];
 
       const relatedMap = new Map();
-      relatedMap.set('related.js', 1); 
-      
+      relatedMap.set('related.js', 1);
 
       const cache = createHybridSearchCacheStub({
         vectorStore,
@@ -104,13 +103,13 @@ describe('HybridSearch Final Coverage', () => {
         exactMatchBoost: 0,
         recencyBoost: 0,
         callGraphEnabled: true,
-        callGraphBoost: 10, 
+        callGraphBoost: 10,
         searchDirectory: '/mock',
       };
 
       const embedder = async () => ({ data: new Float32Array([1, 0]) });
       const hybrid = new HybridSearch(embedder, cache, config);
-      
+
       vi.spyOn(CallGraph, 'extractSymbolsFromContent').mockReturnValue(['source']);
 
       const { results } = await hybrid.search('query', 3);
@@ -176,7 +175,6 @@ describe('HybridSearch Final Coverage', () => {
       const embedder = async () => ({ data: new Float32Array([1]) });
       const hybrid = new HybridSearch(embedder, cache, config);
 
-      
       await hybrid.search('a', 2);
     });
 
@@ -190,7 +188,7 @@ describe('HybridSearch Final Coverage', () => {
       });
       const config = {
         annEnabled: true,
-        maxResults: 1, 
+        maxResults: 1,
         semanticWeight: 1,
         exactMatchBoost: 1,
         recencyBoost: 0,

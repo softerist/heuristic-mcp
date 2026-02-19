@@ -52,25 +52,21 @@ describe('EmbeddingsCache Perfection', () => {
       const config = makeConfig(dir);
       const cache = new EmbeddingsCache(config);
 
-      
       cache.config.annEnabled = false;
       expect(await cache.ensureAnnIndex()).toBeNull();
 
-      
       cache.config.annEnabled = true;
       cache.config.annMinChunks = 10;
       cache.vectorStore = [{ vector: [1, 2, 3] }];
       expect(await cache.ensureAnnIndex()).toBeNull();
 
-      
-      cache.config.annMinChunks = 1; 
+      cache.config.annMinChunks = 1;
       const mockIndex = { setEf: vi.fn() };
       cache.annIndex = mockIndex;
       cache.annDirty = false;
       expect(await cache.ensureAnnIndex()).toBe(mockIndex);
 
-      
-      cache.annIndex = null; 
+      cache.annIndex = null;
       const loadingValue = { mock: 'loading' };
       const loadingPromise = Promise.resolve(loadingValue);
       cache.annLoading = loadingPromise;
@@ -86,7 +82,7 @@ describe('EmbeddingsCache Perfection', () => {
       const meta = { version: 1, embeddingModel: config.embeddingModel };
       const cacheData = [
         { file: 'a.js', vector: [1, 2] },
-        { file: 'a.txt', vector: [3, 4] }, 
+        { file: 'a.txt', vector: [3, 4] },
       ];
       const hashData = {
         'a.js': 'hash1',
@@ -110,13 +106,11 @@ describe('EmbeddingsCache Perfection', () => {
       const config = makeConfig(dir);
       const cache = new EmbeddingsCache(config);
 
-      
       const meta = { version: 1, embeddingModel: config.embeddingModel };
       await fs.writeFile(path.join(dir, 'meta.json'), JSON.stringify(meta));
 
-      
       await cache.load();
-      
+
       expect(infoSpy).not.toHaveBeenCalledWith(expect.stringContaining('call-graph'));
     });
   });
@@ -126,16 +120,13 @@ describe('EmbeddingsCache Perfection', () => {
       const config = makeConfig(dir, { enableCache: true });
       const cache = new EmbeddingsCache(config);
 
-      
       const callGraphFile = path.join(dir, 'call-graph.json');
       await fs.writeFile(callGraphFile, '{}');
       await cache.clearCallGraphData({ removeFile: true });
       await expect(fs.access(callGraphFile)).rejects.toThrow();
 
-      
       cache.config.enableCache = false;
       await cache.clearCallGraphData({ removeFile: true });
-      
     });
   });
 
@@ -144,14 +135,11 @@ describe('EmbeddingsCache Perfection', () => {
       const config = makeConfig(dir, { callGraphEnabled: false });
       const cache = new EmbeddingsCache(config);
 
-      
       expect((await cache.getRelatedFiles(['sym'])).size).toBe(0);
 
-      
       cache.config.callGraphEnabled = true;
       expect((await cache.getRelatedFiles([])).size).toBe(0);
 
-      
       cache.clearFileCallData();
       cache.callGraph = null;
       expect((await cache.getRelatedFiles(['sym'])).size).toBe(0);
@@ -176,7 +164,6 @@ describe('EmbeddingsCache Perfection', () => {
 
   it('covers readHnswIndex retries and failure', () => {
     const cache = new EmbeddingsCache(makeConfig('dir'));
-    
   });
 
   it('covers readHnswIndex retries and failure via loadAnnIndexFromDisk', async () => {
@@ -202,7 +189,7 @@ describe('EmbeddingsCache Perfection', () => {
         readIndexSync() {
           calls++;
           if (calls === 1) throw new Error('fail 1');
-          if (calls === 2) return true; 
+          if (calls === 2) return true;
         }
         setEf() {}
       }
@@ -210,7 +197,6 @@ describe('EmbeddingsCache Perfection', () => {
       await cache.loadAnnIndexFromDisk(MockIndex, 1);
       expect(calls).toBe(2);
 
-      
       calls = 0;
       class FailIndex {
         readIndexSync() {
@@ -230,10 +216,8 @@ describe('EmbeddingsCache Perfection', () => {
     const cache = new EmbeddingsCache(makeConfig('dir', { verbose: true }));
     cache.setFileCallData('a.js', {});
 
-    
-    
     cache.rebuildCallGraph();
-    
+
     await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
@@ -259,7 +243,7 @@ describe('EmbeddingsCache Perfection', () => {
           calls++;
           if (calls === 1) throw new Error('1st fail');
           if (calls === 2) throw new Error('2nd fail');
-          return; 
+          return;
         }
       }
 
@@ -271,7 +255,7 @@ describe('EmbeddingsCache Perfection', () => {
   it('covers annVectorCache length mismatch', () => {
     const cache = new EmbeddingsCache(makeConfig('dir'));
     cache.vectorStore = [{ vector: [1] }];
-    cache.annVectorCache = new Array(10); 
+    cache.annVectorCache = new Array(10);
     const vec = cache.getAnnVector(0);
     expect(cache.annVectorCache.length).toBe(1);
     expect(vec).toBeInstanceOf(Float32Array);
@@ -297,7 +281,6 @@ describe('EmbeddingsCache Perfection', () => {
     const cache = new EmbeddingsCache(makeConfig('dir'));
     cache.vectorStore = [{ vector: [1] }];
 
-    
     const mockIndex = {
       searchKnn: vi
         .fn()
@@ -308,9 +291,9 @@ describe('EmbeddingsCache Perfection', () => {
     cache.annIndex = mockIndex;
     cache.annDirty = false;
 
-    expect(await cache.queryAnn([1], 1)).toEqual([0]); 
-    expect(await cache.queryAnn([1], 1)).toEqual([0]); 
-    expect(await cache.queryAnn([1], 1)).toEqual([]); 
+    expect(await cache.queryAnn([1], 1)).toEqual([0]);
+    expect(await cache.queryAnn([1], 1)).toEqual([0]);
+    expect(await cache.queryAnn([1], 1)).toEqual([]);
   });
 
   it('covers setVectorStore and addToStore', () => {
@@ -340,7 +323,6 @@ describe('EmbeddingsCache Perfection', () => {
       const config = makeConfig(dir, { callGraphEnabled: true });
       const cache = new EmbeddingsCache(config);
 
-      
       cache.setFileCallData('a.js', { definitions: [], calls: [] });
       const result = await cache.getRelatedFiles(['sym']);
       expect(result).toBeDefined();

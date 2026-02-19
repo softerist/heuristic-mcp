@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs/promises';
 
-
 vi.mock('fs/promises');
 vi.mock('../lib/json-writer.js', () => ({
   StreamingJsonWriter: class {
@@ -15,7 +14,6 @@ vi.mock('../lib/json-writer.js', () => ({
   },
 }));
 
-
 const mockIndex = {
   initIndex: vi.fn(),
   readIndexSync: vi.fn(),
@@ -27,11 +25,9 @@ const mockIndex = {
   getCurrentCount: vi.fn().mockReturnValue(0),
 };
 
-
 const mockConstructor = vi.fn(function () {
   return mockIndex;
 });
-
 
 vi.mock('hnswlib-node', () => {
   return {
@@ -47,16 +43,14 @@ describe('EmbeddingsCache Error Handling', () => {
   let config;
 
   beforeEach(async () => {
-    vi.clearAllMocks(); 
-    vi.resetModules(); 
+    vi.clearAllMocks();
+    vi.resetModules();
 
-    
     mockIndex.initIndex.mockImplementation(() => undefined);
     mockIndex.readIndexSync.mockImplementation(() => true);
     mockIndex.addPoint.mockImplementation(() => undefined);
     mockIndex.writeIndexSync.mockImplementation(() => undefined);
 
-    
     const { EmbeddingsCache } = await import('../lib/cache.js');
 
     config = {
@@ -74,7 +68,6 @@ describe('EmbeddingsCache Error Handling', () => {
     };
     cache = new EmbeddingsCache(config);
 
-    
     vi.spyOn(console, 'warn');
     vi.spyOn(console, 'error');
 
@@ -208,9 +201,7 @@ describe('EmbeddingsCache Error Handling', () => {
 
     it('should recover save queue after a throwing save failure', async () => {
       cache.vectorStore = [{ vector: [1] }];
-      fs.mkdir
-        .mockRejectedValueOnce(new Error('Read-only file system'))
-        .mockResolvedValue();
+      fs.mkdir.mockRejectedValueOnce(new Error('Read-only file system')).mockResolvedValue();
 
       await expect(cache.save({ throwOnError: true })).rejects.toThrow(
         'Cache save failed: Read-only file system'
@@ -245,7 +236,7 @@ describe('EmbeddingsCache Error Handling', () => {
     it('should handle metadata mismatch forcing rebuild', async () => {
       fs.readFile.mockResolvedValue(
         JSON.stringify({
-          version: 999, 
+          version: 999,
           embeddingModel: 'test-model',
         })
       );

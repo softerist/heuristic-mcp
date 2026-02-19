@@ -3,7 +3,6 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import path from 'path';
 
-
 process.env.SMART_CODING_UNLOAD_MODEL_AFTER_SEARCH = 'false';
 
 const workspaceDir = path.join(process.cwd(), 'test', 'fixtures', 'mcp-workspace');
@@ -24,13 +23,13 @@ describe('mcp client search', () => {
         constructor() {
           return serverTransport;
         }
-      }
+      },
     }));
 
     vi.doMock('@huggingface/transformers', () => {
       const pipeline = vi.fn(async () => {
         return () => ({
-          data: new Float32Array([1, 0, 0])
+          data: new Float32Array([1, 0, 0]),
         });
       });
 
@@ -39,10 +38,10 @@ describe('mcp client search', () => {
         env: {
           backends: {
             onnx: {
-              wasm: { numThreads: 1 }
-            }
-          }
-        }
+              wasm: { numThreads: 1 },
+            },
+          },
+        },
       };
     });
 
@@ -62,7 +61,7 @@ describe('mcp client search', () => {
   it('indexes and searches via MCP tool', async () => {
     const indexResponse = await client.callTool({
       name: 'b_index_codebase',
-      arguments: { force: true }
+      arguments: { force: true },
     });
 
     const indexText = indexResponse.content?.[0]?.text ?? '';
@@ -70,7 +69,7 @@ describe('mcp client search', () => {
 
     const searchResponse = await client.callTool({
       name: 'a_semantic_search',
-      arguments: { query: 'MCP_SEARCH_UNIQUE_TOKEN_12345', maxResults: 3 }
+      arguments: { query: 'MCP_SEARCH_UNIQUE_TOKEN_12345', maxResults: 3 },
     });
 
     const searchText = searchResponse.content?.[0]?.text ?? '';

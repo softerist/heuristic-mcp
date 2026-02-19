@@ -32,13 +32,17 @@ import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import { getWorkspaceCachePath } from './lib/workspace-cache-key.js';
 
-
 const require = createRequire(import.meta.url);
 const packageJson = require('./package.json');
 
 import { loadConfig, getGlobalCacheDir, isNonProjectDirectory } from './lib/config.js';
 import { clearStaleCaches } from './lib/cache-utils.js';
-import { enableStderrOnlyLogging, setupFileLogging, getLogFilePath, flushLogs } from './lib/logging.js';
+import {
+  enableStderrOnlyLogging,
+  setupFileLogging,
+  getLogFilePath,
+  flushLogs,
+} from './lib/logging.js';
 import { parseArgs, printHelp } from './lib/cli.js';
 import { clearCache } from './lib/cache-ops.js';
 import { logMemory, startMemoryLogger } from './lib/memory-logger.js';
@@ -50,7 +54,10 @@ import {
 } from './lib/server-lifecycle.js';
 
 import { EmbeddingsCache } from './lib/cache.js';
-import { cleanupStaleBinaryArtifacts, recordBinaryStoreCorruption } from './lib/vector-store-binary.js';
+import {
+  cleanupStaleBinaryArtifacts,
+  recordBinaryStoreCorruption,
+} from './lib/vector-store-binary.js';
 import { CodebaseIndexer } from './features/index-codebase.js';
 import { HybridSearch } from './features/hybrid-search.js';
 
@@ -127,11 +134,8 @@ async function printMemorySnapshot(workspaceDir) {
   return true;
 }
 
-
-
-
 let embedder = null;
-let unloadMainEmbedder = null; 
+let unloadMainEmbedder = null;
 let cache = null;
 let indexer = null;
 let hybridSearch = null;
@@ -302,7 +306,8 @@ async function findAutoAttachWorkspaceCandidate({ excludeCacheDirectory = null }
   for (const entry of cacheDirs) {
     if (!entry.isDirectory()) continue;
     const cacheDirectory = path.join(cacheRoot, entry.name);
-    if (normalizedExclude && normalizePathForCompare(cacheDirectory) === normalizedExclude) continue;
+    if (normalizedExclude && normalizePathForCompare(cacheDirectory) === normalizedExclude)
+      continue;
 
     const lockPath = path.join(cacheDirectory, 'server.lock.json');
     try {
@@ -321,9 +326,7 @@ async function findAutoAttachWorkspaceCandidate({ excludeCacheDirectory = null }
         rank,
       });
       continue;
-    } catch {
-      
-    }
+    } catch {}
 
     const metaPath = path.join(cacheDirectory, 'meta.json');
     try {
@@ -342,9 +345,7 @@ async function findAutoAttachWorkspaceCandidate({ excludeCacheDirectory = null }
         source: 'meta',
         rank,
       });
-    } catch {
-      
-    }
+    } catch {}
   }
 
   const candidates = Array.from(candidatesByWorkspace.values());
@@ -384,8 +385,6 @@ async function maybeAutoSwitchWorkspace(request) {
   return detected.workspacePath;
 }
 
-
-
 async function detectWorkspaceFromRoots({ quiet = false } = {}) {
   try {
     const caps = server.getClientCapabilities();
@@ -409,14 +408,13 @@ async function detectWorkspaceFromRoots({ quiet = false } = {}) {
     }
 
     if (!quiet) {
-      console.info(`[Server] MCP roots received: ${result.roots.map(r => r.uri).join(', ')}`);
+      console.info(`[Server] MCP roots received: ${result.roots.map((r) => r.uri).join(', ')}`);
     }
 
-    
     const rootPaths = result.roots
-      .map(r => r.uri)
-      .filter(uri => uri.startsWith('file://'))
-      .map(uri => {
+      .map((r) => r.uri)
+      .filter((uri) => uri.startsWith('file://'))
+      .map((uri) => {
         try {
           return fileURLToPath(uri);
         } catch {
@@ -441,7 +439,10 @@ async function detectWorkspaceFromRoots({ quiet = false } = {}) {
   }
 }
 
-async function maybeAutoSwitchWorkspaceToPath(targetWorkspacePath, { source, reindex = false } = {}) {
+async function maybeAutoSwitchWorkspaceToPath(
+  targetWorkspacePath,
+  { source, reindex = false } = {}
+) {
   if (!setWorkspaceFeatureInstance || !config?.searchDirectory) return;
   if (!targetWorkspacePath) return;
   if (isNonProjectDirectory(targetWorkspacePath)) {
@@ -471,9 +472,7 @@ async function maybeAutoSwitchWorkspaceToPath(targetWorkspacePath, { source, rei
       reindex,
     });
     if (!result.success) {
-      console.warn(
-        `[Server] Auto workspace switch failed (${source || 'auto'}): ${result.error}`
-      );
+      console.warn(`[Server] Auto workspace switch failed (${source || 'auto'}): ${result.error}`);
       return;
     }
     trustWorkspacePath(targetWorkspacePath);
@@ -513,8 +512,6 @@ async function maybeAutoSwitchWorkspaceFromRoots(request) {
   }
 }
 
-
-
 const features = [
   {
     module: HybridSearchFeature,
@@ -553,15 +550,9 @@ const features = [
   },
 ];
 
-
-
 async function initialize(workspaceDir) {
-  
-  
   config = await loadConfig(workspaceDir);
-  
-  
-  
+
   if (config.enableCache && config.cacheCleanup?.autoCleanup) {
     console.info('[Server] Running automatic cache cleanup...');
     const results = await clearStaleCaches({
@@ -569,12 +560,12 @@ async function initialize(workspaceDir) {
       logger: console,
     });
     if (results.removed > 0) {
-      console.info(`[Server] Removed ${results.removed} stale cache ${results.removed === 1 ? 'directory' : 'directories'}`);
+      console.info(
+        `[Server] Removed ${results.removed} stale cache ${results.removed === 1 ? 'directory' : 'directories'}`
+      );
     }
   }
-  
-  
-  
+
   const isTest = Boolean(process.env.VITEST || process.env.VITEST_WORKER_ID);
   if (config.enableExplicitGc && typeof global.gc !== 'function' && !isTest) {
     console.warn(
@@ -608,10 +599,7 @@ async function initialize(workspaceDir) {
       if (env?.backends?.onnx?.wasm) {
         env.backends.onnx.wasm.numThreads = ONNX_THREAD_LIMIT;
       }
-    } catch {
-      
-      
-    }
+    } catch {}
     const status = getNativeOnnxStatus();
     const reason = status?.message || 'onnxruntime-node not available';
     console.warn(`[Server] Native ONNX backend unavailable (${reason}); using WASM backend.`);
@@ -652,7 +640,9 @@ async function initialize(workspaceDir) {
         const details = killed
           .map((entry) => `${entry.pid}${entry.workspace ? ` (${entry.workspace})` : ''}`)
           .join(', ');
-        console.info(`[Server] Auto-stopped ${killed.length} stale heuristic-mcp server(s): ${details}`);
+        console.info(
+          `[Server] Auto-stopped ${killed.length} stale heuristic-mcp server(s): ${details}`
+        );
       }
       if (failed.length > 0) {
         const details = failed
@@ -710,7 +700,9 @@ async function initialize(workspaceDir) {
     if (workspaceEnvProbe.length > 0) {
       const probePreview = workspaceEnvProbe.slice(0, 8).map((entry) => {
         const scope = entry?.priority ? 'priority' : 'diagnostic';
-        const status = entry?.resolvedPath ? `valid:${entry.resolvedPath}` : `invalid:${entry?.value}`;
+        const status = entry?.resolvedPath
+          ? `valid:${entry.resolvedPath}`
+          : `invalid:${entry?.value}`;
         return `${entry?.key}[${scope}]=${status}`;
       });
       const suffix = workspaceEnvProbe.length > 8 ? ` (+${workspaceEnvProbe.length - 8} more)` : '';
@@ -718,8 +710,6 @@ async function initialize(workspaceDir) {
     }
   }
 
-  
-  
   console.info(
     `[Server] Config: workerThreads=${config.workerThreads}, embeddingProcessPerBatch=${config.embeddingProcessPerBatch}`
   );
@@ -731,18 +721,15 @@ async function initialize(workspaceDir) {
     console.info(`[Server] PID file: ${pidPath}`);
   }
 
-  
-  
   try {
     const globalCache = path.join(getGlobalCacheDir(), 'heuristic-mcp');
     const localCache = path.join(process.cwd(), '.heuristic-mcp');
     console.info(`[Server] Cache debug: Global=${globalCache}, Local=${localCache}`);
     console.info(`[Server] Process CWD: ${process.cwd()}`);
-    console.info(`[Server] Resolved workspace: ${config.searchDirectory} (via ${config.workspaceResolution?.source || 'unknown'})`);
-  } catch (_e) {
-    
-    
-  }
+    console.info(
+      `[Server] Resolved workspace: ${config.searchDirectory} (via ${config.workspaceResolution?.source || 'unknown'})`
+    );
+  } catch (_e) {}
 
   let stopStartupMemory = null;
   if (config.verbose) {
@@ -750,8 +737,6 @@ async function initialize(workspaceDir) {
     stopStartupMemory = startMemoryLogger('[Server] Memory (startup)', MEMORY_LOG_INTERVAL_MS);
   }
 
-  
-  
   try {
     await fs.access(config.searchDirectory);
   } catch {
@@ -759,8 +744,6 @@ async function initialize(workspaceDir) {
     process.exit(1);
   }
 
-  
-  
   console.info('[Server] Initializing features...');
   let cachedEmbedderPromise = null;
   const lazyEmbedder = async (...args) => {
@@ -792,8 +775,7 @@ async function initialize(workspaceDir) {
     const model = await cachedEmbedderPromise;
     return model(...args);
   };
-  
-  
+
   const unloader = async () => {
     if (!cachedEmbedderPromise) return false;
     try {
@@ -816,9 +798,9 @@ async function initialize(workspaceDir) {
       return false;
     }
   };
-  
+
   embedder = lazyEmbedder;
-  unloadMainEmbedder = unloader; 
+  unloadMainEmbedder = unloader;
   const preloadEmbeddingModel = async () => {
     if (config.preloadEmbeddingModel === false) return;
     try {
@@ -829,10 +811,6 @@ async function initialize(workspaceDir) {
     }
   };
 
-  
-  
-
-  
   if (config.vectorStoreFormat === 'binary') {
     try {
       await cleanupStaleBinaryArtifacts(config.cacheDirectory, { logger: console });
@@ -841,26 +819,21 @@ async function initialize(workspaceDir) {
     }
   }
 
-  
   cache = new EmbeddingsCache(config);
   console.info(`[Server] Cache directory: ${config.cacheDirectory}`);
 
-  
   indexer = new CodebaseIndexer(embedder, cache, config, server);
   hybridSearch = new HybridSearch(embedder, cache, config);
   const cacheClearer = new ClearCacheFeature.CacheClearer(embedder, cache, config, indexer);
   const findSimilarCode = new FindSimilarCodeFeature.FindSimilarCode(embedder, cache, config);
   const annConfig = new AnnConfigFeature.AnnConfigTool(cache, config);
 
-  
   features[0].instance = hybridSearch;
   features[1].instance = indexer;
   features[2].instance = cacheClearer;
   features[3].instance = findSimilarCode;
   features[4].instance = annConfig;
-  
 
-  
   const setWorkspaceInstance = new SetWorkspaceFeature.SetWorkspaceFeature(
     config,
     cache,
@@ -871,7 +844,6 @@ async function initialize(workspaceDir) {
   features[6].instance = setWorkspaceInstance;
   features[6].handler = SetWorkspaceFeature.createHandleToolCall(setWorkspaceInstance);
 
-  
   server.hybridSearch = hybridSearch;
 
   const startBackgroundTasks = async () => {
@@ -898,7 +870,10 @@ async function initialize(workspaceDir) {
       }
       return true;
     };
-    const tryAutoAttachWorkspaceCache = async (reason, { canReindex = workspaceLockAcquired } = {}) => {
+    const tryAutoAttachWorkspaceCache = async (
+      reason,
+      { canReindex = workspaceLockAcquired } = {}
+    ) => {
       const candidate = await findAutoAttachWorkspaceCandidate({
         excludeCacheDirectory: config.cacheDirectory,
       });
@@ -987,15 +962,12 @@ async function initialize(workspaceDir) {
       stopStartupMemoryLogger();
     }
 
-    
     console.info('[Server] Starting background indexing (delayed)...');
 
-    
     setTimeout(() => {
       indexer
         .indexAll()
         .then(() => {
-          
           if (config.watchFiles) {
             indexer.setupFileWatcher();
           }
@@ -1008,7 +980,6 @@ async function initialize(workspaceDir) {
 
   return { startBackgroundTasks, config };
 }
-
 
 const server = new Server(
   {
@@ -1023,7 +994,6 @@ const server = new Server(
   }
 );
 
-
 server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
   console.info('[Server] Received roots/list_changed notification from client.');
   const newRoot = await detectWorkspaceFromRoots();
@@ -1035,8 +1005,6 @@ server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
   }
 });
 
-
-
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   await configReadyPromise;
   if (configInitError || !config) {
@@ -1045,8 +1013,6 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return await handleListResources(config);
 });
 
-
-
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   await configReadyPromise;
   if (configInitError || !config) {
@@ -1054,8 +1020,6 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   }
   return await handleReadResource(request.params.uri, config);
 });
-
-
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   await configReadyPromise;
@@ -1071,8 +1035,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
   return { tools };
 });
-
-
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   await configReadyPromise;
@@ -1222,14 +1184,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const toolDef = feature.module.getToolDefinition(config);
 
     if (request.params.name === toolDef.name) {
-      
-      
       if (typeof feature.handler !== 'function') {
         return {
-          content: [{
-            type: 'text',
-            text: `Tool "${toolDef.name}" is not ready. Server may still be initializing.`,
-          }],
+          content: [
+            {
+              type: 'text',
+              text: `Tool "${toolDef.name}" is not ready. Server may still be initializing.`,
+            },
+          ],
           isError: true,
         };
       }
@@ -1252,22 +1214,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (toolDef.name === 'f_set_workspace' && !isToolResponseError(result)) {
         trustWorkspacePath(config.searchDirectory);
       }
-      
-      
-      
-      
-      
+
       const searchTools = ['a_semantic_search', 'd_find_similar_code'];
       if (config.unloadModelAfterSearch && searchTools.includes(toolDef.name)) {
-        
-        
         setImmediate(async () => {
           if (typeof unloadMainEmbedder === 'function') {
             await unloadMainEmbedder();
           }
         });
       }
-      
+
       return result;
     }
   }
@@ -1282,8 +1238,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     isError: true,
   };
 });
-
-
 
 export async function main(argv = process.argv) {
   const parsed = parseArgs(argv);
@@ -1339,7 +1293,6 @@ export async function main(argv = process.argv) {
     console.info(`[Server] Workspace mode: ${workspaceDir}`);
   }
 
-
   if (wantsStop) {
     await stop();
     process.exit(0);
@@ -1355,23 +1308,15 @@ export async function main(argv = process.argv) {
     process.exit(0);
   }
 
-  
-  
   if (wantsCache) {
     await status({ fix: wantsClean, cacheOnly: true, workspaceDir });
     process.exit(0);
   }
 
-  
-  
   const clearIndex = parsed.rawArgs.indexOf('--clear');
   if (clearIndex !== -1) {
     const cacheId = parsed.rawArgs[clearIndex + 1];
     if (cacheId && !cacheId.startsWith('--')) {
-      
-      
-      
-      
       let cacheHome;
       if (process.platform === 'win32') {
         cacheHome = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
@@ -1394,7 +1339,7 @@ export async function main(argv = process.argv) {
       }
 
       const cachePath = resolvedCachePath;
-      
+
       try {
         await fs.access(cachePath);
         console.info(`[Cache] Removing cache: ${cacheId}`);
@@ -1406,7 +1351,7 @@ export async function main(argv = process.argv) {
           console.error(`[Cache] ❌ Cache not found: ${cacheId}`);
           console.error(`[Cache] Available caches in ${globalCacheRoot}:`);
           const dirs = await fs.readdir(globalCacheRoot).catch(() => []);
-          dirs.forEach(dir => console.error(`   - ${dir}`));
+          dirs.forEach((dir) => console.error(`   - ${dir}`));
           process.exit(1);
         } else {
           console.error(`[Cache] ❌ Failed to remove cache: ${error.message}`);
@@ -1415,8 +1360,6 @@ export async function main(argv = process.argv) {
       }
       process.exit(0);
     }
-    
-    
   }
 
   if (wantsClearCache) {
@@ -1459,12 +1402,7 @@ export async function main(argv = process.argv) {
   }
 
   registerSignalHandlers(requestShutdown);
-  
-  
-  
-  
 
-  
   const detectedRootPromise = new Promise((resolve) => {
     const HANDSHAKE_TIMEOUT_MS = 1000;
     let settled = false;
@@ -1475,7 +1413,9 @@ export async function main(argv = process.argv) {
     };
 
     const timer = setTimeout(() => {
-      console.warn(`[Server] MCP handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms, proceeding without roots.`);
+      console.warn(
+        `[Server] MCP handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms, proceeding without roots.`
+      );
       resolveOnce(null);
     }, HANDSHAKE_TIMEOUT_MS);
 
@@ -1500,11 +1440,8 @@ export async function main(argv = process.argv) {
     });
   }
 
-  
-  
   const detectedRoot = await detectedRootPromise;
 
-  
   const effectiveWorkspace = detectedRoot || workspaceDir;
   if (detectedRoot) {
     console.info(`[Server] Using workspace from MCP roots: ${detectedRoot}`);
@@ -1524,8 +1461,6 @@ export async function main(argv = process.argv) {
 
   console.info('[Server] Heuristic MCP server started.');
 
-  
-  
   void startBackgroundTasks().catch((err) => {
     console.error(`[Server] Background task error: ${err.message}`);
   });
@@ -1541,16 +1476,12 @@ export async function main(argv = process.argv) {
   console.info('[Server] MCP server is now fully ready to accept requests.');
 }
 
-
-
 async function gracefulShutdown(signal) {
   console.info(`[Server] Received ${signal}, shutting down gracefully...`);
   const exitCode = isCrashShutdownReason(signal) ? 1 : 0;
 
   const cleanupTasks = [];
 
-  
-  
   if (indexer && indexer.watcher) {
     cleanupTasks.push(
       indexer.watcher
@@ -1560,8 +1491,6 @@ async function gracefulShutdown(signal) {
     );
   }
 
-  
-  
   if (indexer && indexer.terminateWorkers) {
     cleanupTasks.push(
       (async () => {
@@ -1572,8 +1501,6 @@ async function gracefulShutdown(signal) {
     );
   }
 
-  
-  
   if (cache) {
     if (!workspaceLockAcquired) {
       console.info('[Server] Secondary/fallback mode: skipping cache save.');
@@ -1591,8 +1518,6 @@ async function gracefulShutdown(signal) {
   console.info('[Server] Goodbye!');
   await flushLogs({ close: true, timeoutMs: 1500 }).catch(() => {});
 
-  
-  
   setTimeout(() => process.exit(exitCode), 100);
 }
 

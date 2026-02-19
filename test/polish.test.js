@@ -3,7 +3,6 @@ import { CodebaseIndexer, handleToolCall } from '../features/index-codebase.js';
 import { EmbeddingsCache } from '../lib/cache.js';
 import fs from 'fs/promises';
 
-
 vi.mock('fs/promises');
 vi.mock('../lib/call-graph.js', () => ({
   extractCallData: vi.fn().mockReturnValue({}),
@@ -104,12 +103,11 @@ describe('Final Polish Coverage', () => {
 
   describe('lib/cache.js', () => {
     it('handles invalid JSON in cache metadata (line 123)', async () => {
-      
       const config = { enableCache: true, cacheDirectory: '/c' };
       const cache = new EmbeddingsCache(config);
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       vi.spyOn(fs, 'mkdir').mockResolvedValue();
-      
+
       vi.spyOn(fs, 'readFile').mockImplementation(async (p) => {
         if (p.endsWith('meta.json')) return '{ invalid';
         return null;
@@ -120,7 +118,6 @@ describe('Final Polish Coverage', () => {
     });
 
     it('handles ANN metadata rebuilding (line 332)', async () => {
-      
       const config = { enableCache: true, cacheDirectory: '/c', annEnabled: true };
       const cache = new EmbeddingsCache(config);
       cache.vectorStore = [{ vector: [1] }];
@@ -134,28 +131,22 @@ describe('Final Polish Coverage', () => {
 
   describe('features/index-codebase.js', () => {
     it('handles stat errors in preFilterFiles (line 483)', async () => {
-      
       vi.spyOn(fs, 'stat').mockRejectedValue(new Error('Stat Fail'));
       const files = ['/test/bad.js'];
 
-      
       const results = await indexer.preFilterFiles(files);
       expect(results).toEqual([]);
-      
     });
 
     it('triggers call-graph data re-indexing (line 578)', async () => {
-      
       const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
-      
       cache.getVectorStore.mockReturnValue([{ file: '/test/file1.js' }]);
-      cache.clearFileCallData(); 
+      cache.clearFileCallData();
       cache.setFileHashes(new Map([['/test/file1.js', 'fixed-hash']]));
       cache.getFileHash.mockReturnValue('fixed-hash');
       cache.getFileMeta.mockReturnValue({ mtimeMs: 123, size: 50 });
 
-      
       vi.spyOn(fs, 'stat').mockResolvedValue({ isDirectory: () => false, size: 50, mtimeMs: 123 });
       vi.spyOn(fs, 'readFile').mockResolvedValue('content');
 
@@ -172,7 +163,6 @@ describe('Final Polish Coverage', () => {
     });
 
     it('reports processed files in tool response (line 992)', async () => {
-      
       indexer.indexAll = vi.fn().mockResolvedValue({
         filesProcessed: 5,
         chunksCreated: 10,

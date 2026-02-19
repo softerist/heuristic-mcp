@@ -1,7 +1,6 @@
 import path from 'path';
 import { dotSimilarity, smartChunk, estimateTokens, getModelTokenLimit } from '../lib/utils.js';
 
-
 export class FindSimilarCode {
   constructor(embedder, cache, config) {
     this.embedder = embedder;
@@ -59,15 +58,10 @@ export class FindSimilarCode {
       let codeToEmbed = code;
       let warningMessage = null;
 
-      
       const estimatedTokens = estimateTokens(code);
       const limit = getModelTokenLimit(this.config.embeddingModel);
 
-      
       if (estimatedTokens > limit) {
-        
-        
-        
         const chunks = smartChunk(code, 'input.txt', this.config);
         if (chunks.length > 0) {
           codeToEmbed = chunks[0].text;
@@ -75,14 +69,11 @@ export class FindSimilarCode {
         }
       }
 
-      
       const codeEmbed = await this.embedder(codeToEmbed, {
         pooling: 'mean',
         normalize: true,
       });
 
-      
-      
       let codeVector;
       try {
         codeVector = new Float32Array(codeEmbed.data);
@@ -90,9 +81,7 @@ export class FindSimilarCode {
         if (typeof codeEmbed.dispose === 'function') {
           try {
             codeEmbed.dispose();
-          } catch {
-            
-          }
+          } catch {}
         }
       }
 
@@ -117,7 +106,6 @@ export class FindSimilarCode {
       const normalizeText = (text) => text.trim().replace(/\s+/g, ' ');
       const normalizedInput = normalizeText(codeToEmbed);
 
-      
       const scoreAndFilter = async (chunks) => {
         const BATCH_SIZE = 500;
         const scored = [];
@@ -125,7 +113,6 @@ export class FindSimilarCode {
         for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
           const batch = chunks.slice(i, i + BATCH_SIZE);
 
-          
           if (i > 0) {
             await new Promise((resolve) => setTimeout(resolve, 0));
           }
@@ -154,14 +141,10 @@ export class FindSimilarCode {
 
       let filteredResults = await scoreAndFilter(candidates);
 
-      
-      
       const MAX_FULL_SCAN_SIZE = 5000;
       if (usedAnn && filteredResults.length < safeMaxResults) {
         if (vectorStore.length <= MAX_FULL_SCAN_SIZE) {
           filteredResults = await scoreAndFilter(vectorStore);
-        } else {
-          
         }
       }
       const results = [];
@@ -215,7 +198,6 @@ export class FindSimilarCode {
   }
 }
 
-
 export function getToolDefinition(_config) {
   return {
     name: 'd_find_similar_code',
@@ -251,7 +233,6 @@ export function getToolDefinition(_config) {
   };
 }
 
-
 export async function handleToolCall(request, findSimilarCode) {
   const args = request.params?.arguments || {};
   const code = args.code;
@@ -261,10 +242,8 @@ export async function handleToolCall(request, findSimilarCode) {
       isError: true,
     };
   }
-  const maxResults =
-    typeof args.maxResults === 'number' ? args.maxResults : 5;
-  const minSimilarity =
-    typeof args.minSimilarity === 'number' ? args.minSimilarity : 0.3;
+  const maxResults = typeof args.maxResults === 'number' ? args.maxResults : 5;
+  const minSimilarity = typeof args.minSimilarity === 'number' ? args.minSimilarity : 0.3;
 
   const { results, message } = await findSimilarCode.execute({
     code,

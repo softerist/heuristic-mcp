@@ -17,12 +17,20 @@ export default [
       },
     },
     rules: {
+      'no-empty': ['error', { allowEmptyCatch: true }],
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       'no-console': ['warn', { allow: ['warn', 'error', 'info'] }],
     },
   },
   {
-    files: ['scripts/**/*.js', 'test/**/*.js'],
+    files: [
+      'scripts/**/*.js',
+      'test/**/*.js',
+      'repro_*.js',
+      'tool_reproduction.js',
+      'tools/scripts/**/*.js',
+      'debug-pids.js',
+    ],
     rules: {
       'no-console': 'off',
     },

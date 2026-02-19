@@ -46,14 +46,12 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
     });
 
     try {
-      
       const result = await fixtures.indexer.preFilterFiles([fileGood, fileBad]);
 
       console.error('PreFilter Result:', result);
 
-      
       const hasGood = result.some((r) => r.file.includes('good.js'));
-      
+
       const hasBad = result.some((r) => r.file.includes('bad.js'));
 
       expect(hasGood).toBe(true);
@@ -80,19 +78,17 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
     const statSpy = vi.spyOn(fs, 'stat').mockImplementation(async (filePath) => {
       if (filePath.toString().includes('p2_flush_data')) {
         const s = await realStat.call(fs, filePath);
-        
-        s.size = 20 * 1024 * 1024; 
+
+        s.size = 20 * 1024 * 1024;
         return s;
       }
       return realStat.call(fs, filePath);
     });
 
     const oldMax = fixtures.config.maxFileSize;
-    fixtures.config.maxFileSize = 100 * 1024 * 1024; 
+    fixtures.config.maxFileSize = 100 * 1024 * 1024;
 
     try {
-      
-      
       const result = await fixtures.indexer.preFilterFiles([file1, file2, file3]);
 
       console.error('Batch flush result:', result);
@@ -227,14 +223,11 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
   });
 
   it('should queue watcher events during indexing (L1106, L1126, L1146)', async () => {
-    
     fixtures.config.watchFiles = true;
     await fixtures.indexer.setupFileWatcher();
 
-    
     fixtures.indexer.isIndexing = true;
 
-    
     const watcher = fixtures.indexer.watcher;
     if (watcher) {
       watcher.emit('add', 'new.js');
@@ -242,7 +235,6 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
       watcher.emit('unlink', 'deleted.js');
     }
 
-    
     expect(
       fixtures.indexer.pendingWatchEvents.has(path.join(fixtures.config.searchDirectory, 'new.js'))
     ).toBe(true);
@@ -251,11 +243,10 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
         path.join(fixtures.config.searchDirectory, 'changed.js')
       )
     ).toBe(true);
-    
+
     const delPath = path.join(fixtures.config.searchDirectory, 'deleted.js');
     expect(fixtures.indexer.pendingWatchEvents.get(delPath)).toBe('unlink');
 
-    
     fixtures.indexer.isIndexing = false;
   });
 });

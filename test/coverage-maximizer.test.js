@@ -3,7 +3,6 @@ import { CodebaseIndexer, handleToolCall } from '../features/index-codebase.js';
 import fs from 'fs/promises';
 import path from 'path';
 
-
 vi.mock('fs/promises');
 vi.mock('../lib/call-graph.js', () => ({
   extractCallData: vi.fn(),
@@ -12,7 +11,7 @@ vi.mock('../lib/utils.js', async () => {
   const actual = await vi.importActual('../lib/utils.js');
   return {
     ...actual,
-    hashContent: vi.fn().mockReturnValue('fixed-hash'), 
+    hashContent: vi.fn().mockReturnValue('fixed-hash'),
     smartChunk: actual.smartChunk,
   };
 });
@@ -52,11 +51,11 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
   beforeEach(async () => {
     const callGraph = await import('../lib/call-graph.js');
     extractCallDataMock = callGraph.extractCallData;
-    extractCallDataMock.mockReturnValue({}); 
+    extractCallDataMock.mockReturnValue({});
 
     config = {
       workerThreads: 2,
-      verbose: true, 
+      verbose: true,
       embeddingModel: 'test-model',
       searchDirectory: '/test',
       maxFileSize: 100,
@@ -88,7 +87,7 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
         cacheMock.fileCallData = new Map();
       }),
       clearCallGraphData: vi.fn(),
-      pruneCallGraphData: vi.fn().mockReturnValue(5), 
+      pruneCallGraphData: vi.fn().mockReturnValue(5),
       rebuildCallGraph: vi.fn(),
       ensureAnnIndex: vi.fn().mockResolvedValue(),
       deleteFileHash: vi.fn(),
@@ -106,7 +105,7 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
     embedder = vi.fn().mockResolvedValue({ data: [] });
 
     indexer = new CodebaseIndexer(embedder, cache, config);
-    
+
     indexer.discoverFiles = vi.fn().mockResolvedValue(['/test/file1.js']);
   });
 
@@ -115,14 +114,12 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
   });
 
   it('Line 146: Worker initialization failure catch block', async () => {
-    
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(fs, 'stat').mockRejectedValue(new Error('Stat failed'));
 
     await indexer.indexFile('/test/bad.js');
 
-    
     expect(warnSpy.mock.calls.length + errorSpy.mock.calls.length).toBeGreaterThan(0);
   });
 
@@ -130,17 +127,15 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => true,
       size: 50,
     });
     await indexer.indexFile('/test/dir');
 
-    
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => false,
-      size: 1000, 
+      size: 1000,
     });
     await indexer.indexFile('/test/large.js');
 
@@ -150,24 +145,19 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
   it('Lines 515-516: preFilterFiles error handling', async () => {
     vi.spyOn(fs, 'stat').mockRejectedValue(new Error('PreFilter Fail'));
 
-    
     const files = ['/test/bad.js'];
     const results = await indexer.preFilterFiles(files);
 
-    
     expect(results.length).toBe(0);
   });
 
   it('Lines 603 & 612: indexAll pruning branches', async () => {
     const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
-    
     cache.setFileHashes(new Map([['/test/deleted.js', 'hash']]));
     cache.setFileCallDataEntries(new Map([['/test/deleted.js', {}]]));
 
-    
-
-    await indexer.indexAll(false); 
+    await indexer.indexAll(false);
 
     expect(cache.removeFileFromStore).toHaveBeenCalledWith('/test/deleted.js');
     expect(consoleSpy).toHaveBeenCalledWith(
@@ -179,15 +169,13 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
   it('Line 662: indexAll missing call graph data re-indexing', async () => {
     const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
-    
     cache.getVectorStore.mockReturnValue([{ file: '/test/file1.js' }]);
-    cache.clearFileCallData(); 
-    
+    cache.clearFileCallData();
+
     cache.setFileHashes(new Map([['/test/file1.js', 'fixed-hash']]));
     cache.getFileHash.mockReturnValue('fixed-hash');
     cache.getFileMeta.mockReturnValue({ mtimeMs: 123, size: 50 });
 
-    
     vi.spyOn(fs, 'stat').mockResolvedValue({
       isDirectory: () => false,
       size: 50,
@@ -198,20 +186,18 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
     await indexer.indexAll(false);
 
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('missing call graph data'));
-    
+
     expect(cache.setFileCallData).toHaveBeenCalled();
   });
 
   it('Line 746 & 773: indexAll loop and call graph extraction error', async () => {
-    
     extractCallDataMock.mockImplementation(() => {
       throw new Error('Parse Error');
     });
 
-    
     vi.spyOn(fs, 'stat').mockResolvedValue({ isDirectory: () => false, size: 50, mtimeMs: 123 });
     vi.spyOn(fs, 'readFile').mockResolvedValue('content');
-    
+
     cache.getFileHash.mockReturnValue('old-hash');
 
     await indexer.indexAll(true);
@@ -223,7 +209,6 @@ describe('CodebaseIndexer Coverage Maximizer', () => {
   it('Line 992: handleToolCall stats', async () => {
     const request = { params: { arguments: { force: true } } };
 
-    
     indexer.indexAll = vi.fn().mockResolvedValue({
       skipped: false,
       filesProcessed: 5,

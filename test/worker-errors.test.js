@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 
-
 const runWorkerErrors = true;
 const maybeDescribe = describe;
 
@@ -38,7 +37,6 @@ maybeDescribe('Worker Error Handling', () => {
       cpus: () => [{}, {}, {}, {}],
     }));
 
-    
     const { CodebaseIndexer } = await import('../features/index-codebase.js');
 
     config = {
@@ -70,17 +68,11 @@ maybeDescribe('Worker Error Handling', () => {
 
     const promise = indexer.processChunksWithWorkers(chunks);
 
-    
     await new Promise((r) => setTimeout(r, 10));
 
     try {
-      
-      
-      
       workers[0].emit('error', new Error('Worker crash'));
-    } catch (_e) {
-      
-    }
+    } catch (_e) {}
 
     await promise;
 

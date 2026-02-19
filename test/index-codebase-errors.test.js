@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CodebaseIndexer } from '../features/index-codebase.js';
 import { EventEmitter } from 'events';
 
-
 vi.mock('worker_threads', async () => {
   const { EventEmitter } = await import('events');
   class Worker extends EventEmitter {
@@ -19,7 +18,6 @@ vi.mock('worker_threads', async () => {
     }
     postMessage(msg) {
       if (msg.type === 'process') {
-        
         if (msg.batchId.includes('error-batch')) {
           setTimeout(() => {
             this.emit('message', {
@@ -77,17 +75,6 @@ describe('CodebaseIndexer Error Handling', () => {
   it('should handle worker error message during processing (Line 253)', async () => {
     await indexer.initializeWorkers();
 
-    
-    
-    
-    
-    
-    
-
-    
-    
-
-    
     const worker = indexer.workers[0];
     const originalPostMessage = worker.postMessage;
 
@@ -97,16 +84,13 @@ describe('CodebaseIndexer Error Handling', () => {
           worker.emit('message', {
             type: 'error',
             error: 'Forced Error',
-            batchId: msg.batchId, 
+            batchId: msg.batchId,
           });
         }, 10);
       }
     };
 
     const chunks = [{ text: 'content', file: 'f1.js' }];
-
-    
-    
 
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -121,10 +105,8 @@ describe('CodebaseIndexer Error Handling', () => {
   it('should handle terminate error (Line 168)', async () => {
     await indexer.initializeWorkers();
 
-    
     indexer.workers[0].terminate = vi.fn().mockRejectedValue(new Error('Terminate fail'));
 
-    
     await indexer.terminateWorkers();
 
     expect(indexer.workers.length).toBe(0);
