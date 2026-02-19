@@ -13,13 +13,13 @@ vi.mock('chokidar', () => ({
   },
 }));
 
-// Mock Worker with controlled event firing to avoid hangs
+
 class MockWorker extends EventEmitter {
   constructor() {
     super();
     this.postMessage = vi.fn((msg) => {
       if (msg.type === 'process') {
-        // Simulate processing results immediately
+        
         setTimeout(() => {
           this.emit('message', {
             type: 'results',
@@ -80,7 +80,7 @@ describe('CodebaseIndexer Detailed Coverage', () => {
       indexer.config.fileNames = ['config.json'];
       await indexer.setupFileWatcher();
       expect(indexer.watcher).toBeDefined();
-      await indexer.terminateWorkers(); // Cleanup if any
+      await indexer.terminateWorkers(); 
     });
   });
 
@@ -112,17 +112,17 @@ describe('CodebaseIndexer Detailed Coverage', () => {
     });
 
     it('covers worker creation and ready flow (lines 110-143)', async () => {
-      // Mock os
+      
       vi.doMock('os', () => ({
         default: { cpus: () => [{}, {}, {}, {}] },
         cpus: () => [{}, {}, {}, {}],
       }));
 
-      // Mock worker_threads
+      
       vi.doMock('worker_threads', () => ({
         Worker: vi.fn(function () {
           const w = new MockWorker();
-          // Auto-emit ready on next tick
+          
           setTimeout(() => w.emit('message', { type: 'ready' }), 10);
           return w;
         }),
@@ -140,7 +140,7 @@ describe('CodebaseIndexer Detailed Coverage', () => {
 
     it('covers worker processing with recovery (lines 197-283)', async () => {
       const worker = new MockWorker();
-      // Ready already
+      
       indexer.workers = [worker];
       const chunks = [{ file: 'a.js', text: 'code' }];
 
@@ -153,7 +153,7 @@ describe('CodebaseIndexer Detailed Coverage', () => {
       vi.doMock('worker_threads', () => ({
         Worker: vi.fn(function () {
           const w = new MockWorker();
-          // Emit error instead of ready
+          
           setTimeout(() => w.emit('error', new Error('Init fail')), 10);
           return w;
         }),
@@ -163,7 +163,7 @@ describe('CodebaseIndexer Detailed Coverage', () => {
       const localIndexer = new CodebaseIndexer(mockEmbedder, mockCache, {
         ...config,
         workerThreads: 1,
-      }); // Force 1 to hit guard? No, 2 to hit readyPromise catch
+      }); 
       localIndexer.config.workerThreads = 2;
 
       await localIndexer.initializeWorkers();

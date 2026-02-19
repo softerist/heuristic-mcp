@@ -1,13 +1,4 @@
-/**
- * Tests for HybridSearch feature
- *
- * Tests the search functionality including:
- * - Semantic search with embeddings
- * - Exact match boosting
- * - Result formatting
- * - Empty index handling
- * - Score calculation
- */
+
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import {
@@ -26,7 +17,7 @@ describe('HybridSearch', () => {
   beforeAll(async () => {
     fixtures = await createTestFixtures({ workerThreads: 1, verbose: true });
 
-    // Ensure we have indexed content
+    
     await clearTestCache(fixtures.config);
     fixtures.cache.setVectorStore([]);
     fixtures.cache.clearFileHashes();
@@ -39,13 +30,13 @@ describe('HybridSearch', () => {
 
   describe('Search Functionality', () => {
     it('should find relevant code for semantic queries', async () => {
-      // Search for something that should exist in the codebase
+      
       const { results, message } = await fixtures.hybridSearch.search('embedding model', 5);
 
       expect(message).toBeNull();
       expect(results.length).toBeGreaterThan(0);
 
-      // Results should have required properties
+      
       for (const result of results) {
         expect(result).toHaveProperty('file');
         expect(result).toHaveProperty('content');
@@ -61,7 +52,7 @@ describe('HybridSearch', () => {
 
       expect(results.length).toBeGreaterThan(1);
 
-      // Verify descending order
+      
       for (let i = 1; i < results.length; i++) {
         expect(results[i - 1].score).toBeGreaterThanOrEqual(results[i].score);
       }
@@ -75,10 +66,10 @@ describe('HybridSearch', () => {
     });
 
     it('should boost exact matches', async () => {
-      // Search for an exact term that exists
+      
       const { results: exactResults } = await fixtures.hybridSearch.search('embedder', 5);
 
-      // At least one result should contain the exact term
+      
       const hasExactMatch = exactResults.some((r) => r.content.toLowerCase().includes('embedder'));
 
       expect(hasExactMatch).toBe(true);
@@ -96,7 +87,7 @@ describe('HybridSearch', () => {
 
   describe('Empty Index Handling', () => {
     it('should return helpful message when index is empty', async () => {
-      // Create a search instance with empty cache
+      
       const emptyCache = createHybridSearchCacheStub({
         vectorStore: [],
         getVector: () => null,
@@ -116,7 +107,7 @@ describe('HybridSearch', () => {
       const { results } = await fixtures.hybridSearch.search('function', 3);
       const formatted = await fixtures.hybridSearch.formatResults(results);
 
-      // Should contain markdown elements
+      
       expect(formatted).toContain('## Result');
       expect(formatted).toContain('**File:**');
       expect(formatted).toContain('**Lines:**');
@@ -134,18 +125,18 @@ describe('HybridSearch', () => {
       const { results } = await fixtures.hybridSearch.search('export', 1);
       const formatted = await fixtures.hybridSearch.formatResults(results);
 
-      // Should not contain absolute paths in the output
+      
       expect(formatted).not.toContain(fixtures.config.searchDirectory);
     });
   });
 
   describe('Score Calculation', () => {
     it('should give higher scores to more relevant results', async () => {
-      // Search for a specific term
+      
       const { results } = await fixtures.hybridSearch.search('CodebaseIndexer', 5);
 
       if (results.length > 0) {
-        // Top result should have high relevance
+        
         expect(results[0].score).toBeGreaterThan(0.3);
       }
     });
@@ -153,7 +144,7 @@ describe('HybridSearch', () => {
     it('should apply semantic weight from config', async () => {
       const { results } = await fixtures.hybridSearch.search('async function', 5);
 
-      // All results should have positive scores
+      
       for (const result of results) {
         expect(result.score).toBeGreaterThan(0);
       }
@@ -333,18 +324,18 @@ describe('HybridSearch', () => {
     });
 
     it('should add exact matches missed by ANN and avoid duplicates (lines 110, 113 coverage)', async () => {
-      // Setup:
-      // - 2 chunks in store, both are exact matches.
-      // - ANN returns only the first one.
-      // - maxResults = 2.
-      //
-      // Expected flow:
-      // 1. ANN returns chunk 0. candidates = [chunk0].
-      // 2. exactMatchCount = 1.
-      // 3. exactMatchCount (1) < maxResults (2), so we enter the fallback block (line 110).
-      // 4. We iterate over vectorStore.
-      //    - Chunk 0 is already in 'seen', so we skip it (line 113 coverage).
-      //    - Chunk 1 is not in 'seen', so we add it.
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
       const vectorStore = [
         {
           file: 'a.js',
@@ -563,7 +554,7 @@ describe('Hybrid Search Tool Handler', () => {
   beforeAll(async () => {
     fixtures = await createTestFixtures({ workerThreads: 1 });
 
-    // Ensure indexed content
+    
     await fixtures.indexer.indexAll(false);
   });
 
@@ -609,7 +600,7 @@ describe('Hybrid Search Tool Handler', () => {
 
       const result = await HybridSearchFeature.handleToolCall(request, fixtures.hybridSearch);
 
-      // Should return results (up to default max)
+      
       expect(result.content[0].text.length).toBeGreaterThan(0);
     });
 
@@ -621,7 +612,7 @@ describe('Hybrid Search Tool Handler', () => {
 
       const result = await HybridSearchFeature.handleToolCall(request, fixtures.hybridSearch);
 
-      // Count result headers
+      
       const resultCount = (result.content[0].text.match(/## Result/g) || []).length;
       expect(resultCount).toBeLessThanOrEqual(2);
     });
@@ -633,7 +624,7 @@ describe('Hybrid Search Tool Handler', () => {
 
       const result = await HybridSearchFeature.handleToolCall(request, fixtures.hybridSearch);
 
-      // Should return something (either no matches message or low-score results)
+      
       expect(result.content[0].text.length).toBeGreaterThan(0);
     });
 

@@ -142,8 +142,8 @@ describe('EmbeddingsCache JSON worker parsing', () => {
   });
 
   it('ignores subsequent events after settlement (covers settled guard)', async () => {
-    // This targets the "if (settled) return;" line in the finish function.
-    // We manually invoke the message handler twice to force a second finish call.
+    
+    
     const Worker = vi.fn(function () {
       const worker = {
         once(event, handler) {
@@ -182,7 +182,7 @@ describe('EmbeddingsCache JSON worker parsing', () => {
 
     const { EmbeddingsCache } = await import('../lib/cache.js');
     const cache = new EmbeddingsCache(baseConfig);
-    // Should not throw or log an error about double-resolution
+    
     await cache.load();
 
     expect(Worker).toHaveBeenCalled();

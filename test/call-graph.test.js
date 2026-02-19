@@ -114,7 +114,7 @@ describe('Call Graph Extractor', () => {
       `;
       const calls = extractCalls(content, 'test.js');
       expect(calls).toContain('foo');
-      expect(calls).toContain('baz'); // bar.baz() -> extracts 'baz'
+      expect(calls).toContain('baz'); 
       expect(calls).toContain('asyncFunc');
     });
 
@@ -166,7 +166,7 @@ describe('Call Graph Extractor', () => {
       const result = extractCallData(content, 'test.js');
       expect(result.definitions).toContain('localFunc');
       expect(result.calls).toContain('externalFunc');
-      expect(result.calls).not.toContain('localFunc'); // Filtered as self-reference
+      expect(result.calls).not.toContain('localFunc'); 
     });
   });
 
@@ -197,7 +197,7 @@ describe('Call Graph Extractor', () => {
       const graph = buildCallGraph(fileData);
       const related = getRelatedFiles(graph, ['funcB'], 1);
 
-      // funcB is defined in b.js and called by a.js
+      
       expect(related.has('/path/a.js')).toBe(true);
       expect(related.has('/path/b.js')).toBe(true);
     });

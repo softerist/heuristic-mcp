@@ -1,18 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { sliceAndNormalize } from '../lib/slice-normalize.js';
 
-/**
- * This test verifies that the sliceAndNormalize implementation in lib/slice-normalize.js
- * matches the duplicated implementation in lib/embedding-worker.js.
- * 
- * The worker duplicates this function to avoid dynamic import latency.
- * If this test fails, both implementations need to be synchronized.
- * 
- * See comment in lib/embedding-worker.js around line 107-110.
- */
+
 
 describe('sliceAndNormalize synchronization', () => {
-  // Replicate the worker's implementation for comparison
+  
   function workerSliceAndNormalize(vector, targetDim) {
     if (!targetDim || targetDim >= vector.length) {
       return vector;
@@ -36,7 +28,7 @@ describe('sliceAndNormalize synchronization', () => {
       { vector: new Float32Array([1, 2, 3, 4, 5]), targetDim: 3 },
       { vector: new Float32Array([0.1, 0.2, 0.3, 0.4]), targetDim: 2 },
       { vector: new Float32Array([1, 0, 0, 0]), targetDim: 2 },
-      { vector: new Float32Array([0, 0, 0, 0]), targetDim: 2 }, // Edge case: zero vector
+      { vector: new Float32Array([0, 0, 0, 0]), targetDim: 2 }, 
       { vector: new Float32Array([0.5, -0.5, 0.5, -0.5]), targetDim: 3 },
     ];
 
@@ -72,7 +64,7 @@ describe('sliceAndNormalize synchronization', () => {
     const libResult = sliceAndNormalize(vector, targetDim);
     const workerResult = workerSliceAndNormalize(vector, targetDim);
 
-    // Calculate magnitude of result
+    
     const libMagnitude = Math.sqrt(libResult[0] ** 2 + libResult[1] ** 2);
     const workerMagnitude = Math.sqrt(workerResult[0] ** 2 + workerResult[1] ** 2);
 

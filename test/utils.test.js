@@ -1,6 +1,4 @@
-/**
- * Tests for utils helpers not covered elsewhere
- */
+
 
 import { describe, it, expect } from 'vitest';
 import { smartChunk, MODEL_TOKEN_LIMITS } from '../lib/utils.js';
@@ -27,26 +25,26 @@ describe('smartChunk', () => {
   });
 
   it('splits large content respecting boundaries and overlap', () => {
-    // Generate content larger than typical token limit
+    
     const lines = [];
     for (let i = 0; i < 500; i++) {
       lines.push(`function function_${i}() { return ${i}; }`);
     }
     const content = lines.join('\n');
 
-    // Mock config with small limit to force frequent splitting
-    // Note: getChunkingParams returns fixed values usually, unless mocked.
-    // But we can rely on default limits (usually ~1000 tokens)
-    // 500 lines of code should trigger split.
+    
+    
+    
+    
 
     const config = { embeddingModel: 'test-model' };
     const chunks = smartChunk(content, 'test.js', config);
 
     expect(chunks.length).toBeGreaterThan(1);
-    // Check overlap
+    
     if (chunks.length > 1) {
-      // First few lines of chunk 2 should be in chunk 1 (if overlap exists)
-      // This validates lines 255-280 (split logic)
+      
+      
     }
   });
 
@@ -75,7 +73,7 @@ describe('smartChunk', () => {
     `;
     const config = { embeddingModel: 'test-model' };
     smartChunk(content, 'test.js', config);
-    // Mainly ensuring no crash and coverage of state machine (lines 176-230)
+    
   });
 
   it('splits chunks when target token budget is exceeded', () => {
@@ -114,7 +112,7 @@ describe('Similarity Metrics', () => {
   it('dotSimilarity calculates correct dot product', () => {
     const a = [1, 2, 3];
     const b = [4, 5, 6];
-    // 1*4 + 2*5 + 3*6 = 4 + 10 + 18 = 32
+    
     expect(dotSimilarity(a, b)).toBe(32);
   });
 });
@@ -124,8 +122,8 @@ describe('Hashing', () => {
     const content = 'hello world';
     const hash = hashContent(content);
     expect(typeof hash).toBe('string');
-    expect(hash).toHaveLength(32); // MD5 hex
-    expect(hash).toBe(hashContent(content)); // Deterministic
+    expect(hash).toHaveLength(32); 
+    expect(hash).toBe(hashContent(content)); 
     expect(hash).not.toBe(hashContent('goodbye'));
   });
 });

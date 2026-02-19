@@ -273,7 +273,7 @@ describe('index-codebase branch coverage focused', () => {
     const cache = createCache();
     const indexer = new CodebaseIndexer(vi.fn(), cache, { workerThreads: 1 });
 
-    // Create a worker that returns empty results
+    
     let handler;
     const worker = {
       on: (event, fn) => {
@@ -282,7 +282,7 @@ describe('index-codebase branch coverage focused', () => {
       once: () => {},
       off: () => {},
       postMessage: (msg) => {
-        // Respond with success but empty results, implying nothing needed retry or all done
+        
         handler({ type: 'results', results: [], batchId: msg.batchId });
       },
     };
@@ -485,7 +485,7 @@ describe('index-codebase branch coverage focused', () => {
       .mockResolvedValue([{ file: '/root/a.js', content: 'code', hash: 'h' }]);
     smartChunkMock.mockReturnValueOnce([{ text: 'a', startLine: 1, endLine: 1 }]);
 
-    // Return a result for a file that wasn't in the batch ('phantom.js')
+    
     vi.spyOn(indexer, 'processChunksSingleThreaded').mockResolvedValue([
       {
         file: '/root/phantom.js',

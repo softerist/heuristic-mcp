@@ -1,6 +1,4 @@
-/**
- * Ensure the code-review workflow includes the required production-ready guidance.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import fs from 'fs/promises';

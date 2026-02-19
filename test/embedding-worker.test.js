@@ -236,7 +236,7 @@ describe('embedding-worker', () => {
 
     await messageHandler({ type: 'unknown' });
 
-    // Should throw error for unknown message type
+    
     expect(parentPort.postMessage).toHaveBeenCalledTimes(2);
     expect(parentPort.postMessage).toHaveBeenCalledWith({ type: 'ready' });
     expect(parentPort.postMessage).toHaveBeenCalledWith({

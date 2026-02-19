@@ -1,10 +1,7 @@
 import path from 'path';
 import { dotSimilarity, smartChunk, estimateTokens, getModelTokenLimit } from '../lib/utils.js';
 
-/**
- * FindSimilarCode feature
- * Given a code snippet, finds similar patterns elsewhere in the codebase
- */
+
 export class FindSimilarCode {
   constructor(embedder, cache, config) {
     this.embedder = embedder;
@@ -62,15 +59,15 @@ export class FindSimilarCode {
       let codeToEmbed = code;
       let warningMessage = null;
 
-      // Check if input is too large and truncate intelligently
+      
       const estimatedTokens = estimateTokens(code);
       const limit = getModelTokenLimit(this.config.embeddingModel);
 
-      // If input is significantly larger than the model limit, we should chunk it
+      
       if (estimatedTokens > limit) {
-        // Use smartChunk to get a semantically valid first block
-        // We pass a dummy file name to trigger language detection if possible, or default to .txt
-        // Since we don't know the language, we'll try to guess or just use generic chunking
+        
+        
+        
         const chunks = smartChunk(code, 'input.txt', this.config);
         if (chunks.length > 0) {
           codeToEmbed = chunks[0].text;
@@ -78,14 +75,14 @@ export class FindSimilarCode {
         }
       }
 
-      // Generate embedding for the input code
+      
       const codeEmbed = await this.embedder(codeToEmbed, {
         pooling: 'mean',
         normalize: true,
       });
 
-      // CRITICAL: Deep copy Float32Array to avoid detachment issues with WASM/Workers
-      // accessing a detached buffer from a reusable ONNX tensor can crash the process.
+      
+      
       let codeVector;
       try {
         codeVector = new Float32Array(codeEmbed.data);
@@ -94,7 +91,7 @@ export class FindSimilarCode {
           try {
             codeEmbed.dispose();
           } catch {
-            /* ignore */
+            
           }
         }
       }
@@ -120,9 +117,7 @@ export class FindSimilarCode {
       const normalizeText = (text) => text.trim().replace(/\s+/g, ' ');
       const normalizedInput = normalizeText(codeToEmbed);
 
-      /**
-       * Batch scoring function to prevent blocking the event loop
-       */
+      
       const scoreAndFilter = async (chunks) => {
         const BATCH_SIZE = 500;
         const scored = [];
@@ -130,7 +125,7 @@ export class FindSimilarCode {
         for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
           const batch = chunks.slice(i, i + BATCH_SIZE);
 
-          // Yield to event loop between batches
+          
           if (i > 0) {
             await new Promise((resolve) => setTimeout(resolve, 0));
           }
@@ -159,14 +154,14 @@ export class FindSimilarCode {
 
       let filteredResults = await scoreAndFilter(candidates);
 
-      // Fallback to full scan if ANN didn't provide enough results
-      // Optimization: Skip full scan on large codebases to avoid long pauses
+      
+      
       const MAX_FULL_SCAN_SIZE = 5000;
       if (usedAnn && filteredResults.length < safeMaxResults) {
         if (vectorStore.length <= MAX_FULL_SCAN_SIZE) {
           filteredResults = await scoreAndFilter(vectorStore);
         } else {
-          // Just return what we found via ANN
+          
         }
       }
       const results = [];
@@ -220,7 +215,7 @@ export class FindSimilarCode {
   }
 }
 
-// MCP Tool definition
+
 export function getToolDefinition(_config) {
   return {
     name: 'd_find_similar_code',
@@ -256,7 +251,7 @@ export function getToolDefinition(_config) {
   };
 }
 
-// Tool handler
+
 export async function handleToolCall(request, findSimilarCode) {
   const args = request.params?.arguments || {};
   const code = args.code;

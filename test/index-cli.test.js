@@ -396,7 +396,7 @@ describe('index.js CLI coverage', () => {
       const { main } = await import('../index.js');
       await main();
     } catch {
-      /* ignore */
+      
     }
     expect(stopMock).toHaveBeenCalled();
 
@@ -407,7 +407,7 @@ describe('index.js CLI coverage', () => {
       const { main } = await import('../index.js');
       await main();
     } catch {
-      /* ignore */
+      
     }
     expect(startMock).toHaveBeenCalled();
 
@@ -418,7 +418,7 @@ describe('index.js CLI coverage', () => {
       const { main } = await import('../index.js');
       await main();
     } catch {
-      /* ignore */
+      
     }
     expect(statusMock).toHaveBeenCalled();
   });
@@ -455,7 +455,7 @@ describe('index.js CLI coverage', () => {
     const { main } = await import('../index.js');
     await main();
 
-    // Trigger the background initialization timeout
+    
     await vi.runAllTimersAsync();
     await Promise.resolve();
     await Promise.resolve();
@@ -493,7 +493,7 @@ describe('index.js CLI coverage', () => {
     const { main } = await import('../index.js');
     await main();
 
-    // Trigger the background initialization timeout
+    
     await vi.runAllTimersAsync();
     await Promise.resolve();
     await Promise.resolve();
@@ -617,7 +617,7 @@ describe('index.js CLI coverage', () => {
       const { main } = await import('../index.js');
       await main();
     } catch (err) {
-      // Expected failure
+      
     }
 
     await listeners.SIGINT();

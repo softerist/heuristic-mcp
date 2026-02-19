@@ -1,25 +1,18 @@
-/**
- * Runtime Workspace Switching Tool
- *
- * Changes the workspace path at runtime, reinitializing the cache
- * and optionally triggering reindexing.
- */
+
 
 import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
 import { acquireWorkspaceLock, releaseWorkspaceLock } from '../lib/server-lifecycle.js';
 
-/**
- * Generate a workspace-specific cache directory path
- */
+
 function getWorkspaceCacheDir(workspacePath, globalCacheDir) {
   const normalized = path.resolve(workspacePath);
   const hash = crypto.createHash('md5').update(normalized).digest('hex').slice(0, 12);
   return path.join(globalCacheDir, 'heuristic-mcp', hash);
 }
 
-// MCP Tool definition
+
 export function getToolDefinition() {
   return {
     name: 'f_set_workspace',
@@ -50,10 +43,7 @@ export function getToolDefinition() {
   };
 }
 
-/**
- * Create the SetWorkspace feature class
- * This needs access to shared state (config, cache, indexer) to actually perform the switch
- */
+
 export class SetWorkspaceFeature {
   constructor(config, cache, indexer, getGlobalCacheDir) {
     this.config = config;
@@ -63,7 +53,7 @@ export class SetWorkspaceFeature {
   }
 
   async execute({ workspacePath, reindex = true }) {
-    // Validate workspace path
+    
     if (!workspacePath || typeof workspacePath !== 'string') {
       return {
         success: false,
@@ -73,7 +63,7 @@ export class SetWorkspaceFeature {
 
     const normalizedPath = path.resolve(workspacePath);
 
-    // Check if directory exists
+    
     try {
       const stat = await fs.stat(normalizedPath);
       if (!stat.isDirectory()) {
@@ -92,14 +82,14 @@ export class SetWorkspaceFeature {
     const previousWorkspace = this.config.searchDirectory;
     const previousCache = this.config.cacheDirectory;
 
-    // Update config
+    
     this.config.searchDirectory = normalizedPath;
 
-    // Calculate new cache directory (match config.js behavior)
+    
     const globalCacheDir = this.getGlobalCacheDir();
     let newCacheDir = getWorkspaceCacheDir(normalizedPath, globalCacheDir);
 
-    // Prefer legacy local cache if present
+    
     const legacyPath = path.join(normalizedPath, '.smart-coding-cache');
     try {
       const legacyStats = await fs.stat(legacyPath);
@@ -107,15 +97,15 @@ export class SetWorkspaceFeature {
         newCacheDir = legacyPath;
       }
     } catch {
-      // ignore missing legacy cache
+      
     }
     this.config.cacheDirectory = newCacheDir;
 
-    // Create cache directory if needed
+    
     try {
       await fs.mkdir(newCacheDir, { recursive: true });
     } catch (err) {
-      // Revert config on failure
+      
       this.config.searchDirectory = previousWorkspace;
       this.config.cacheDirectory = previousCache;
       return {
@@ -124,13 +114,13 @@ export class SetWorkspaceFeature {
       };
     }
 
-    // Acquire new workspace lock before proceeding
+    
     const lock = await acquireWorkspaceLock({
       cacheDirectory: newCacheDir,
       workspaceDir: normalizedPath,
     });
     if (!lock.acquired) {
-      // Revert config on failure
+      
       this.config.searchDirectory = previousWorkspace;
       this.config.cacheDirectory = previousCache;
       return {
@@ -140,7 +130,7 @@ export class SetWorkspaceFeature {
     }
     let indexerUpdateError = null;
 
-    // Update indexer's workspace root and related state
+    
     if (this.indexer) {
       if (typeof this.indexer.terminateWorkers === 'function') {
         try {
@@ -154,7 +144,7 @@ export class SetWorkspaceFeature {
           await this.indexer.updateWorkspaceState({ restartWatcher: true });
         } else {
           this.indexer.workspaceRoot = normalizedPath;
-          this.indexer.workspaceRootReal = null; // Reset cached realpath
+          this.indexer.workspaceRootReal = null; 
           if (this.config.watchFiles && typeof this.indexer.setupFileWatcher === 'function') {
             await this.indexer.setupFileWatcher();
           }
@@ -165,7 +155,7 @@ export class SetWorkspaceFeature {
     }
 
     if (indexerUpdateError) {
-      // Roll back config + lock on failure to avoid partial switch
+      
       this.config.searchDirectory = previousWorkspace;
       this.config.cacheDirectory = previousCache;
       await releaseWorkspaceLock({ cacheDirectory: newCacheDir });
@@ -192,12 +182,12 @@ export class SetWorkspaceFeature {
       };
     }
 
-    // Release old workspace lock after successful indexer update
+    
     if (previousCache) {
       await releaseWorkspaceLock({ cacheDirectory: previousCache });
     }
 
-    // Re-initialize cache for new workspace if cache has a load method
+    
     if (this.cache && typeof this.cache.load === 'function') {
       try {
         await this.cache.load();
@@ -206,11 +196,11 @@ export class SetWorkspaceFeature {
       }
     }
 
-    // Optionally trigger reindex
+    
     let reindexStatus = null;
     if (reindex && this.indexer && typeof this.indexer.indexAll === 'function') {
       try {
-        // Start indexing asynchronously
+        
         this.indexer.indexAll().catch((err) => {
           console.warn(`[SetWorkspace] Reindex failed: ${err.message}`);
         });
@@ -232,7 +222,7 @@ export class SetWorkspaceFeature {
   }
 }
 
-// Tool handler (needs instance context, so this is a factory)
+
 export function createHandleToolCall(featureInstance) {
   return async (request) => {
     const args = request.params?.arguments || {};
@@ -240,7 +230,7 @@ export function createHandleToolCall(featureInstance) {
 
     const result = await featureInstance.execute({
       workspacePath,
-      reindex: reindex !== false, // Default to true
+      reindex: reindex !== false, 
     });
 
     if (result.success) {
@@ -261,5 +251,5 @@ export function createHandleToolCall(featureInstance) {
   };
 }
 
-// Export for use in registration
+
 export { getWorkspaceCacheDir };

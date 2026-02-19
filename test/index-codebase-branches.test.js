@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import os from 'os';
 
-// Mock os.cpus
+
 vi.mock('os', async () => {
   const actual = await vi.importActual('os');
   return {
@@ -12,7 +12,7 @@ vi.mock('os', async () => {
 
 let workerMode = 'ready';
 
-// Mock Worker
+
 vi.mock('worker_threads', () => {
   class MockWorker {
     constructor() {
@@ -44,7 +44,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { Worker } from 'worker_threads';
 
-// Store handlers
+
 const handlers = {};
 const mockWatcher = {
   on: vi.fn((event, handler) => {
@@ -54,7 +54,7 @@ const mockWatcher = {
   close: vi.fn().mockResolvedValue(undefined),
 };
 
-// Mock dependencies
+
 vi.mock('fs/promises');
 vi.mock('chokidar', () => ({
   default: {
@@ -70,7 +70,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
   let mockServer;
 
   beforeEach(() => {
-    // Ensure we start with real timers
+    
     vi.useRealTimers();
     workerMode = 'ready';
 
@@ -167,10 +167,10 @@ describe('CodebaseIndexer Branch Coverage', () => {
     indexer.config.workerThreads = 2;
     const promise = indexer.initializeWorkers();
 
-    // Advance time to trigger timeout
+    
     vi.advanceTimersByTime(130000);
 
-    // The timeout callback rejects the promise, which is caught in initializeWorkers
+    
     await promise;
   });
 
@@ -221,14 +221,14 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     const handler = mockWorker.on.mock.calls.find((call) => call[0] === 'message')[1];
 
-    handler({ batchId: 'wrong' }); // L249 false
+    handler({ batchId: 'wrong' }); 
 
     const batchId = mockWorker.postMessage.mock.calls[0][0].batchId;
-    handler({ batchId, type: 'unknown' }); // L254 unknown
-    handler({ batchId, type: 'error', error: 'fail' }); // L254 error
+    handler({ batchId, type: 'unknown' }); 
+    handler({ batchId, type: 'error', error: 'fail' }); 
 
     const results = await promise;
-    expect(results).toHaveLength(1); // Fallback ran
+    expect(results).toHaveLength(1); 
   });
 
   it('falls back to single-threaded execution on worker error', async () => {
@@ -326,11 +326,11 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     const promise = indexer.processChunksWithWorkers([{ file: 'a.js', text: 'c' }]);
 
-    // 1. Crash
+    
     const errorHandler = mockWorker.once.mock.calls.find((c) => c[0] === 'error')[1];
     errorHandler(new Error('crash'));
 
-    // 2. Timeout
+    
     const promise2 = indexer.processChunksWithWorkers([{ file: 'b.js', text: 'c' }]);
     vi.advanceTimersByTime(310000);
 
@@ -452,7 +452,7 @@ describe('CodebaseIndexer Branch Coverage', () => {
 
     await indexer.indexAll();
 
-    // Wait for background promise
+    
     await new Promise((resolve) => setImmediate(resolve));
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Skipped hash update'));
     expect(console.warn).toHaveBeenCalledWith(
@@ -504,19 +504,19 @@ describe('CodebaseIndexer Branch Coverage', () => {
     await indexer.setupFileWatcher();
     await indexer.setupFileWatcher();
 
-    // TRUE branches
+    
     await handlers['add']('file.js');
     await handlers['change']('file.js');
     await handlers['unlink']('file.js');
 
-    // FALSE branches
+    
     indexer.server = null;
     await handlers['add']('file.js');
   });
 
   it('skips files provided with content if too large', async () => {
     indexer.discoverFiles = vi.fn().mockResolvedValue(['file-large-content.js']);
-    // Mock preFilterFiles to return an entry with content that exceeds maxFileSize
+    
     indexer.preFilterFiles = vi.fn().mockResolvedValue([
       {
         file: 'file-large-content.js',
@@ -801,24 +801,24 @@ describe('CodebaseIndexer Branch Coverage', () => {
   it('queues watch events when indexing is in progress', async () => {
     await indexer.setupFileWatcher();
 
-    // Simulate indexing in progress
+    
     indexer.isIndexing = true;
 
-    // Trigger ADD event
+    
     await handlers['add']('added.js');
     expect(indexer.pendingWatchEvents.get(path.join('/test', 'added.js'))).toBe('add');
     expect(console.info).toHaveBeenCalledWith(
       expect.stringContaining('Queued add event during indexing')
     );
 
-    // Trigger CHANGE event
+    
     await handlers['change']('changed.js');
     expect(indexer.pendingWatchEvents.get(path.join('/test', 'changed.js'))).toBe('change');
     expect(console.info).toHaveBeenCalledWith(
       expect.stringContaining('Queued change event during indexing')
     );
 
-    // Trigger UNLINK event
+    
     await handlers['unlink']('deleted.js');
     expect(indexer.pendingWatchEvents.get(path.join('/test', 'deleted.js'))).toBe('unlink');
     expect(console.info).toHaveBeenCalledWith(

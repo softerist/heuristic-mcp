@@ -83,7 +83,7 @@ describe('EmbeddingsCache', () => {
       const config = await createConfig(dir);
       const cache = new EmbeddingsCache(config);
 
-      // Line 176
+      
       const mkdirSpy = vi
         .spyOn(fs, 'mkdir')
         .mockRejectedValue(new Error('Failed to create directory'));
@@ -94,11 +94,11 @@ describe('EmbeddingsCache', () => {
       );
       mkdirSpy.mockRestore();
 
-      // Line 219
+      
       await cache.save();
       expect(cache.isSaving).toBe(false);
 
-      // Line 246
+      
       cache.setFileCallData('a.js', { defs: [], calls: [] });
       cache.removeFileFromStore('a.js');
       expect(cache.getFileCallData('a.js')).toBeUndefined();
@@ -617,7 +617,7 @@ describe('EmbeddingsCache', () => {
       const cache = new EmbeddingsCache(config);
       const meta = { version: 1, embeddingModel: config.embeddingModel };
       await fs.writeFile(path.join(dir, 'meta.json'), JSON.stringify(meta));
-      // embeddings.json and file-hashes.json are missing
+      
       await cache.load();
       expect(cache.getVectorStore()).toEqual([]);
 

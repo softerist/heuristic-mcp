@@ -10,26 +10,26 @@ describe('ANN Fallback (Missing hnswlib-node)', () => {
   let embedder;
 
   beforeEach(() => {
-    // Mock configuration with ANN enabled
+    
     const config = {
       ...DEFAULT_CONFIG,
       enableCache: false,
       cacheDirectory: './test-cache-ann',
       annEnabled: true,
-      annMinChunks: 5, // Low threshold for testing
+      annMinChunks: 5, 
       annIndexCache: false,
       embeddingModel: 'test-model',
-      unloadModelAfterSearch: false, // Use mock embedder directly, not child process
+      unloadModelAfterSearch: false, 
     };
 
-    // Mock embedder
+    
     embedder = vi.fn().mockResolvedValue({
       data: new Float32Array([0.1, 0.2, 0.3]),
     });
 
     cache = new EmbeddingsCache(config);
 
-    // Populate vector store with dummy data
+    
     const vectors = [];
     for (let i = 0; i < 10; i++) {
       vectors.push({
@@ -37,7 +37,7 @@ describe('ANN Fallback (Missing hnswlib-node)', () => {
         content: `content ${i}`,
         startLine: 1,
         endLine: 5,
-        vector: [0.1, 0.2, 0.3], // simple dummy vector
+        vector: [0.1, 0.2, 0.3], 
       });
     }
     cache.setVectorStore(vectors);
@@ -54,7 +54,7 @@ describe('ANN Fallback (Missing hnswlib-node)', () => {
     expect(result).toBeDefined();
     expect(result.results.length).toBe(5);
     expect(embedder).toHaveBeenCalledWith(query, expect.any(Object));
-    // Verify it didn't throw and ANN attempt doesn't prevent results
+    
     const annAttempt = await cache.queryAnn([0.1, 0.2, 0.3], 5);
     expect(annAttempt).toEqual([]);
   });

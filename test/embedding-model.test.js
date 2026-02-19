@@ -1,12 +1,4 @@
-/**
- * Tests for Local LLM (Embedding Model)
- *
- * Tests the embedding model functionality including:
- * - Model loading
- * - Embedding generation
- * - Vector properties
- * - Similarity calculations
- */
+
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { pipeline } from '@huggingface/transformers';
@@ -26,14 +18,14 @@ describe('Local Embedding Model', () => {
       embedder = await pipeline('feature-extraction', config.embeddingModel);
       console.info('[Test] Embedding model loaded successfully');
     } else {
-      // Smart semi-semantic mock for offline/CI-friendly tests
-      // Simulates semantic similarity using keywords and bag-of-words
+      
+      
       embedder = async (text, options = {}) => {
         const input = String(text ?? '').toLowerCase();
         const vector = new Float32Array(mockDimensions).fill(0);
 
-        // 1. Synonym Mapping (Concept Injection)
-        // Map synonyms to specific vector dimensions to simulate "meaning"
+        
+        
         const concepts = {
           login: 0,
           auth: 0,
@@ -49,29 +41,29 @@ describe('Local Embedding Model', () => {
           require: 3,
           module: 3,
           react: 3,
-          vue: 3, // Frameworks grouped
+          vue: 3, 
           weather: 4,
           sun: 4,
           pizza: 5,
           food: 5,
         };
 
-        // 2. Bag-of-Words with ordering noise
-        // This ensures "A B" == "B A" (high similarity)
+        
+        
         for (const word of input.split(/\W+/)) {
           if (!word) continue;
 
-          // Add concept signal
+          
           if (word in concepts) {
             const dim = concepts[word];
             vector[dim] += 1.0;
           }
 
-          // Add deterministic character signal (hashing)
-          // Use Bag-of-Words approach: sum vectors regardless of position
+          
+          
           for (let i = 0; i < word.length; i++) {
             const charCode = word.charCodeAt(i);
-            // Spread char influence across dimensions to avoid collisions
+            
             vector[charCode % mockDimensions] += 0.1;
           }
         }
@@ -114,7 +106,7 @@ describe('Local Embedding Model', () => {
       const vector = Array.from(output.data);
 
       if (useRealEmbedder) {
-        // Jina v2 base code produces 768-dimensional vectors
+        
         expect(vector.length).toBe(768);
       } else {
         expect(vector.length).toBe(mockDimensions);
@@ -126,7 +118,7 @@ describe('Local Embedding Model', () => {
       const output = await embedder(text, { pooling: 'mean', normalize: true });
       const vector = Array.from(output.data);
 
-      // Calculate magnitude (should be ~1 for normalized vectors)
+      
       const magnitude = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
       expect(magnitude).toBeCloseTo(1, 4);
     });
@@ -144,7 +136,7 @@ describe('Local Embedding Model', () => {
       const vector1 = Array.from(output1.data);
       const vector2 = Array.from(output2.data);
 
-      // Vectors should be different
+      
       const areSame = vector1.every((v, i) => Math.abs(v - vector2[i]) < 0.0001);
       expect(areSame).toBe(false);
     });
@@ -201,7 +193,7 @@ describe('Local Embedding Model', () => {
 
       const similarity = dotSimilarity(vector1, vector2);
 
-      // Same words, different order - should be very similar
+      
       expect(similarity).toBeGreaterThan(0.9);
     });
 
@@ -220,8 +212,8 @@ describe('Local Embedding Model', () => {
 
       const similarity = dotSimilarity(vector1, vector2);
 
-      // Different topics - should have low similarity
-      expect(similarity).toBeLessThan(0.7); // Relaxed for Jina which might have different distribution
+      
+      expect(similarity).toBeLessThan(0.7); 
     });
 
     it('should capture code semantic similarity', async () => {
@@ -242,10 +234,10 @@ describe('Local Embedding Model', () => {
       const v2 = Array.from(output2.data);
       const v3 = Array.from(output3.data);
 
-      const sim12 = dotSimilarity(v1, v2); // login-related
-      const sim13 = dotSimilarity(v1, v3); // login vs sorting
+      const sim12 = dotSimilarity(v1, v2); 
+      const sim13 = dotSimilarity(v1, v3); 
 
-      // Login concepts should be more similar to each other than to sorting
+      
       expect(sim12).toBeGreaterThan(sim13);
     });
 
@@ -267,10 +259,10 @@ describe('Local Embedding Model', () => {
       const v2 = Array.from(output2.data);
       const v3 = Array.from(output3.data);
 
-      const sim12 = dotSimilarity(v1, v2); // Both imports
-      const sim13 = dotSimilarity(v1, v3); // Import vs weather
+      const sim12 = dotSimilarity(v1, v2); 
+      const sim13 = dotSimilarity(v1, v3); 
 
-      // Import statements should be more similar to each other
+      
       expect(sim12).toBeGreaterThan(sim13);
     });
   });
@@ -283,7 +275,7 @@ describe('Local Embedding Model', () => {
       await embedder(text, { pooling: 'mean', normalize: true });
       const duration = Date.now() - start;
 
-      // Should be fast (under 500ms for single embedding)
+      
       expect(duration).toBeLessThan(1500);
     });
 
@@ -302,7 +294,7 @@ describe('Local Embedding Model', () => {
       }
       const duration = Date.now() - start;
 
-      // 5 embeddings should complete in reasonable time
+      
       expect(duration).toBeLessThan(6000);
       console.info(
         `[Test] 5 embeddings generated in ${duration}ms (${(duration / 5).toFixed(0)}ms avg)`

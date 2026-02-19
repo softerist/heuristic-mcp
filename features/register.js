@@ -16,9 +16,9 @@ function getUserHomeDir() {
   return os.homedir();
 }
 
-// Detect which IDE is running the install
+
 function detectCurrentIDE() {
-  // Check environment variables to determine which IDE is running
+  
   if (process.env.ANTIGRAVITY_AGENT) {
     return 'Antigravity';
   }
@@ -46,18 +46,18 @@ function detectCurrentIDE() {
     return 'Windsurf';
   }
 
-  // Claude Desktop doesn't have a known env var.
+  
   return null;
 }
 
-// Known config paths for different IDEs
+
 function getConfigPaths() {
   const platform = process.platform;
   const home = getUserHomeDir();
   const currentIDE = detectCurrentIDE();
   const allPaths = [];
 
-  // Antigravity - dedicated mcp_config.json
+  
   allPaths.push({
     name: 'Antigravity',
     path: path.join(home, '.gemini', 'antigravity', 'mcp_config.json'),
@@ -65,7 +65,7 @@ function getConfigPaths() {
     canCreate: true,
   });
 
-  // Codex - dedicated config.toml
+  
   allPaths.push({
     name: 'Codex',
     path: path.join(home, '.codex', 'config.toml'),
@@ -73,7 +73,7 @@ function getConfigPaths() {
     canCreate: true,
   });
 
-  // Claude Desktop - dedicated config file
+  
   if (platform === 'darwin') {
     allPaths.push({
       name: 'Claude Desktop',
@@ -96,7 +96,7 @@ function getConfigPaths() {
     });
   }
 
-  // Cursor - settings.json with mcpServers key
+  
   if (platform === 'darwin') {
     allPaths.push({
       name: 'Cursor',
@@ -138,7 +138,7 @@ function getConfigPaths() {
     preferredContainerKey: 'mcpServers',
   });
 
-  // Warp MCP config
+  
   allPaths.push({
     name: 'Warp',
     path: path.join(home, '.warp', 'mcp_settings.json'),
@@ -156,7 +156,7 @@ function getConfigPaths() {
     });
   }
   
-  // VS Code MCP registry (mcp.json uses "servers" key)
+  
   if (platform === 'darwin') {
     allPaths.push({
       name: 'VS Code',
@@ -211,15 +211,15 @@ function getConfigPaths() {
     });
   }
 
-  // Keep updates broad so a single install can refresh dedicated configs (Codex + Antigravity)
-  // while still avoiding creation of shared IDE settings files unless they already exist.
+  
+  
   return allPaths.map((entry) => ({
     ...entry,
     canCreate: entry.canCreate || entry.name === currentIDE,
   }));
 }
 
-// Helper to force output to terminal, bypassing npm's silence
+
 function forceLog(message) {
   try {
     if (process.platform !== 'win32') {
@@ -266,8 +266,8 @@ function ideMatchesFilter(name, filter) {
 export async function register(filter = null) {
   const currentIDE = detectCurrentIDE();
 
-  // Use PATH-resolved CLI command so generated configs stay portable across machines
-  // and installations (no absolute script path baked into IDE settings).
+  
+  
   const serverConfig = {
     command: 'heuristic-mcp',
     args: [],
@@ -284,7 +284,7 @@ export async function register(filter = null) {
     }
 
     try {
-      // Check if file exists - create if canCreate is true for this IDE
+      
       let fileExists = true;
 
       try {
@@ -292,7 +292,7 @@ export async function register(filter = null) {
       } catch {
         fileExists = false;
 
-        // Only create config if this IDE allows it (has dedicated MCP config file)
+        
         if (canCreate) {
           try {
             await fs.mkdir(path.dirname(configPath), { recursive: true });
@@ -304,7 +304,7 @@ export async function register(filter = null) {
             continue;
           }
         } else {
-          // Skip IDEs that use shared settings files if they don't exist
+          
           continue;
         }
       }
@@ -339,7 +339,7 @@ export async function register(filter = null) {
         continue;
       }
 
-      // Write back synchronously to avoid race conditions
+      
       writeFileSync(configPath, updated);
 
       forceLog(`\x1b[32m[Auto-Register] ✅ Successfully registered with ${name}\x1b[0m`);
@@ -355,12 +355,12 @@ export async function register(filter = null) {
       `[Auto-Register] Manual Config:\n${JSON.stringify({ mcpServers: { 'heuristic-mcp': serverConfig } }, null, 2)}`
     );
   } else {
-    // Friendly Banner (Using forceLog to bypass npm stdout suppression)
+    
     forceLog('\n\x1b[36m' + '='.repeat(60));
     forceLog('   🚀 Heuristic MCP Installed & Configured!   ');
     forceLog('='.repeat(60) + '\x1b[0m');
 
-    // Show important paths
+    
     const home = getUserHomeDir();
     const cacheRoot =
       process.platform === 'win32'

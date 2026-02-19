@@ -5,14 +5,14 @@ import fs from 'fs/promises';
 import { Worker } from 'worker_threads';
 import EventEmitter from 'events';
 
-// Mock worker_threads
+
 vi.mock('worker_threads', () => {
   return {
     Worker: vi.fn(),
   };
 });
 
-// Mock fs/promises
+
 vi.mock('fs/promises', () => {
   return {
     default: {
@@ -39,19 +39,19 @@ describe('Final Coverage Boost', () => {
     };
 
     beforeEach(() => {
-      // Default fs behavior
+      
       fs.stat.mockResolvedValue({ size: 100 });
       fs.readFile.mockResolvedValue('{}');
     });
 
     it('should handle worker double-settling guard', { timeout: 1000 }, async () => {
-      // Setup: only cache file triggers worker
+      
       fs.stat.mockImplementation(async (path) => {
         if (path && path.includes('embeddings.json')) return { size: 6 * 1024 * 1024 };
         return { size: 100 };
       });
 
-      // Provide valid meta to avoid early returns (though not strictly needed for this test)
+      
       fs.readFile.mockImplementation(async (path) => {
         if (path.includes('meta.json'))
           return JSON.stringify({ version: 1, embeddingModel: 'test-model' });
@@ -68,7 +68,7 @@ describe('Final Coverage Boost', () => {
 
       const cache = new EmbeddingsCache(config);
 
-      // Wait for the worker to attach the 'message' listener
+      
       const workerListenerReady = new Promise((resolve) => {
         mockWorker.on('newListener', (event) => {
           if (event === 'message') resolve();
@@ -79,15 +79,15 @@ describe('Final Coverage Boost', () => {
 
       await workerListenerReady;
 
-      // Trigger success message
+      
       mockWorker.emit('message', { ok: true, data: [] });
 
-      // Immediately trigger exit - acts as second "settle" attempt
+      
       mockWorker.emit('exit', 0);
 
       await loadPromise;
 
-      // If it didn't throw, we're good.
+      
       expect(mockWorker.removeAllListeners).toHaveBeenCalled();
     });
 
@@ -96,8 +96,8 @@ describe('Final Coverage Boost', () => {
       fs.stat.mockImplementation(async (path) => {
         if (path && path.includes('embeddings.json')) {
           embeddingsStatCalls++;
-          // Only trigger worker (large size) on first attempt.
-          // On retry (triggered by load() seeing null result), return small size to use fs.readFile.
+          
+          
           if (embeddingsStatCalls === 1) return { size: 6 * 1024 * 1024 };
           return { size: 100 };
         }
@@ -195,19 +195,19 @@ describe('Final Coverage Boost', () => {
       };
 
       fs.mkdir.mockResolvedValue(undefined);
-      // readFile needs to return null for meta/cache/hash to skip main logic
-      // but return valid JSON for call-graph
+      
+      
       fs.readFile.mockImplementation(async (path) => {
         if (path.endsWith('call-graph.json')) {
           return JSON.stringify({ 'file.js': { definitions: [], calls: [] } });
         }
-        return null; // triggers "Missing cache metadata" early return, which is after call-graph load?
-        // Wait, call-graph load is inside load().
+        return null; 
+        
       });
 
-      // We need main cache load to succeed partially or reach the call-graph part.
-      // Looking at cache.js:163, it reads meta, cache, hash.
-      // If meta missing, it returns. We need meta to exist.
+      
+      
+      
 
       fs.readFile.mockImplementation(async (filePath) => {
         if (filePath.endsWith('meta.json')) {
@@ -221,7 +221,7 @@ describe('Final Coverage Boost', () => {
         return null;
       });
 
-      // Mock fs.stat for readJsonFile to avoid worker
+      
       fs.stat.mockResolvedValue({ size: 100 });
 
       const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -251,7 +251,7 @@ describe('Final Coverage Boost', () => {
       const fileCallData = new Map();
       fileCallData.set('file1.js', { definitions: ['CommonFunc'], calls: ['SharedTarget'] });
       fileCallData.set('file2.js', { definitions: ['CommonFunc'], calls: ['SharedTarget'] });
-      // logic at lines 253, 262: checks if map.has(key)
+      
 
       const graph = callGraph.buildCallGraph(fileCallData);
 

@@ -1,6 +1,4 @@
-/**
- * Tests for CodebaseIndexer file watcher behavior
- */
+
 
 import { describe, it, expect, vi } from 'vitest';
 import path from 'path';

@@ -1,9 +1,4 @@
-/**
- * ANN Config Tool - Runtime tuning of ANN search parameters
- *
- * Allows adjusting efSearch on the fly for speed/accuracy tradeoff,
- * and querying current ANN index statistics.
- */
+
 
 export class AnnConfigTool {
   constructor(cache, config) {
@@ -11,9 +6,7 @@ export class AnnConfigTool {
     this.config = config;
   }
 
-  /**
-   * Adjust efSearch and optionally trigger index rebuild
-   */
+  
   async execute(args) {
     const action = args.action || 'stats';
 
@@ -33,7 +26,7 @@ export class AnnConfigTool {
     }
 
     if (action === 'rebuild') {
-      // Force invalidate and rebuild the ANN index
+      
       this.cache.invalidateAnnIndex();
       const index = await this.cache.ensureAnnIndex();
       return {
@@ -56,7 +49,7 @@ export class AnnConfigTool {
     }
 
     if (result.enabled !== undefined) {
-      // Stats response
+      
       let output = '## ANN Index Statistics\n\n';
       output += `- **Enabled**: ${result.enabled}\n`;
       output += `- **Index Loaded**: ${result.indexLoaded}\n`;
@@ -79,12 +72,12 @@ export class AnnConfigTool {
       return output;
     }
 
-    // Other responses (set_ef_search, rebuild)
+    
     return JSON.stringify(result, null, 2);
   }
 }
 
-// MCP Tool definition
+
 export function getToolDefinition() {
   return {
     name: 'd_ann_config',
@@ -119,7 +112,7 @@ export function getToolDefinition() {
   };
 }
 
-// Tool handler
+
 export async function handleToolCall(request, annConfigTool) {
   const args = request.params.arguments || {};
   const result = await annConfigTool.execute(args);
