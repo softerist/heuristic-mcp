@@ -217,9 +217,13 @@ async function detectWorkspaceFromRoots() {
     
     const rootPaths = result.roots
       .map(r => r.uri)
-      .filter(uri => uri.startsWith('file:
+      .filter(uri => uri.startsWith('file://'))
       .map(uri => {
-        try { return fileURLToPath(uri); } catch { return null; }
+        try {
+          return fileURLToPath(uri);
+        } catch {
+          return null;
+        }
       })
       .filter(Boolean);
 
@@ -271,8 +275,7 @@ const features = [
   {
     module: SetWorkspaceFeature,
     instance: null,
-    handler: null, 
-    handler: null, 
+    handler: null,
   },
 ];
 

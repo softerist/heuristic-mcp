@@ -2,14 +2,12 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import crypto from 'crypto';
 import { acquireWorkspaceLock, releaseWorkspaceLock } from '../lib/server-lifecycle.js';
+import { getWorkspaceCachePath } from '../lib/workspace-cache-key.js';
 
 
 function getWorkspaceCacheDir(workspacePath, globalCacheDir) {
-  const normalized = path.resolve(workspacePath);
-  const hash = crypto.createHash('md5').update(normalized).digest('hex').slice(0, 12);
-  return path.join(globalCacheDir, 'heuristic-mcp', hash);
+  return getWorkspaceCachePath(workspacePath, globalCacheDir);
 }
 
 

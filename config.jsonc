@@ -1,5 +1,6 @@
 {
   // Root directory to index (relative or absolute).
+  // Keep "." for dynamic workspace behavior so MCP roots / IDE workspace selection works.
   "searchDirectory": ".",
   // File extensions to include (without dot).
   "fileExtensions": [
@@ -653,6 +654,8 @@
   },
   // Cache engine and serialization controls.
   "cache": {
+    // NOTE: leave top-level "cacheDirectory" unset to keep per-workspace global cache hashing.
+    // This preserves resume/incremental indexing across IDE restarts.
     // Persist embeddings between sessions.
     "enableCache": true,
     // Assume vectors are finite (skip validation).
@@ -710,7 +713,7 @@
     // Override embedding batch size (null = auto).
     "embeddingBatchSize": null,
     // ONNX threads used by embedding child process.
-    // 6 is a practical balance on 24-thread desktop CPUs (high throughput, less contention than 8+).
+    // 8 is a practical balance on 24-thread desktop CPUs for this workspace size.
     "embeddingProcessNumThreads": 8,
     // Embedding-child adaptive GC RSS threshold in MB (higher = less frequent GC).
     "embeddingProcessGcRssThresholdMb": 2048,
