@@ -1,6 +1,6 @@
 {
   "name": "@softerist/heuristic-mcp",
-  "version": "3.0.17",
+  "version": "3.1.0",
   "description": "An enhanced MCP server providing intelligent semantic code search with find-similar-code, recency ranking, and improved chunking. Fork of smart-coding-mcp.",
   "type": "module",
   "main": "index.js",
