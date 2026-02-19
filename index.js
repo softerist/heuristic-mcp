@@ -165,6 +165,105 @@ async function detectRuntimeWorkspaceFromEnv() {
   return null;
 }
 
+function normalizePathForCompare(targetPath) {
+  if (!targetPath) return '';
+  const resolved = path.resolve(targetPath);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+function isProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err?.code === 'EPERM';
+  }
+}
+
+async function findAutoAttachWorkspaceCandidate({ excludeCacheDirectory = null } = {}) {
+  const cacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
+  const normalizedExclude = normalizePathForCompare(excludeCacheDirectory);
+
+  let cacheDirs = [];
+  try {
+    cacheDirs = await fs.readdir(cacheRoot, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  const candidatesByWorkspace = new Map();
+  const preferredWorkspaceFromEnv = (await detectRuntimeWorkspaceFromEnv())?.workspacePath ?? null;
+  const normalizedPreferred = normalizePathForCompare(preferredWorkspaceFromEnv);
+
+  const upsertCandidate = (candidate) => {
+    const key = normalizePathForCompare(candidate.workspace);
+    const existing = candidatesByWorkspace.get(key);
+    if (!existing || candidate.rank > existing.rank) {
+      candidatesByWorkspace.set(key, candidate);
+    }
+  };
+
+  for (const entry of cacheDirs) {
+    if (!entry.isDirectory()) continue;
+    const cacheDirectory = path.join(cacheRoot, entry.name);
+    if (normalizedExclude && normalizePathForCompare(cacheDirectory) === normalizedExclude) continue;
+
+    const lockPath = path.join(cacheDirectory, 'server.lock.json');
+    try {
+      const rawLock = await fs.readFile(lockPath, 'utf-8');
+      const lock = JSON.parse(rawLock);
+      if (!isProcessAlive(lock?.pid)) continue;
+      const workspace = path.resolve(lock?.workspace || '');
+      if (!workspace || isNonProjectDirectory(workspace)) continue;
+      const stats = await fs.stat(workspace).catch(() => null);
+      if (!stats?.isDirectory()) continue;
+      const rank = Date.parse(lock?.startedAt || '') || 0;
+      upsertCandidate({
+        workspace,
+        cacheDirectory,
+        source: `lock:${lock.pid}`,
+        rank,
+      });
+      continue;
+    } catch {
+      
+    }
+
+    const metaPath = path.join(cacheDirectory, 'meta.json');
+    try {
+      const rawMeta = await fs.readFile(metaPath, 'utf-8');
+      const meta = JSON.parse(rawMeta);
+      const workspace = path.resolve(meta?.workspace || '');
+      if (!workspace || isNonProjectDirectory(workspace)) continue;
+      const stats = await fs.stat(workspace).catch(() => null);
+      if (!stats?.isDirectory()) continue;
+      const filesIndexed = Number(meta?.filesIndexed || 0);
+      if (filesIndexed <= 0) continue;
+      const rank = Date.parse(meta?.lastSaveTime || '') || 0;
+      upsertCandidate({
+        workspace,
+        cacheDirectory,
+        source: 'meta',
+        rank,
+      });
+    } catch {
+      
+    }
+  }
+
+  const candidates = Array.from(candidatesByWorkspace.values());
+  if (candidates.length === 0) return null;
+  if (normalizedPreferred) {
+    const preferred = candidates.find(
+      (candidate) => normalizePathForCompare(candidate.workspace) === normalizedPreferred
+    );
+    if (preferred) return preferred;
+  }
+  if (candidates.length === 1) return candidates[0];
+  return null;
+}
+
 async function maybeAutoSwitchWorkspace(request) {
   if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return;
   if (!setWorkspaceFeatureInstance || !config?.searchDirectory) return;
@@ -172,9 +271,16 @@ async function maybeAutoSwitchWorkspace(request) {
 
   const detected = await detectRuntimeWorkspaceFromEnv();
   if (!detected) return;
+  if (isNonProjectDirectory(detected.workspacePath)) {
+    console.info(
+      `[Server] Ignoring auto-switch candidate from env ${detected.envKey}: non-project path ${detected.workspacePath}`
+    );
+    return;
+  }
 
-  const currentWorkspace = path.resolve(config.searchDirectory);
-  if (detected.workspacePath === currentWorkspace) return;
+  const currentWorkspace = normalizePathForCompare(config.searchDirectory);
+  const detectedWorkspace = normalizePathForCompare(detected.workspacePath);
+  if (detectedWorkspace === currentWorkspace) return;
 
   if (autoWorkspaceSwitchPromise) {
     await autoWorkspaceSwitchPromise;
@@ -574,22 +680,54 @@ async function initialize(workspaceDir) {
   server.hybridSearch = hybridSearch;
 
   const startBackgroundTasks = async () => {
-    const resolutionSource = config.workspaceResolution?.source || 'unknown';
-    const isSystemFallback =
-      (resolutionSource === 'cwd' || resolutionSource === 'cwd-root-search') &&
-      isNonProjectDirectory(config.searchDirectory);
     const stopStartupMemoryLogger = () => {
       if (stopStartupMemory) {
         stopStartupMemory();
       }
     };
+    const tryAutoAttachWorkspaceCache = async (reason) => {
+      const candidate = await findAutoAttachWorkspaceCandidate({
+        excludeCacheDirectory: config.cacheDirectory,
+      });
+      if (!candidate) {
+        console.warn(
+          `[Server] Auto-attach skipped (${reason}): no unambiguous workspace cache candidate found.`
+        );
+        return false;
+      }
+
+      config.searchDirectory = candidate.workspace;
+      config.cacheDirectory = candidate.cacheDirectory;
+      await fs.mkdir(config.cacheDirectory, { recursive: true });
+      await cache.load();
+      console.info(
+        `[Server] Auto-attached workspace cache (${reason}): ${candidate.workspace} via ${candidate.source}`
+      );
+      if (config.verbose) {
+        logMemory('[Server] Memory (after cache load)');
+      }
+      return true;
+    };
+
+    const resolutionSource = config.workspaceResolution?.source || 'unknown';
+    const isSystemFallback =
+      (resolutionSource === 'cwd' || resolutionSource === 'cwd-root-search') &&
+      isNonProjectDirectory(config.searchDirectory);
 
     if (isSystemFallback) {
-      console.warn(
-        `[Server] Skipping background indexing for detected system workspace: ${config.searchDirectory}`
-      );
-      console.warn('[Server] Waiting for a proper workspace root (MCP roots or f_set_workspace).');
-      stopStartupMemoryLogger();
+      try {
+        console.warn(
+          `[Server] Detected system fallback workspace: ${config.searchDirectory}. Attempting cache auto-attach.`
+        );
+        const attached = await tryAutoAttachWorkspaceCache('system-fallback');
+        if (!attached) {
+          console.warn(
+            '[Server] Waiting for a proper workspace root (MCP roots, env vars, or f_set_workspace).'
+          );
+        }
+      } finally {
+        stopStartupMemoryLogger();
+      }
       return;
     }
 
@@ -597,6 +735,9 @@ async function initialize(workspaceDir) {
       try {
         console.info('[Server] Secondary instance detected; loading cache in read-only mode.');
         await cache.load();
+        if (cache.getStoreSize() === 0) {
+          await tryAutoAttachWorkspaceCache('secondary-empty-cache');
+        }
         if (config.verbose) {
           logMemory('[Server] Memory (after cache load)');
         }
