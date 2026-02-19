@@ -265,22 +265,22 @@ function ideMatchesFilter(name, filter) {
 
 function getServerConfigForIde(name) {
   const normalizedName = normalizeIdeName(name);
+  const workspaceArgs = [
+    '--workspace',
+    '${workspaceFolder}',
+    '--workspace',
+    '${workspaceRoot}',
+    '--workspace',
+    '${workspace}',
+  ];
   const config = {
     command: 'heuristic-mcp',
-    args: [],
+    // Prefer explicit workspace forwarding when supported by the host.
+    // Unexpanded placeholders are safely ignored by CLI workspace parsing.
+    args: workspaceArgs,
   };
 
   if (normalizedName === 'antigravity') {
-    // Prefer explicit workspace forwarding in VS Code-compatible clients.
-    // If the variable is not expanded by the IDE, CLI parsing safely ignores it.
-    config.args = [
-      '--workspace',
-      '${workspaceFolder}',
-      '--workspace',
-      '${workspaceRoot}',
-      '--workspace',
-      '${workspace}',
-    ];
     // Allow provider-specific workspace env discovery as a backup signal.
     config.env = {
       HEURISTIC_MCP_ENABLE_DYNAMIC_WORKSPACE_ENV: 'true',

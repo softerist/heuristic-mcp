@@ -257,7 +257,9 @@ describe('register', () => {
     expect(codexCall).toBeDefined();
     expect(String(codexCall[1])).toContain('[mcp_servers.heuristic-mcp]');
     expect(String(codexCall[1])).toContain('command = "heuristic-mcp"');
-    expect(String(codexCall[1])).toContain('args = []');
+    expect(String(codexCall[1])).toContain(
+      'args = ["--workspace", "${workspaceFolder}", "--workspace", "${workspaceRoot}", "--workspace", "${workspace}"]'
+    );
     expect(String(codexCall[1])).not.toContain('disabled = false');
   });
 
