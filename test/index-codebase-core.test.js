@@ -695,6 +695,114 @@ describe('index-codebase branch coverage focused', () => {
     expect(processSpy.mock.calls[0][0]).toHaveLength(1);
   });
 
+  it('writes checkpoint saves during long indexing runs', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1000,
+      callGraphEnabled: false,
+      verbose: false,
+      workerThreads: 0,
+      allowSingleThreadFallback: true,
+      indexCheckpointIntervalMs: 1,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    cpuCount = 1;
+    mockFiles = new Array(11).fill(0).map((_, i) => `/root/file-${i}.js`);
+    indexer.preFilterFiles = vi.fn().mockResolvedValue(
+      mockFiles.map((file, i) => ({
+        file,
+        content: `content-${i}`,
+        hash: `h-${i}`,
+        force: true,
+      }))
+    );
+    smartChunkMock.mockReturnValue([{ text: 'x', startLine: 1, endLine: 1 }]);
+    vi.spyOn(indexer, 'processChunksSingleThreaded').mockImplementation(async (chunks) =>
+      chunks.map((chunk) => ({
+        file: chunk.file,
+        startLine: chunk.startLine,
+        endLine: chunk.endLine,
+        content: chunk.text,
+        vector: [1],
+        success: true,
+      }))
+    );
+
+    let now = 1000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => {
+      now += 10;
+      return now;
+    });
+
+    try {
+      await indexer.indexAll(false);
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    expect(cache.save.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(cache.setLastIndexStats).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lastCheckpointIntervalMs: 1,
+        lastCheckpointSaves: 1,
+      })
+    );
+  });
+
+  it('skips checkpoint saves when indexCheckpointIntervalMs is disabled', async () => {
+    const { CodebaseIndexer } = await import('../features/index-codebase.js');
+    const cache = createCache();
+    const config = {
+      searchDirectory: '/root',
+      excludePatterns: [],
+      fileExtensions: ['js'],
+      fileNames: [],
+      batchSize: 1,
+      maxFileSize: 1000,
+      callGraphEnabled: false,
+      verbose: false,
+      workerThreads: 0,
+      allowSingleThreadFallback: true,
+      indexCheckpointIntervalMs: 0,
+    };
+    const indexer = new CodebaseIndexer(vi.fn(), cache, config);
+
+    cpuCount = 1;
+    mockFiles = ['/root/a.js', '/root/b.js'];
+    indexer.preFilterFiles = vi.fn().mockResolvedValue([
+      { file: '/root/a.js', content: 'a', hash: 'ha', force: true },
+      { file: '/root/b.js', content: 'b', hash: 'hb', force: true },
+    ]);
+    smartChunkMock.mockReturnValue([{ text: 'x', startLine: 1, endLine: 1 }]);
+    vi.spyOn(indexer, 'processChunksSingleThreaded').mockImplementation(async (chunks) =>
+      chunks.map((chunk) => ({
+        file: chunk.file,
+        startLine: chunk.startLine,
+        endLine: chunk.endLine,
+        content: chunk.text,
+        vector: [1],
+        success: true,
+      }))
+    );
+
+    await indexer.indexAll(false);
+
+    expect(cache.save).toHaveBeenCalledTimes(1);
+    expect(cache.setLastIndexStats).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lastCheckpointIntervalMs: 0,
+        lastCheckpointSaves: 0,
+      })
+    );
+  });
+
   it('accepts allowed file names without matching extensions', async () => {
     const { CodebaseIndexer } = await import('../features/index-codebase.js');
     const cache = createCache();

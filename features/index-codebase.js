@@ -202,6 +202,13 @@ export class CodebaseIndexer {
     return { threads, batchSize };
   }
 
+  getIndexCheckpointIntervalMs() {
+    const raw = Number(this.config.indexCheckpointIntervalMs);
+    if (!Number.isFinite(raw)) return 15000;
+    if (raw <= 0) return 0;
+    return Math.floor(raw);
+  }
+
   getEmbeddingProcessGcConfig() {
     const thresholdRaw = Number(this.config.embeddingProcessGcRssThresholdMb);
     const minIntervalRaw = Number(this.config.embeddingProcessGcMinIntervalMs);
@@ -2452,6 +2459,9 @@ export class CodebaseIndexer {
 
       let totalChunks = 0;
       let processedFiles = 0;
+      const checkpointIntervalMs = this.getIndexCheckpointIntervalMs();
+      let lastCheckpointSaveAt = Date.now();
+      let checkpointSaveCount = 0;
 
       console.info(
         `[Indexer] Embedding pass started: ${filesToProcess.length} files using ${this.config.embeddingModel}`
@@ -2783,6 +2793,23 @@ export class CodebaseIndexer {
 
         processedFiles += batch.length;
 
+        const shouldCheckpointSave =
+          checkpointIntervalMs > 0 &&
+          processedFiles < filesToProcess.length &&
+          Date.now() - lastCheckpointSaveAt >= checkpointIntervalMs;
+        if (shouldCheckpointSave) {
+          await this.traceIncrementalMemoryPhase('indexAll.checkpointSave', async () => {
+            await this.cache.save();
+          });
+          checkpointSaveCount += 1;
+          lastCheckpointSaveAt = Date.now();
+          if (this.config.verbose) {
+            console.info(
+              `[Indexer] Checkpoint saved (${processedFiles}/${filesToProcess.length} files processed)`
+            );
+          }
+        }
+
         // Progress indicator
         if (
           processedFiles % (adaptiveBatchSize * 2) === 0 ||
@@ -2840,6 +2867,8 @@ export class CodebaseIndexer {
         lastBatchSize: adaptiveBatchSize,
         lastWorkerThreads: resolvedWorkerThreads,
         lastEmbeddingProcessPerBatch: useEmbeddingProcessPerBatch,
+        lastCheckpointIntervalMs: checkpointIntervalMs,
+        lastCheckpointSaves: checkpointSaveCount,
       });
       await this.cache.save();
 

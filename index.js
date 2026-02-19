@@ -7,6 +7,7 @@ import {
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
+  RootsListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 let transformersModule = null;
 async function getTransformers() {
@@ -189,6 +190,48 @@ async function maybeAutoSwitchWorkspace(request) {
   }
 }
 
+
+/**
+ * After MCP handshake completes, ask the client for its workspace roots.
+ * Returns the first valid file:// root path, or null if unavailable.
+ */
+async function detectWorkspaceFromRoots() {
+  try {
+    const caps = server.getClientCapabilities();
+    if (!caps?.roots) {
+      console.info('[Server] Client does not support roots capability, skipping workspace auto-detection.');
+      return null;
+    }
+
+    const result = await server.listRoots();
+    if (!result?.roots?.length) {
+      console.info('[Server] Client returned no roots.');
+      return null;
+    }
+
+    console.info(`[Server] MCP roots received: ${result.roots.map(r => r.uri).join(', ')}`);
+
+    // Convert file:// URIs to local paths
+    const rootPaths = result.roots
+      .map(r => r.uri)
+      .filter(uri => uri.startsWith('file://'))
+      .map(uri => {
+        try { return fileURLToPath(uri); } catch { return null; }
+      })
+      .filter(Boolean);
+
+    if (rootPaths.length === 0) {
+      console.info('[Server] No valid file:// roots found.');
+      return null;
+    }
+
+    return path.resolve(rootPaths[0]);
+  } catch (err) {
+    console.warn(`[Server] MCP roots detection failed (non-fatal): ${err.message}`);
+    return null;
+  }
+}
+
 // Feature registry - ordered by priority (semantic_search first as primary tool)
 const features = [
   {
@@ -328,6 +371,19 @@ async function initialize(workspaceDir) {
     );
     if (resolution.fromPath) {
       console.info(`[Server] Workspace resolution origin cwd: ${resolution.fromPath}`);
+    }
+
+    const workspaceEnvProbe = Array.isArray(resolution.workspaceEnvProbe)
+      ? resolution.workspaceEnvProbe
+      : [];
+    if (workspaceEnvProbe.length > 0) {
+      const probePreview = workspaceEnvProbe.slice(0, 8).map((entry) => {
+        const scope = entry?.priority ? 'priority' : 'diagnostic';
+        const status = entry?.resolvedPath ? `valid:${entry.resolvedPath}` : `invalid:${entry?.value}`;
+        return `${entry?.key}[${scope}]=${status}`;
+      });
+      const suffix = workspaceEnvProbe.length > 8 ? ` (+${workspaceEnvProbe.length - 8} more)` : '';
+      console.info(`[Server] Workspace env probe: ${probePreview.join('; ')}${suffix}`);
     }
   }
 
@@ -524,6 +580,19 @@ const server = new Server(
     },
   }
 );
+
+// Handle roots/list_changed notification — auto-switch workspace when IDE changes folders
+server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
+  console.info('[Server] Received roots/list_changed notification from client.');
+  const newRoot = await detectWorkspaceFromRoots();
+  if (newRoot && setWorkspaceFeatureInstance) {
+    const currentWorkspace = path.resolve(config.searchDirectory);
+    if (newRoot.toLowerCase() !== currentWorkspace.toLowerCase()) {
+      console.info(`[Server] Auto-switching workspace to ${newRoot} (roots changed)`);
+      await setWorkspaceFeatureInstance.execute({ workspacePath: newRoot, reindex: true });
+    }
+  }
+});
 
 // Handle resources/list
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
@@ -761,17 +830,39 @@ export async function main(argv = process.argv) {
   // When an IDE restarts, it may briefly close stdin then reconnect.
   // The server should remain running to preserve cache and be ready for reconnection.
   // Use SIGINT/SIGTERM or --stop command for intentional shutdown.
-  const { startBackgroundTasks } = await initialize(workspaceDir);
 
-  // (Blocking init moved below)
-
+  // 1. Connect MCP transport FIRST so we can query the client for its workspace roots.
   const transport = new StdioServerTransport();
   await server.connect(transport);
-
   console.info('[Server] MCP transport connected.');
+
+  // 2. Wait for MCP handshake to complete (client sends initialized notification).
+  //    This gives us access to client capabilities and the ability to call listRoots().
+  const detectedRoot = await new Promise((resolve) => {
+    const HANDSHAKE_TIMEOUT_MS = 5000;
+    const timer = setTimeout(() => {
+      console.warn(`[Server] MCP handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms, proceeding without roots.`);
+      resolve(null);
+    }, HANDSHAKE_TIMEOUT_MS);
+
+    server.oninitialized = async () => {
+      clearTimeout(timer);
+      console.info('[Server] MCP handshake complete.');
+      const root = await detectWorkspaceFromRoots();
+      resolve(root);
+    };
+  });
+
+  // 3. Initialize with the correct workspace: MCP root > CLI arg > CWD fallback.
+  const effectiveWorkspace = detectedRoot || workspaceDir;
+  if (detectedRoot) {
+    console.info(`[Server] Using workspace from MCP roots: ${detectedRoot}`);
+  }
+  const { startBackgroundTasks } = await initialize(effectiveWorkspace);
+
   console.info('[Server] Heuristic MCP server started.');
 
-  // Load cache and start indexing in background AFTER server is ready
+  // 4. Load cache and start indexing in background AFTER server is ready
   void startBackgroundTasks().catch((err) => {
     console.error(`[Server] Background task error: ${err.message}`);
   });
