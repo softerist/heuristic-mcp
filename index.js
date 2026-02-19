@@ -38,7 +38,7 @@ const packageJson = require('./package.json');
 
 import { loadConfig, getGlobalCacheDir, isNonProjectDirectory } from './lib/config.js';
 import { clearStaleCaches } from './lib/cache-utils.js';
-import { enableStderrOnlyLogging, setupFileLogging, getLogFilePath } from './lib/logging.js';
+import { enableStderrOnlyLogging, setupFileLogging, getLogFilePath, flushLogs } from './lib/logging.js';
 import { parseArgs, printHelp } from './lib/cli.js';
 import { clearCache } from './lib/cache-ops.js';
 import { logMemory, startMemoryLogger } from './lib/memory-logger.js';
@@ -180,6 +180,59 @@ function isToolResponseError(result) {
       typeof entry.text === 'string' &&
       entry.text.trim().toLowerCase().startsWith('error:')
   );
+}
+
+function formatCrashDetail(detail) {
+  if (detail instanceof Error) {
+    return detail.stack || detail.message || String(detail);
+  }
+  if (typeof detail === 'string') {
+    return detail;
+  }
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return String(detail);
+  }
+}
+
+function isCrashShutdownReason(reason) {
+  const normalized = String(reason || '').toLowerCase();
+  return normalized.includes('uncaughtexception') || normalized.includes('unhandledrejection');
+}
+
+function registerProcessDiagnostics({ isServerMode, requestShutdown, getShutdownReason }) {
+  if (!isServerMode) return;
+
+  process.on('beforeExit', (code) => {
+    const reason = getShutdownReason() || 'natural';
+    console.info(`[Server] Process beforeExit (code=${code}, reason=${reason}).`);
+  });
+
+  process.on('exit', (code) => {
+    const reason = getShutdownReason() || 'natural';
+    console.info(`[Server] Process exit (code=${code}, reason=${reason}).`);
+  });
+
+  let fatalHandled = false;
+  const handleFatalError = (reason, detail) => {
+    if (fatalHandled) return;
+    fatalHandled = true;
+    console.error(`[Server] Fatal ${reason}: ${formatCrashDetail(detail)}`);
+    requestShutdown(reason);
+    const forceExitTimer = setTimeout(() => {
+      console.error(`[Server] Forced exit after fatal ${reason}.`);
+      process.exit(1);
+    }, 5000);
+    forceExitTimer.unref?.();
+  };
+
+  process.on('uncaughtException', (err) => {
+    handleFatalError('uncaughtException', err);
+  });
+  process.on('unhandledRejection', (reason) => {
+    handleFatalError('unhandledRejection', reason);
+  });
 }
 
 async function resolveWorkspaceFromEnvValue(rawValue) {
@@ -1181,12 +1234,19 @@ export async function main(argv = process.argv) {
   } = parsed;
 
   let shutdownRequested = false;
+  let shutdownReason = 'natural';
   const requestShutdown = (reason) => {
     if (shutdownRequested) return;
     shutdownRequested = true;
+    shutdownReason = String(reason || 'unknown');
     console.info(`[Server] Shutdown requested (${reason}).`);
     void gracefulShutdown(reason);
   };
+  registerProcessDiagnostics({
+    isServerMode,
+    requestShutdown,
+    getShutdownReason: () => shutdownReason,
+  });
 
   if (isServerMode && !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test')) {
     enableStderrOnlyLogging();
@@ -1402,6 +1462,7 @@ export async function main(argv = process.argv) {
 
 async function gracefulShutdown(signal) {
   console.info(`[Server] Received ${signal}, shutting down gracefully...`);
+  const exitCode = isCrashShutdownReason(signal) ? 1 : 0;
 
   const cleanupTasks = [];
 
@@ -1445,10 +1506,11 @@ async function gracefulShutdown(signal) {
 
   await Promise.allSettled(cleanupTasks);
   console.info('[Server] Goodbye!');
+  await flushLogs({ close: true, timeoutMs: 1500 }).catch(() => {});
 
   
   
-  setTimeout(() => process.exit(0), 100);
+  setTimeout(() => process.exit(exitCode), 100);
 }
 
 const isMain =
@@ -1460,5 +1522,9 @@ const isMain =
   !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test');
 
 if (isMain) {
-  main().catch(console.error);
+  main().catch(async (err) => {
+    console.error(err);
+    await flushLogs({ close: true, timeoutMs: 500 }).catch(() => {});
+    process.exit(1);
+  });
 }
