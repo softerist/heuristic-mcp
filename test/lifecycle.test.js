@@ -228,6 +228,71 @@ describe('lifecycle', () => {
     expect(fsMock.unlink).toHaveBeenCalled();
   });
 
+  it('shows corruption telemetry and last corruption event in cache status', async () => {
+    setPlatform('linux');
+    fsMock.readFile.mockImplementation(async (filePath) => {
+      const p = String(filePath);
+      if (p.endsWith('.heuristic-mcp.pid')) {
+        return '2222';
+      }
+      if (p.endsWith('meta.json')) {
+        return JSON.stringify({
+          workspace: 'repo',
+          filesIndexed: 2,
+          chunksStored: 3,
+          lastSaveTime: new Date().toISOString(),
+        });
+      }
+      if (p.endsWith('binary-store-telemetry.json')) {
+        return JSON.stringify({
+          totals: {
+            corruptionDetected: 3,
+            corruptionAutoCleared: 2,
+            corruptionSecondaryReadonlyBlocked: 1,
+          },
+          lastCorruption: {
+            at: new Date().toISOString(),
+            action: 'secondary-readonly-blocked',
+            context: 'f_set_workspace read-only attach',
+            message: 'cache is corrupt',
+          },
+        });
+      }
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    });
+    fsMock.readdir.mockResolvedValue(['cacheA']);
+    fsMock.stat.mockResolvedValue({
+      mtime: new Date(Date.now() - 2 * 60 * 1000),
+    });
+    fsMock.access.mockRejectedValue(new Error('nope'));
+    execPromiseMock.mockImplementation(async (cmd) => {
+      if (cmd === 'ps aux') {
+        return { stdout: 'user 3333 0.0 0.1 heuristic-mcp/index.js' };
+      }
+      if (cmd === 'npm config get prefix') {
+        return { stdout: '/usr/local' };
+      }
+      return { stdout: '' };
+    });
+    const { status } = await import('../features/lifecycle.js');
+
+    await status({ cacheOnly: true });
+
+    expect(
+      consoleInfo.mock.calls.some(
+        (call) =>
+          typeof call[0] === 'string' &&
+          call[0].includes('Corruption telemetry: detected=3 autoCleared=2 secondaryBlocked=1')
+      )
+    ).toBe(true);
+    expect(
+      consoleInfo.mock.calls.some(
+        (call) =>
+          typeof call[0] === 'string' && call[0].includes('Last corruption event:')
+      )
+    ).toBe(true);
+  });
+
   it('skips invalid PID file entries', async () => {
     setPlatform('linux');
     fsMock.readFile.mockResolvedValue('not-a-number');

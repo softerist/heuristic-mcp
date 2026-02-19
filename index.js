@@ -50,7 +50,7 @@ import {
 } from './lib/server-lifecycle.js';
 
 import { EmbeddingsCache } from './lib/cache.js';
-import { cleanupStaleBinaryArtifacts } from './lib/vector-store-binary.js';
+import { cleanupStaleBinaryArtifacts, recordBinaryStoreCorruption } from './lib/vector-store-binary.js';
 import { CodebaseIndexer } from './features/index-codebase.js';
 import { HybridSearch } from './features/hybrid-search.js';
 
@@ -879,9 +879,13 @@ async function initialize(workspaceDir) {
         stopStartupMemory();
       }
     };
-    const handleCorruptCacheAfterLoad = ({ context, canReindex }) => {
+    const handleCorruptCacheAfterLoad = async ({ context, canReindex }) => {
       if (!cache.consumeAutoReindex()) return false;
       cache.clearInMemoryState();
+      await recordBinaryStoreCorruption(config.cacheDirectory, {
+        context,
+        action: canReindex ? 'auto-cleared' : 'secondary-readonly-blocked',
+      });
       if (canReindex) {
         console.warn(
           `[Server] Cache corruption detected while ${context}; in-memory cache was cleared and a full re-index will run.`
@@ -911,7 +915,10 @@ async function initialize(workspaceDir) {
         await cleanupStaleBinaryArtifacts(config.cacheDirectory, { logger: console });
       }
       await cache.load();
-      handleCorruptCacheAfterLoad({ context: `auto-attaching workspace cache (${reason})`, canReindex });
+      await handleCorruptCacheAfterLoad({
+        context: `auto-attaching workspace cache (${reason})`,
+        canReindex,
+      });
       console.info(
         `[Server] Auto-attached workspace cache (${reason}): ${candidate.workspace} via ${candidate.source}`
       );
@@ -949,7 +956,7 @@ async function initialize(workspaceDir) {
       try {
         console.info('[Server] Secondary instance detected; loading cache in read-only mode.');
         await cache.load();
-        handleCorruptCacheAfterLoad({
+        await handleCorruptCacheAfterLoad({
           context: 'loading cache in secondary read-only mode',
           canReindex: false,
         });
@@ -971,7 +978,7 @@ async function initialize(workspaceDir) {
     try {
       console.info('[Server] Loading cache (deferred)...');
       await cache.load();
-      handleCorruptCacheAfterLoad({ context: 'startup cache load', canReindex: true });
+      await handleCorruptCacheAfterLoad({ context: 'startup cache load', canReindex: true });
       if (config.verbose) {
         logMemory('[Server] Memory (after cache load)');
       }
@@ -1129,6 +1136,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       await cache.load();
       if (cache.consumeAutoReindex()) {
         cache.clearInMemoryState();
+        await recordBinaryStoreCorruption(config.cacheDirectory, {
+          context: 'f_set_workspace read-only attach',
+          action: 'secondary-readonly-blocked',
+        });
         return {
           content: [
             {

@@ -7,6 +7,7 @@ import {
   BinaryStoreCorruptionError,
   cleanupStaleBinaryArtifacts,
   readBinaryStoreTelemetry,
+  recordBinaryStoreCorruption,
 } from '../lib/vector-store-binary.js';
 
 async function withTempDir(testFn) {
@@ -343,6 +344,61 @@ describe('BinaryVectorStore integrity checks', () => {
 
       await expect(BinaryVectorStore.load(dir)).rejects.toThrow(BinaryStoreCorruptionError);
       await expect(BinaryVectorStore.load(dir)).rejects.toThrow(/content CRC32 mismatch/);
+    });
+  });
+
+  it('detects vectors CRC32 corruption in disk-load mode', async () => {
+    await withTempDir(async (dir) => {
+      const chunks = [
+        {
+          file: path.join(dir, 'v1.js'),
+          startLine: 1,
+          endLine: 2,
+          content: 'vector-one',
+          vector: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+        },
+      ];
+
+      const store = await BinaryVectorStore.write(dir, chunks);
+      await store.close();
+
+      // Corrupt vectors payload (after 32-byte header)
+      const vectorsPath = path.join(dir, 'vectors.bin');
+      const vectorsData = await fs.readFile(vectorsPath);
+      vectorsData[33] ^= 0xFF;
+      await fs.writeFile(vectorsPath, vectorsData);
+
+      await expect(
+        BinaryVectorStore.load(dir, { vectorLoadMode: 'disk' })
+      ).rejects.toThrow(BinaryStoreCorruptionError);
+      await expect(
+        BinaryVectorStore.load(dir, { vectorLoadMode: 'disk' })
+      ).rejects.toThrow(/vectors CRC32 mismatch/);
+    });
+  });
+
+  it('records corruption telemetry counters and last event', async () => {
+    await withTempDir(async (dir) => {
+      await recordBinaryStoreCorruption(dir, {
+        message: 'detected corruption',
+        context: 'cache.load binary store',
+        action: 'detected',
+      });
+      await recordBinaryStoreCorruption(dir, {
+        context: 'startup cache load',
+        action: 'auto-cleared',
+      });
+      await recordBinaryStoreCorruption(dir, {
+        context: 'secondary attach',
+        action: 'secondary-readonly-blocked',
+      });
+
+      const telemetry = await readBinaryStoreTelemetry(dir);
+      expect(telemetry?.totals?.corruptionDetected).toBe(1);
+      expect(telemetry?.totals?.corruptionAutoCleared).toBe(1);
+      expect(telemetry?.totals?.corruptionSecondaryReadonlyBlocked).toBe(1);
+      expect(telemetry?.lastCorruption?.action).toBe('secondary-readonly-blocked');
+      expect(telemetry?.lastCorruption?.context).toBe('secondary attach');
     });
   });
 

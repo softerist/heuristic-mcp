@@ -1269,6 +1269,36 @@ export async function status({ fix = false, cacheOnly = false, workspaceDir = nu
             if (binaryTelemetry.lastError?.message) {
               console.info(`   Last binary error: ${binaryTelemetry.lastError.message}`);
             }
+            if (
+              (totals.corruptionDetected || 0) > 0 ||
+              (totals.corruptionAutoCleared || 0) > 0 ||
+              (totals.corruptionSecondaryReadonlyBlocked || 0) > 0
+            ) {
+              console.info(
+                `   Corruption telemetry: detected=${totals.corruptionDetected || 0} autoCleared=${totals.corruptionAutoCleared || 0} secondaryBlocked=${totals.corruptionSecondaryReadonlyBlocked || 0}`
+              );
+            }
+            if (binaryTelemetry.lastCorruption?.at || binaryTelemetry.lastCorruption?.message) {
+              const atLabel = binaryTelemetry.lastCorruption?.at
+                ? formatDateTime(binaryTelemetry.lastCorruption.at)
+                : 'unknown time';
+              const actionLabel =
+                typeof binaryTelemetry.lastCorruption?.action === 'string'
+                  ? binaryTelemetry.lastCorruption.action
+                  : 'unknown';
+              const contextLabel =
+                typeof binaryTelemetry.lastCorruption?.context === 'string'
+                  ? binaryTelemetry.lastCorruption.context
+                  : 'n/a';
+              const msgLabel =
+                typeof binaryTelemetry.lastCorruption?.message === 'string' &&
+                binaryTelemetry.lastCorruption.message.trim().length > 0
+                  ? ` message=${binaryTelemetry.lastCorruption.message}`
+                  : '';
+              console.info(
+                `   Last corruption event: ${atLabel} action=${actionLabel} context=${contextLabel}${msgLabel}`
+              );
+            }
           }
 
           if (metaData && isProgressIncomplete) {
