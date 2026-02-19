@@ -6,7 +6,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { loadConfig, getGlobalCacheDir, getConfig, DEFAULT_CONFIG } from '../lib/config.js';
+import { loadConfig, getGlobalCacheDir, getConfig, DEFAULT_CONFIG, isNonProjectDirectory } from '../lib/config.js';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -626,5 +626,33 @@ describe('Global Cache Directory', () => {
       process.env.XDG_CACHE_HOME = originalXdg;
     }
     Object.defineProperty(process, 'platform', { value: originalPlatform });
+  });
+});
+
+describe('isNonProjectDirectory', () => {
+  it('detects Windows IDE install directories', () => {
+    expect(isNonProjectDirectory('C:\\Users\\user\\AppData\\Local\\Programs\\MyIDE')).toBe(true);
+    expect(isNonProjectDirectory('C:\\Program Files\\SomeApp')).toBe(true);
+    expect(isNonProjectDirectory('C:\\Program Files (x86)\\SomeApp')).toBe(true);
+  });
+
+  it('detects AppData/Roaming directories', () => {
+    expect(isNonProjectDirectory('C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules')).toBe(true);
+  });
+
+  it('detects macOS application directories', () => {
+    expect(isNonProjectDirectory('/Applications/MyIDE.app')).toBe(true);
+    expect(isNonProjectDirectory('/App/Contents/Resources/ext')).toBe(true);
+  });
+
+  it('returns false for normal project directories', () => {
+    expect(isNonProjectDirectory('C:\\Users\\user\\projects\\my-app')).toBe(false);
+    expect(isNonProjectDirectory('/home/user/code/my-project')).toBe(false);
+    expect(isNonProjectDirectory('F:\\Git\\heuristic-mcp')).toBe(false);
+  });
+
+  it('is case-insensitive', () => {
+    expect(isNonProjectDirectory('C:\\PROGRAM FILES\\APP')).toBe(true);
+    expect(isNonProjectDirectory('C:\\users\\user\\APPDATA\\LOCAL\\PROGRAMS\\IDE')).toBe(true);
   });
 });

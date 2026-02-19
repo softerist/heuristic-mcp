@@ -3,7 +3,6 @@ import { writeFileSync } from 'fs';
 
 import path from 'path';
 import os from 'os';
-import { fileURLToPath } from 'url';
 import {
   parseJsonc,
   upsertMcpServerEntryInText,
@@ -265,18 +264,13 @@ function ideMatchesFilter(name, filter) {
 }
 
 export async function register(filter = null) {
-  const binaryPath = process.execPath; // The node binary
-  const scriptPath = fileURLToPath(new URL('../index.js', import.meta.url)); // Absolute path to index.js
   const currentIDE = detectCurrentIDE();
 
-  // Build args array - add --expose-gc if enableExplicitGc is likely needed
-  // For workspace selection, rely on runtime auto-detection (env vars + cwd) so one config
-  // can be reused across projects without editing the installed path each day.
-  const args = ['--expose-gc', scriptPath];
-
+  // Use PATH-resolved CLI command so generated configs stay portable across machines
+  // and installations (no absolute script path baked into IDE settings).
   const serverConfig = {
-    command: binaryPath,
-    args,
+    command: 'heuristic-mcp',
+    args: [],
     disabled: false,
   };
 

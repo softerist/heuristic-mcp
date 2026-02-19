@@ -225,10 +225,8 @@ describe('register', () => {
 
     const [, writtenText] = fsMock.writeFileSync.mock.calls[0];
     const parsed = JSON.parse(writtenText);
-    expect(parsed.mcpServers['heuristic-mcp'].args).toEqual([
-      '--expose-gc',
-      expect.stringContaining('index.js'),
-    ]);
+    expect(parsed.mcpServers['heuristic-mcp'].command).toBe('heuristic-mcp');
+    expect(parsed.mcpServers['heuristic-mcp'].args).toEqual([]);
   });
 
   it('handles existing mcpServers object', async () => {

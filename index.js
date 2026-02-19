@@ -349,6 +349,7 @@ async function initialize(workspaceDir) {
     const localCache = path.join(process.cwd(), '.heuristic-mcp');
     console.info(`[Server] Cache debug: Global=${globalCache}, Local=${localCache}`);
     console.info(`[Server] Process CWD: ${process.cwd()}`);
+    console.info(`[Server] Resolved workspace: ${config.searchDirectory} (via ${config.workspaceResolution?.source || 'unknown'})`);
   } catch (_e) {
     /* ignore */
   }
