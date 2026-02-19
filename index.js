@@ -16,6 +16,9 @@ async function getTransformers() {
     if (transformersModule?.env) {
       transformersModule.env.cacheDir = path.join(getGlobalCacheDir(), 'xenova');
     }
+    if (transformersModule?.env) {
+      transformersModule.env.cacheDir = path.join(getGlobalCacheDir(), 'xenova');
+    }
   }
   return transformersModule;
 }
@@ -214,7 +217,7 @@ async function detectWorkspaceFromRoots() {
     
     const rootPaths = result.roots
       .map(r => r.uri)
-      .filter(uri => uri.startsWith('file://'))
+      .filter(uri => uri.startsWith('file:
       .map(uri => {
         try { return fileURLToPath(uri); } catch { return null; }
       })
@@ -231,6 +234,7 @@ async function detectWorkspaceFromRoots() {
     return null;
   }
 }
+
 
 
 const features = [
@@ -268,13 +272,17 @@ const features = [
     module: SetWorkspaceFeature,
     instance: null,
     handler: null, 
+    handler: null, 
   },
 ];
 
 
+
 async function initialize(workspaceDir) {
   
+  
   config = await loadConfig(workspaceDir);
+  
   
   
   if (config.enableCache && config.cacheCleanup?.autoCleanup) {
@@ -287,6 +295,7 @@ async function initialize(workspaceDir) {
       console.info(`[Server] Removed ${results.removed} stale cache ${results.removed === 1 ? 'directory' : 'directories'}`);
     }
   }
+  
   
   
   const isTest = Boolean(process.env.VITEST || process.env.VITEST_WORKER_ID);
@@ -323,6 +332,7 @@ async function initialize(workspaceDir) {
         env.backends.onnx.wasm.numThreads = ONNX_THREAD_LIMIT;
       }
     } catch {
+      
       
     }
     const status = getNativeOnnxStatus();
@@ -388,6 +398,7 @@ async function initialize(workspaceDir) {
   }
 
   
+  
   console.info(
     `[Server] Config: workerThreads=${config.workerThreads}, embeddingProcessPerBatch=${config.embeddingProcessPerBatch}`
   );
@@ -400,6 +411,7 @@ async function initialize(workspaceDir) {
   }
 
   
+  
   try {
     const globalCache = path.join(getGlobalCacheDir(), 'heuristic-mcp');
     const localCache = path.join(process.cwd(), '.heuristic-mcp');
@@ -407,6 +419,7 @@ async function initialize(workspaceDir) {
     console.info(`[Server] Process CWD: ${process.cwd()}`);
     console.info(`[Server] Resolved workspace: ${config.searchDirectory} (via ${config.workspaceResolution?.source || 'unknown'})`);
   } catch (_e) {
+    
     
   }
 
@@ -417,6 +430,7 @@ async function initialize(workspaceDir) {
   }
 
   
+  
   try {
     await fs.access(config.searchDirectory);
   } catch {
@@ -424,6 +438,7 @@ async function initialize(workspaceDir) {
     process.exit(1);
   }
 
+  
   
   console.info('[Server] Initializing features...');
   let cachedEmbedderPromise = null;
@@ -595,14 +610,17 @@ server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
 });
 
 
+
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return await handleListResources(config);
 });
 
 
+
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   return await handleReadResource(request.params.uri, config);
 });
+
 
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -617,6 +635,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 });
 
 
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   await maybeAutoSwitchWorkspace(request);
 
@@ -624,6 +643,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const toolDef = feature.module.getToolDefinition(config);
 
     if (request.params.name === toolDef.name) {
+      
       
       if (typeof feature.handler !== 'function') {
         return {
@@ -638,8 +658,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
       
       
+      
+      
       const searchTools = ['a_semantic_search', 'd_find_similar_code'];
       if (config.unloadModelAfterSearch && searchTools.includes(toolDef.name)) {
+        
         
         setImmediate(async () => {
           if (typeof unloadMainEmbedder === 'function') {
@@ -662,6 +685,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     isError: true,
   };
 });
+
 
 
 export async function main(argv = process.argv) {
@@ -728,16 +752,20 @@ export async function main(argv = process.argv) {
   }
 
   
+  
   if (wantsCache) {
     await status({ fix: wantsClean, cacheOnly: true, workspaceDir });
     process.exit(0);
   }
 
   
+  
   const clearIndex = parsed.rawArgs.indexOf('--clear');
   if (clearIndex !== -1) {
     const cacheId = parsed.rawArgs[clearIndex + 1];
     if (cacheId && !cacheId.startsWith('--')) {
+      
+      
       
       
       let cacheHome;
@@ -783,6 +811,7 @@ export async function main(argv = process.argv) {
       }
       process.exit(0);
     }
+    
     
   }
 
@@ -863,6 +892,7 @@ export async function main(argv = process.argv) {
   console.info('[Server] Heuristic MCP server started.');
 
   
+  
   void startBackgroundTasks().catch((err) => {
     console.error(`[Server] Background task error: ${err.message}`);
   });
@@ -870,11 +900,13 @@ export async function main(argv = process.argv) {
 }
 
 
+
 async function gracefulShutdown(signal) {
   console.info(`[Server] Received ${signal}, shutting down gracefully...`);
 
   const cleanupTasks = [];
 
+  
   
   if (indexer && indexer.watcher) {
     cleanupTasks.push(
@@ -886,6 +918,7 @@ async function gracefulShutdown(signal) {
   }
 
   
+  
   if (indexer && indexer.terminateWorkers) {
     cleanupTasks.push(
       (async () => {
@@ -896,6 +929,7 @@ async function gracefulShutdown(signal) {
     );
   }
 
+  
   
   if (cache) {
     cleanupTasks.push(
@@ -909,6 +943,7 @@ async function gracefulShutdown(signal) {
   await Promise.allSettled(cleanupTasks);
   console.info('[Server] Goodbye!');
 
+  
   
   setTimeout(() => process.exit(0), 100);
 }
