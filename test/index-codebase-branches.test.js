@@ -161,6 +161,19 @@ describe('CodebaseIndexer Branch Coverage', () => {
     expect(indexer.workers.length).toBe(expectedWorkers);
   });
 
+  it('allows opting into heavy-model workers on Windows', async () => {
+    indexer.config.workerThreads = 'auto';
+    indexer.config.embeddingModel = 'jinaai/jina-embeddings-v2-base-code';
+    indexer.config.workerDisableHeavyModelOnWindows = false;
+    vi.spyOn(os, 'cpus').mockReturnValue(Array(8).fill({}));
+    vi.spyOn(os, 'freemem').mockReturnValue(32 * 1024 * 1024 * 1024);
+    vi.spyOn(os, 'totalmem').mockReturnValue(64 * 1024 * 1024 * 1024);
+
+    await indexer.initializeWorkers();
+
+    expect(indexer.workers.length).toBe(2);
+  });
+
   it('covers initializeWorkers timeout branch', async () => {
     vi.useFakeTimers();
     workerMode = 'none';
@@ -187,6 +200,51 @@ describe('CodebaseIndexer Branch Coverage', () => {
       { file: '/test/a.js', status: 'retry' },
       { file: '/test/b.js', status: 'retry' },
     ]);
+  });
+
+  it('resets worker timeout when progress heartbeats are received', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(indexer, 'isPathInsideWorkspaceReal').mockResolvedValue(true);
+
+    const listeners = new Map();
+    const mockWorker = {
+      on: vi.fn((event, handler) => {
+        listeners.set(event, handler);
+      }),
+      off: vi.fn((event, handler) => {
+        const current = listeners.get(event);
+        if (current === handler) {
+          listeners.delete(event);
+        }
+      }),
+      postMessage: vi.fn((msg) => {
+        const messageHandler = listeners.get('message');
+        if (!messageHandler) return;
+        const { batchId } = msg;
+        setTimeout(() => {
+          messageHandler({ type: 'progress', batchId });
+        }, 800);
+        setTimeout(() => {
+          messageHandler({
+            type: 'results',
+            batchId,
+            results: [{ file: '/test/a.js', status: 'indexed', results: [] }],
+            done: true,
+          });
+        }, 1800);
+      }),
+      once: vi.fn(),
+      terminate: vi.fn().mockResolvedValue(undefined),
+    };
+    indexer.workers = [mockWorker];
+    indexer.config.workerBatchTimeoutMs = 1000;
+
+    const promise = indexer.processFilesWithWorkers([{ file: '/test/a.js' }]);
+    await vi.advanceTimersByTimeAsync(2000);
+    const results = await promise;
+
+    expect(results).toEqual([{ file: '/test/a.js', status: 'indexed', results: [] }]);
+    expect(console.warn).not.toHaveBeenCalledWith(expect.stringContaining('timed out (files'));
   });
 
   it('skips worker replacement wait when worker circuit is open', async () => {

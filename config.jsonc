@@ -686,7 +686,10 @@
   "worker": {
     // Number of embedding workers (0 disables).
     // Windows + heavy Jina models are more stable with child-process embedding than worker pools.
-    "workerThreads": 0,
+    "workerThreads": 1,
+    // Safety guard for heavy models on Windows.
+    // Keep true (recommended). Set false only to opt in to experimental heavy-model workers on Windows.
+    "workerDisableHeavyModelOnWindows": false,
     // Worker batch timeout in milliseconds.
     "workerBatchTimeoutMs": 120000,
     // Failures before worker circuit opens.

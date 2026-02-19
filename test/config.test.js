@@ -129,6 +129,7 @@ describe('Configuration Loading', () => {
         worker: {
           workerThreads: 2,
           workerBatchTimeoutMs: 90000,
+          workerDisableHeavyModelOnWindows: false,
         },
         embedding: {
           embeddingProcessNumThreads: 10,
@@ -153,6 +154,7 @@ describe('Configuration Loading', () => {
       const config = await loadConfig(dir);
       expect(config.workerThreads).toBe(2);
       expect(config.workerBatchTimeoutMs).toBe(90000);
+      expect(config.workerDisableHeavyModelOnWindows).toBe(false);
       expect(config.embeddingProcessNumThreads).toBe(10);
       expect(config.embeddingProcessPerBatch).toBe(true);
       expect(config.vectorStoreLoadMode).toBe('disk');
@@ -162,6 +164,7 @@ describe('Configuration Loading', () => {
       expect(config.annEnabled).toBe(true);
       expect(config.annEfSearch).toBe(80);
       expect(config.worker.workerThreads).toBe(2);
+      expect(config.worker.workerDisableHeavyModelOnWindows).toBe(false);
       expect(config.embedding.embeddingProcessNumThreads).toBe(10);
       expect(config.vectorStore.vectorStoreLoadMode).toBe('disk');
       expect(config.search.semanticWeight).toBe(0.6);

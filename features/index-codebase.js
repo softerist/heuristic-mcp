@@ -356,6 +356,12 @@ export class CodebaseIndexer {
     return model.includes('jina');
   }
 
+  shouldDisableHeavyModelWorkersOnWindows() {
+    if (process.platform !== 'win32') return false;
+    if (!this.isHeavyEmbeddingModel()) return false;
+    return this.config.workerDisableHeavyModelOnWindows !== false;
+  }
+
   getWorkerInferenceBatchSize({ numWorkers = null } = {}) {
     const configured =
       Number.isInteger(this.config.embeddingBatchSize) && this.config.embeddingBatchSize > 0
@@ -564,7 +570,7 @@ export class CodebaseIndexer {
 
         
         
-        if (process.platform === 'win32' && this.isHeavyEmbeddingModel() && numWorkers > 0) {
+        if (this.shouldDisableHeavyModelWorkersOnWindows() && numWorkers > 0) {
           if (!this._heavyWorkerSafetyLogged) {
             console.warn(
               '[Indexer] Heavy model worker safety mode: disabling workers on Windows to avoid native worker crashes/timeouts'
@@ -1115,20 +1121,28 @@ export class CodebaseIndexer {
           }
         };
 
+        let timeout = null;
+        const resetTimeout = () => {
+          if (timeout) clearTimeout(timeout);
+          timeout = setTimeout(handleTimeout, WORKER_TIMEOUT);
+        };
+
         const handleTimeout = () => {
           
           void killWorker();
           worker.off('message', handler);
           worker.off('error', errorHandler);
-          console.warn(`[Indexer] Worker ${workerIndex} timed out (files)`);
+          console.warn(
+            `[Indexer] Worker ${workerIndex} timed out (files, no heartbeat for ${Math.round(WORKER_TIMEOUT / 1000)}s)`
+          );
           this.recordWorkerFailure(`timeout (batch ${batchId})`);
           resolve([]);
         };
 
-        let timeout = setTimeout(handleTimeout, WORKER_TIMEOUT);
+        resetTimeout();
 
         const finalize = (results) => {
-          clearTimeout(timeout);
+          if (timeout) clearTimeout(timeout);
           worker.off('message', handler);
           worker.off('error', errorHandler);
           resolve(results);
@@ -1136,12 +1150,18 @@ export class CodebaseIndexer {
 
         const handler = (msg) => {
           if (msg.batchId === batchId) {
+            if (msg.type === 'progress') {
+              resetTimeout();
+              return;
+            }
             if (msg.type === 'results') {
               if (Array.isArray(msg.results)) {
                 batchResults.push(...msg.results);
               }
               if (msg.done) {
                 finalize(batchResults);
+              } else {
+                resetTimeout();
               }
             } else if (msg.type === 'error') {
               finalize([]);
