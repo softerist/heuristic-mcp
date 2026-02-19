@@ -132,6 +132,7 @@ let cache = null;
 let indexer = null;
 let hybridSearch = null;
 let config = null;
+let configReadyPromise = Promise.resolve();
 let setWorkspaceFeatureInstance = null;
 let autoWorkspaceSwitchPromise = null;
 
@@ -626,18 +627,21 @@ server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
 
 
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  await configReadyPromise;
   return await handleListResources(config);
 });
 
 
 
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  await configReadyPromise;
   return await handleReadResource(request.params.uri, config);
 });
 
 
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
+  await configReadyPromise;
   const tools = [];
 
   for (const feature of features) {
@@ -651,6 +655,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  await configReadyPromise;
   await maybeAutoSwitchWorkspace(request);
 
   for (const feature of features) {
@@ -901,7 +906,9 @@ export async function main(argv = process.argv) {
   if (detectedRoot) {
     console.info(`[Server] Using workspace from MCP roots: ${detectedRoot}`);
   }
-  const { startBackgroundTasks } = await initialize(effectiveWorkspace);
+  const initPromise = initialize(effectiveWorkspace);
+  configReadyPromise = initPromise;
+  const { startBackgroundTasks } = await initPromise;
 
   console.info('[Server] Heuristic MCP server started.');
 
