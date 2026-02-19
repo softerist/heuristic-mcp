@@ -288,6 +288,7 @@ describe('Configuration Loading', () => {
           delete process.env[key];
         }
       }
+      process.env.HEURISTIC_MCP_ENABLE_DYNAMIC_WORKSPACE_ENV = 'true';
       process.env[envKey] = dir;
 
       try {
