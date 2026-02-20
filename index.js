@@ -47,6 +47,7 @@ import {
   registerSignalHandlers,
   setupPidFile,
   acquireWorkspaceLock,
+  releaseWorkspaceLock,
   stopOtherHeuristicServers,
 } from './lib/server-lifecycle.js';
 
@@ -1319,15 +1320,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       const searchTools = ['a_semantic_search', 'd_find_similar_code'];
       if (config.unloadModelAfterSearch && searchTools.includes(toolDef.name)) {
-        setImmediate(async () => {
-          if (typeof unloadMainEmbedder === 'function') {
-            try {
-              await unloadMainEmbedder();
-            } catch (err) {
+        setImmediate(() => {
+          const unloadFn = unloadMainEmbedder;
+          if (typeof unloadFn !== 'function') return;
+          void Promise.resolve()
+            .then(() => unloadFn())
+            .catch((err) => {
               const message = err instanceof Error ? err.message : String(err);
               console.warn(`[Server] Post-search model unload failed: ${message}`);
-            }
-          }
+            });
         });
       }
 
@@ -1550,27 +1551,24 @@ export async function main(argv = process.argv) {
   if (detectedRoot) {
     console.info(`[Server] Using workspace from MCP roots: ${detectedRoot}`);
   }
-  const initPromise = initialize(effectiveWorkspace);
-  const initWithResolve = initPromise
-    .then((result) => {
-      configReadyResolve();
-      return result;
-    })
-    .catch((err) => {
-      configInitError = err;
-      configReadyResolve();
-      throw err;
-    });
-  const { startBackgroundTasks } = await initWithResolve;
+  let startBackgroundTasks;
+  try {
+    const initResult = await initialize(effectiveWorkspace);
+    startBackgroundTasks = initResult.startBackgroundTasks;
+  } catch (err) {
+    configInitError = err;
+    configReadyResolve();
+    throw err;
+  }
 
   console.info('[Server] Heuristic MCP server started.');
 
-  const backgroundTaskPromise = startBackgroundTasks().catch((err) => {
+  try {
+    await startBackgroundTasks();
+  } catch (err) {
     console.error(`[Server] Background task error: ${err.message}`);
-  });
-  if (isTestEnv) {
-    await backgroundTaskPromise;
   }
+  configReadyResolve();
   // Keep-Alive mechanism: ensure the process stays alive even if StdioServerTransport
   // temporarily loses its active handle status or during complex async chains.
   if (isServerMode && !isTestEnv && !keepAliveTimer) {
@@ -1628,6 +1626,14 @@ async function gracefulShutdown(signal) {
           await cache.close();
         }
       })().catch((err) => console.error(`[Server] Cache shutdown cleanup failed: ${err.message}`))
+    );
+  }
+
+  if (workspaceLockAcquired && config?.cacheDirectory) {
+    cleanupTasks.push(
+      releaseWorkspaceLock({ cacheDirectory: config.cacheDirectory }).catch((err) =>
+        console.warn(`[Server] Failed to release workspace lock: ${err.message}`)
+      )
     );
   }
 

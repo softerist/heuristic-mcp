@@ -204,11 +204,12 @@ export class SetWorkspaceFeature {
 }
 
 export function createHandleToolCall(featureInstance) {
-  return async (request) => {
+  return async (request, instance) => {
+    const activeInstance = instance ?? featureInstance;
     const args = request.params?.arguments || {};
     const { workspacePath, reindex } = args;
 
-    const result = await featureInstance.execute({
+    const result = await activeInstance.execute({
       workspacePath,
       reindex: reindex !== false,
     });

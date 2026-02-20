@@ -17,6 +17,7 @@ const lifecycleMock = {
   registerSignalHandlers: vi.fn(),
   setupPidFile: vi.fn(),
   acquireWorkspaceLock: vi.fn(),
+  releaseWorkspaceLock: vi.fn(),
   stopOtherHeuristicServers: vi.fn(),
 };
 
@@ -210,6 +211,8 @@ describe('index.js CLI coverage', () => {
     lifecycleMock.setupPidFile.mockResolvedValue('C:\\cache\\.heuristic-mcp.pid');
     lifecycleMock.acquireWorkspaceLock.mockReset();
     lifecycleMock.acquireWorkspaceLock.mockResolvedValue({ acquired: true, ownerPid: null });
+    lifecycleMock.releaseWorkspaceLock.mockReset();
+    lifecycleMock.releaseWorkspaceLock.mockResolvedValue(undefined);
     lifecycleMock.stopOtherHeuristicServers.mockReset();
     lifecycleMock.stopOtherHeuristicServers.mockResolvedValue({ killed: [], failed: [] });
     onSpy = vi.spyOn(process, 'on').mockImplementation((event, handler) => {
@@ -571,6 +574,9 @@ describe('index.js CLI coverage', () => {
 
     expect(lastIndexer.watcher.close).toHaveBeenCalled();
     expect(lastCache.save).toHaveBeenCalled();
+    expect(lifecycleMock.releaseWorkspaceLock).toHaveBeenCalledWith({
+      cacheDirectory: baseConfig.cacheDirectory,
+    });
   });
 
   it('handles shutdown when no watcher, workers, or cache exist', async () => {
