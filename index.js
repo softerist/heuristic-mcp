@@ -79,8 +79,7 @@ const PID_FILE_NAME = '.heuristic-mcp.pid';
 function isTestRuntime() {
   return (
     process.env.VITEST === 'true' ||
-    process.env.NODE_ENV === 'test' ||
-    Boolean(process.env.VITEST_WORKER_ID)
+    process.env.NODE_ENV === 'test'
   );
 }
 
@@ -140,11 +139,33 @@ async function printMemorySnapshot(workspaceDir) {
 }
 
 async function flushLogsSafely(options) {
+  if (typeof flushLogs !== 'function') {
+    console.warn('[Logs] flushLogs helper is unavailable; skipping log flush.');
+    return;
+  }
+
   try {
-    if (typeof flushLogs === 'function') {
-      await flushLogs(options);
-    }
-  } catch {}
+    await flushLogs(options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[Logs] Failed to flush logs: ${message}`);
+  }
+}
+
+function assertCacheContract(cacheInstance) {
+  const requiredMethods = [
+    'load',
+    'save',
+    'consumeAutoReindex',
+    'clearInMemoryState',
+    'getStoreSize',
+  ];
+  const missing = requiredMethods.filter((name) => typeof cacheInstance?.[name] !== 'function');
+  if (missing.length > 0) {
+    throw new Error(
+      `[Server] Cache implementation contract violation: missing method(s): ${missing.join(', ')}`
+    );
+  }
 }
 
 let embedder = null;
@@ -579,7 +600,7 @@ async function initialize(workspaceDir) {
     }
   }
 
-  const isTest = Boolean(process.env.VITEST || process.env.VITEST_WORKER_ID);
+  const isTest = isTestRuntime();
   if (config.enableExplicitGc && typeof global.gc !== 'function' && !isTest) {
     console.warn(
       '[Server] enableExplicitGc=true but this process was not started with --expose-gc; continuing with explicit GC disabled.'
@@ -643,54 +664,49 @@ async function initialize(workspaceDir) {
     );
     console.warn('[Server] Skipping lock/PID/log file setup for fallback workspace.');
   } else {
-    if (isTestRuntime()) {
-      workspaceLockAcquired = true;
-      logPath = await setupFileLogging(config);
-    } else {
-      if (config.autoStopOtherServersOnStartup !== false) {
-        const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
-        const { killed, failed } = await stopOtherHeuristicServers({
-          globalCacheRoot,
-          currentCacheDirectory: config.cacheDirectory,
-        });
-        if (killed.length > 0) {
-          const details = killed
-            .map((entry) => `${entry.pid}${entry.workspace ? ` (${entry.workspace})` : ''}`)
-            .join(', ');
-          console.info(
-            `[Server] Auto-stopped ${killed.length} stale heuristic-mcp server(s): ${details}`
-          );
-        }
-        if (failed.length > 0) {
-          const details = failed
-            .map((entry) => `${entry.pid}${entry.workspace ? ` (${entry.workspace})` : ''}`)
-            .join(', ');
-          console.warn(
-            `[Server] Failed to stop ${failed.length} older heuristic-mcp server(s): ${details}`
-          );
-        }
-      }
-
-      const lock = await acquireWorkspaceLock({
-        cacheDirectory: config.cacheDirectory,
-        workspaceDir: config.searchDirectory,
+    if (config.autoStopOtherServersOnStartup !== false) {
+      const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
+      const { killed, failed } = await stopOtherHeuristicServers({
+        globalCacheRoot,
+        currentCacheDirectory: config.cacheDirectory,
       });
-      workspaceLockAcquired = lock.acquired;
-      if (!workspaceLockAcquired) {
-        console.warn(
-          `[Server] Another heuristic-mcp instance is already running for this workspace (pid ${lock.ownerPid ?? 'unknown'}).`
-        );
-        console.warn(
-          '[Server] Starting in secondary read-only mode: background indexing and cache writes are disabled for this instance.'
+      if (killed.length > 0) {
+        const details = killed
+          .map((entry) => `${entry.pid}${entry.workspace ? ` (${entry.workspace})` : ''}`)
+          .join(', ');
+        console.info(
+          `[Server] Auto-stopped ${killed.length} stale heuristic-mcp server(s): ${details}`
         );
       }
-      [pidPath, logPath] = workspaceLockAcquired
-        ? await Promise.all([
-            setupPidFile({ pidFileName: PID_FILE_NAME, cacheDirectory: config.cacheDirectory }),
-            setupFileLogging(config),
-          ])
-        : [null, await setupFileLogging(config)];
+      if (failed.length > 0) {
+        const details = failed
+          .map((entry) => `${entry.pid}${entry.workspace ? ` (${entry.workspace})` : ''}`)
+          .join(', ');
+        console.warn(
+          `[Server] Failed to stop ${failed.length} older heuristic-mcp server(s): ${details}`
+        );
+      }
     }
+
+    const lock = await acquireWorkspaceLock({
+      cacheDirectory: config.cacheDirectory,
+      workspaceDir: config.searchDirectory,
+    });
+    workspaceLockAcquired = lock.acquired;
+    if (!workspaceLockAcquired) {
+      console.warn(
+        `[Server] Another heuristic-mcp instance is already running for this workspace (pid ${lock.ownerPid ?? 'unknown'}).`
+      );
+      console.warn(
+        '[Server] Starting in secondary read-only mode: background indexing and cache writes are disabled for this instance.'
+      );
+    }
+    [pidPath, logPath] = workspaceLockAcquired
+      ? await Promise.all([
+          setupPidFile({ pidFileName: PID_FILE_NAME, cacheDirectory: config.cacheDirectory }),
+          setupFileLogging(config),
+        ])
+      : [null, await setupFileLogging(config)];
   }
   if (logPath) {
     console.info(`[Logs] Writing server logs to ${logPath}`);
@@ -838,6 +854,7 @@ async function initialize(workspaceDir) {
   }
 
   cache = new EmbeddingsCache(config);
+  assertCacheContract(cache);
   console.info(`[Server] Cache directory: ${config.cacheDirectory}`);
 
   indexer = new CodebaseIndexer(embedder, cache, config, server);
@@ -871,12 +888,8 @@ async function initialize(workspaceDir) {
       }
     };
     const handleCorruptCacheAfterLoad = async ({ context, canReindex }) => {
-      if (typeof cache.consumeAutoReindex !== 'function' || !cache.consumeAutoReindex()) {
-        return false;
-      }
-      if (typeof cache.clearInMemoryState === 'function') {
-        cache.clearInMemoryState();
-      }
+      if (!cache.consumeAutoReindex()) return false;
+      cache.clearInMemoryState();
       await recordBinaryStoreCorruption(config.cacheDirectory, {
         context,
         action: canReindex ? 'auto-cleared' : 'secondary-readonly-blocked',
@@ -958,12 +971,7 @@ async function initialize(workspaceDir) {
           context: 'loading cache in secondary read-only mode',
           canReindex: false,
         });
-        const storeSize =
-          typeof cache.getStoreSize === 'function'
-            ? cache.getStoreSize()
-            : Array.isArray(cache.getVectorStore?.())
-              ? cache.getVectorStore().length
-              : 0;
+        const storeSize = cache.getStoreSize();
         if (storeSize === 0) {
           await tryAutoAttachWorkspaceCache('secondary-empty-cache', { canReindex: false });
         }

@@ -115,7 +115,7 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
       startLine: 1,
       endLine: 1,
       content: 'content',
-      vector: [],
+      vector: new Float32Array(64).fill(0).map((_, index) => (index === 0 ? 1 : 0)),
     });
 
     const realStat = fs.stat;
@@ -132,6 +132,36 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
       await fixtures.indexer.indexAll(false);
     } finally {
       statSpy.mockRestore();
+      await fs.rm(subDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects when final cache save fails', async () => {
+    const subDir = path.join(fixtures.config.searchDirectory, 'p2_final_save_failure');
+    await fs.mkdir(subDir, { recursive: true });
+    const filePath = path.join(subDir, 'final-save.js');
+    await fs.writeFile(filePath, 'export const finalSave = 1;');
+
+    fixtures.indexer.discoverFiles = vi.fn().mockResolvedValue([filePath]);
+    fixtures.indexer.preFilterFiles = vi
+      .fn()
+      .mockResolvedValue([{ file: filePath, hash: 'final-save-hash', force: true }]);
+
+    const saveSpy = vi.spyOn(fixtures.cache, 'save').mockImplementation(async (options = {}) => {
+      if (options?.throwOnError) {
+        throw new Error('final save boom');
+      }
+      return undefined;
+    });
+
+    try {
+      await expect(fixtures.indexer.indexAll()).rejects.toThrow('final save boom');
+      const calledWithStrictSave = saveSpy.mock.calls.some(
+        (call) => call[0] && call[0].throwOnError === true
+      );
+      expect(calledWithStrictSave).toBe(true);
+    } finally {
+      saveSpy.mockRestore();
       await fs.rm(subDir, { recursive: true, force: true });
     }
   });
@@ -167,7 +197,13 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
       .fn()
       .mockResolvedValue([{ file: 'stat-error.js', hash: 'h', force: true }]);
 
-    vi.spyOn(fs, 'stat').mockRejectedValue(new Error('Stat failed'));
+    const realStat = fs.stat;
+    vi.spyOn(fs, 'stat').mockImplementation(async (filePath) => {
+      if (String(filePath).includes('stat-error.js')) {
+        throw new Error('Stat failed');
+      }
+      return realStat.call(fs, filePath);
+    });
 
     await fixtures.indexer.indexAll();
   });
@@ -178,8 +214,20 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
       .fn()
       .mockResolvedValue([{ file: 'fail.js', hash: 'h', force: true }]);
 
-    vi.spyOn(fs, 'stat').mockResolvedValue({ isDirectory: () => false, size: 100 });
-    vi.spyOn(fs, 'readFile').mockRejectedValue(new Error('Read fail'));
+    const realStat = fs.stat;
+    const realReadFile = fs.readFile;
+    vi.spyOn(fs, 'stat').mockImplementation(async (filePath) => {
+      if (String(filePath).includes('fail.js')) {
+        return { isDirectory: () => false, size: 100 };
+      }
+      return realStat.call(fs, filePath);
+    });
+    vi.spyOn(fs, 'readFile').mockImplementation(async (filePath, ...args) => {
+      if (String(filePath).includes('fail.js')) {
+        throw new Error('Read fail');
+      }
+      return realReadFile.call(fs, filePath, ...args);
+    });
 
     await fixtures.indexer.indexAll();
   });
@@ -190,8 +238,20 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
       .fn()
       .mockResolvedValue([{ file: 'same.js', hash: 'h', force: false }]);
 
-    vi.spyOn(fs, 'stat').mockResolvedValue({ isDirectory: () => false, size: 100 });
-    vi.spyOn(fs, 'readFile').mockResolvedValue('content');
+    const realStat = fs.stat;
+    const realReadFile = fs.readFile;
+    vi.spyOn(fs, 'stat').mockImplementation(async (filePath) => {
+      if (String(filePath).includes('same.js')) {
+        return { isDirectory: () => false, size: 100 };
+      }
+      return realStat.call(fs, filePath);
+    });
+    vi.spyOn(fs, 'readFile').mockImplementation(async (filePath, ...args) => {
+      if (String(filePath).includes('same.js')) {
+        return 'content';
+      }
+      return realReadFile.call(fs, filePath, ...args);
+    });
     vi.spyOn(fixtures.indexer.cache, 'getFileHash').mockReturnValue('h');
 
     await fixtures.indexer.indexAll();
@@ -203,7 +263,13 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
       .fn()
       .mockResolvedValue([{ file: 'invalid.js', hash: 'h', force: true }]);
 
-    vi.spyOn(fs, 'stat').mockResolvedValue({});
+    const realStat = fs.stat;
+    vi.spyOn(fs, 'stat').mockImplementation(async (filePath) => {
+      if (String(filePath).includes('invalid.js')) {
+        return {};
+      }
+      return realStat.call(fs, filePath);
+    });
 
     await fixtures.indexer.indexAll();
   });
@@ -214,9 +280,15 @@ describe('CodebaseIndexer Phase 2 Coverage', () => {
       .fn()
       .mockResolvedValue([{ file: 'big.js', hash: 'h', force: true }]);
 
-    vi.spyOn(fs, 'stat').mockResolvedValue({
-      isDirectory: () => false,
-      size: fixtures.config.maxFileSize + 1,
+    const realStat = fs.stat;
+    vi.spyOn(fs, 'stat').mockImplementation(async (filePath) => {
+      if (String(filePath).includes('big.js')) {
+        return {
+          isDirectory: () => false,
+          size: fixtures.config.maxFileSize + 1,
+        };
+      }
+      return realStat.call(fs, filePath);
     });
 
     await fixtures.indexer.indexAll();

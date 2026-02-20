@@ -13,6 +13,12 @@ let annHandleToolCall;
 let callSchema;
 let listSchema;
 let logsMock;
+const lifecycleMock = {
+  registerSignalHandlers: vi.fn(),
+  setupPidFile: vi.fn(),
+  acquireWorkspaceLock: vi.fn(),
+  stopOtherHeuristicServers: vi.fn(),
+};
 
 const configMock = {
   loadConfig: vi.fn(),
@@ -84,12 +90,16 @@ vi.mock('@huggingface/transformers', () => ({
 vi.mock('fs/promises', () => ({ default: fsMock, ...fsMock }));
 vi.mock('../lib/logging.js', () => loggingMock);
 vi.mock('../lib/config.js', () => configMock);
+vi.mock('../lib/server-lifecycle.js', () => lifecycleMock);
 vi.mock('../lib/cache.js', () => ({
   EmbeddingsCache: class {
     constructor(config) {
       this.config = config;
       this.load = vi.fn().mockResolvedValue(undefined);
       this.save = vi.fn().mockResolvedValue(undefined);
+      this.consumeAutoReindex = vi.fn().mockReturnValue(false);
+      this.clearInMemoryState = vi.fn();
+      this.getStoreSize = vi.fn().mockReturnValue(0);
       lastCache = this;
     }
   },
@@ -150,6 +160,7 @@ describe('index.js CLI coverage', () => {
   let exitSpy;
   let errorSpy;
   let infoSpy;
+  let warnSpy;
   let listeners;
   let originalVerboseEnv;
   let originalLogsEnv;
@@ -186,8 +197,21 @@ describe('index.js CLI coverage', () => {
     fsMock.readFile.mockReset();
     fsMock.rm.mockReset();
     fsMock.readdir.mockReset();
+    loggingMock.flushLogs.mockReset();
+    loggingMock.flushLogs.mockResolvedValue(undefined);
     loggingMock.getLogFilePath.mockReset();
     loggingMock.getLogFilePath.mockReturnValue('C:\\cache\\logs\\server.log');
+    lifecycleMock.registerSignalHandlers.mockReset();
+    lifecycleMock.registerSignalHandlers.mockImplementation((requestShutdown) => {
+      process.on('SIGINT', () => requestShutdown('SIGINT'));
+      process.on('SIGTERM', () => requestShutdown('SIGTERM'));
+    });
+    lifecycleMock.setupPidFile.mockReset();
+    lifecycleMock.setupPidFile.mockResolvedValue('C:\\cache\\.heuristic-mcp.pid');
+    lifecycleMock.acquireWorkspaceLock.mockReset();
+    lifecycleMock.acquireWorkspaceLock.mockResolvedValue({ acquired: true, ownerPid: null });
+    lifecycleMock.stopOtherHeuristicServers.mockReset();
+    lifecycleMock.stopOtherHeuristicServers.mockResolvedValue({ killed: [], failed: [] });
     onSpy = vi.spyOn(process, 'on').mockImplementation((event, handler) => {
       listeners[event] = handler;
       return process;
@@ -195,6 +219,7 @@ describe('index.js CLI coverage', () => {
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -213,6 +238,7 @@ describe('index.js CLI coverage', () => {
     exitSpy.mockRestore();
     errorSpy.mockRestore();
     infoSpy.mockRestore();
+    warnSpy.mockRestore();
     vi.useRealTimers();
   });
 
@@ -575,6 +601,30 @@ describe('index.js CLI coverage', () => {
     await runHandler(listeners.SIGTERM);
 
     expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('warns when log flush fails during shutdown', async () => {
+    vi.useFakeTimers();
+    process.argv = ['node', 'index.js', '--workspace', 'C:\\work'];
+    configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
+    configMock.loadConfig.mockResolvedValue(baseConfig);
+    fsMock.access.mockResolvedValue(undefined);
+    pipelineMock.mockResolvedValue(() => ({}));
+
+    const { main } = await import('../index.js');
+    const mainPromise = main();
+    await vi.runAllTimersAsync();
+    await mainPromise;
+
+    loggingMock.flushLogs.mockRejectedValueOnce(new Error('flush boom'));
+    const promise = listeners.SIGINT();
+    await vi.runAllTimersAsync();
+    await promise;
+
+    const warned = warnSpy.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('Failed to flush logs: flush boom')
+    );
+    expect(warned).toBe(true);
   });
 
   it('lists tools and routes tool calls', async () => {

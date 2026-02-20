@@ -36,6 +36,14 @@ vi.mock('../features/lifecycle.js', () => ({
   status: vi.fn(),
 }));
 
+const lifecycleMock = {
+  registerSignalHandlers: vi.fn(),
+  setupPidFile: vi.fn(),
+  acquireWorkspaceLock: vi.fn(),
+  stopOtherHeuristicServers: vi.fn(),
+};
+vi.mock('../lib/server-lifecycle.js', () => lifecycleMock);
+
 vi.mock('../lib/config.js', () => ({
   loadConfig: vi.fn().mockResolvedValue({
     verbose: true,
@@ -74,6 +82,13 @@ vi.mock('../lib/cache.js', () => ({
     }
     ensureAnnIndex() {
       return Promise.resolve();
+    }
+    consumeAutoReindex() {
+      return false;
+    }
+    clearInMemoryState() {}
+    getStoreSize() {
+      return 0;
     }
   },
 }));
@@ -157,6 +172,17 @@ describe('Index.js Memory Logging', () => {
     vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('process.exit called');
     });
+    lifecycleMock.registerSignalHandlers.mockReset();
+    lifecycleMock.registerSignalHandlers.mockImplementation((requestShutdown) => {
+      process.on('SIGINT', () => requestShutdown('SIGINT'));
+      process.on('SIGTERM', () => requestShutdown('SIGTERM'));
+    });
+    lifecycleMock.setupPidFile.mockReset();
+    lifecycleMock.setupPidFile.mockResolvedValue('/mock/cache/.heuristic-mcp.pid');
+    lifecycleMock.acquireWorkspaceLock.mockReset();
+    lifecycleMock.acquireWorkspaceLock.mockResolvedValue({ acquired: true, ownerPid: null });
+    lifecycleMock.stopOtherHeuristicServers.mockReset();
+    lifecycleMock.stopOtherHeuristicServers.mockResolvedValue({ killed: [], failed: [] });
   });
 
   afterEach(() => {
