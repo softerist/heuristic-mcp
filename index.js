@@ -184,6 +184,9 @@ let setWorkspaceFeatureInstance = null;
 let autoWorkspaceSwitchPromise = null;
 let rootsCapabilitySupported = null;
 let rootsProbeInFlight = null;
+let lastRootsProbeTime = 0;
+let keepAliveTimer = null;
+const ROOTS_PROBE_COOLDOWN_MS = 2000;
 const WORKSPACE_BOUND_TOOL_NAMES = new Set([
   'a_semantic_search',
   'b_index_codebase',
@@ -236,6 +239,10 @@ function formatCrashDetail(detail) {
   }
 }
 
+function isBrokenPipeError(detail) {
+  return Boolean(detail && typeof detail === 'object' && detail.code === 'EPIPE');
+}
+
 function isCrashShutdownReason(reason) {
   const normalized = String(reason || '').toLowerCase();
   return normalized.includes('uncaughtexception') || normalized.includes('unhandledrejection');
@@ -257,6 +264,10 @@ function registerProcessDiagnostics({ isServerMode, requestShutdown, getShutdown
   let fatalHandled = false;
   const handleFatalError = (reason, detail) => {
     if (fatalHandled) return;
+    if (isBrokenPipeError(detail)) {
+      requestShutdown('stdio-epipe');
+      return;
+    }
     fatalHandled = true;
     console.error(`[Server] Fatal ${reason}: ${formatCrashDetail(detail)}`);
     requestShutdown(reason);
@@ -494,7 +505,9 @@ async function maybeAutoSwitchWorkspaceToPath(
 
   if (autoWorkspaceSwitchPromise) {
     await autoWorkspaceSwitchPromise;
-    return;
+    const currentNow = normalizePathForCompare(config.searchDirectory);
+    const targetNow = normalizePathForCompare(targetWorkspacePath);
+    if (targetNow === currentNow) return;
   }
 
   autoWorkspaceSwitchPromise = (async () => {
@@ -528,6 +541,9 @@ async function maybeAutoSwitchWorkspaceFromRoots(request) {
   if (rootsProbeInFlight) {
     return await rootsProbeInFlight;
   }
+  const now = Date.now();
+  if (now - lastRootsProbeTime < ROOTS_PROBE_COOLDOWN_MS) return null;
+  lastRootsProbeTime = now;
 
   rootsProbeInFlight = (async () => {
     const rootWorkspace = await detectWorkspaceFromRoots({ quiet: true });
@@ -1255,7 +1271,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (config.unloadModelAfterSearch && searchTools.includes(toolDef.name)) {
         setImmediate(async () => {
           if (typeof unloadMainEmbedder === 'function') {
-            await unloadMainEmbedder();
+            try {
+              await unloadMainEmbedder();
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              console.warn(`[Server] Post-search model unload failed: ${message}`);
+            }
           }
         });
       }
@@ -1477,6 +1498,11 @@ export async function main(argv = process.argv) {
         requestShutdown('stdout-epipe');
       }
     });
+    process.stderr?.on?.('error', (err) => {
+      if (err?.code === 'EPIPE') {
+        requestShutdown('stderr-epipe');
+      }
+    });
   }
 
   const detectedRoot = await detectedRootPromise;
@@ -1508,8 +1534,8 @@ export async function main(argv = process.argv) {
   }
   // Keep-Alive mechanism: ensure the process stays alive even if StdioServerTransport
   // temporarily loses its active handle status or during complex async chains.
-  if (isServerMode && !isTestEnv) {
-    setInterval(() => {
+  if (isServerMode && !isTestEnv && !keepAliveTimer) {
+    keepAliveTimer = setInterval(() => {
       // Logic to keep event loop active.
       // We don't need to do anything, just the presence of the timer is enough.
     }, SERVER_KEEP_ALIVE_INTERVAL_MS);
@@ -1521,6 +1547,11 @@ export async function main(argv = process.argv) {
 async function gracefulShutdown(signal) {
   console.info(`[Server] Received ${signal}, shutting down gracefully...`);
   const exitCode = isCrashShutdownReason(signal) ? 1 : 0;
+
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
 
   const cleanupTasks = [];
 

@@ -627,6 +627,78 @@ describe('index.js CLI coverage', () => {
     expect(warned).toBe(true);
   });
 
+  it('treats uncaught EPIPE as graceful stdio shutdown', async () => {
+    vi.useFakeTimers();
+    process.argv = ['node', 'index.js', '--workspace', 'C:\\work'];
+    configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
+    configMock.loadConfig.mockResolvedValue(baseConfig);
+    fsMock.access.mockResolvedValue(undefined);
+    pipelineMock.mockResolvedValue(() => ({}));
+
+    const { main } = await import('../index.js');
+    const mainPromise = main();
+    await vi.runAllTimersAsync();
+    await mainPromise;
+
+    listeners.uncaughtException({ code: 'EPIPE', message: 'broken pipe' });
+    await vi.runAllTimersAsync();
+
+    const errorMessages = errorSpy.mock.calls.map((call) => call[0]);
+    const infoMessages = infoSpy.mock.calls.map((call) => call[0]);
+    const hasFatal = errorMessages.some(
+      (message) => typeof message === 'string' && message.includes('Fatal uncaughtException')
+    );
+    const requestedGraceful = infoMessages.some(
+      (message) => typeof message === 'string' && message.includes('Shutdown requested (stdio-epipe)')
+    );
+
+    expect(hasFatal).toBe(false);
+    expect(requestedGraceful).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('requests graceful shutdown on stderr EPIPE transport errors', async () => {
+    vi.useFakeTimers();
+    process.argv = ['node', 'index.js', '--workspace', 'C:\\work'];
+    configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
+    configMock.loadConfig.mockResolvedValue(baseConfig);
+    fsMock.access.mockResolvedValue(undefined);
+    pipelineMock.mockResolvedValue(() => ({}));
+    const stderrListeners = {};
+    const stderrOnSpy = vi
+      .spyOn(process.stderr, 'on')
+      .mockImplementation((event, handler) => {
+        stderrListeners[event] = handler;
+        return process.stderr;
+      });
+
+    try {
+      const { main } = await import('../index.js');
+      const mainPromise = main();
+      await vi.runAllTimersAsync();
+      await mainPromise;
+
+      expect(typeof stderrListeners.error).toBe('function');
+      stderrListeners.error({ code: 'EPIPE', message: 'stderr closed' });
+      await vi.runAllTimersAsync();
+
+      const infoMessages = infoSpy.mock.calls.map((call) => call[0]);
+      const errorMessages = errorSpy.mock.calls.map((call) => call[0]);
+      const requestedGraceful = infoMessages.some(
+        (message) => typeof message === 'string' && message.includes('Shutdown requested (stderr-epipe)')
+      );
+      const hasFatal = errorMessages.some(
+        (message) => typeof message === 'string' && message.includes('Fatal uncaughtException')
+      );
+
+      expect(requestedGraceful).toBe(true);
+      expect(hasFatal).toBe(false);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      stderrOnSpy.mockRestore();
+    }
+  });
+
   it('lists tools and routes tool calls', async () => {
     vi.useFakeTimers();
     process.argv = ['node', 'index.js', '--workspace', 'C:\\work'];
