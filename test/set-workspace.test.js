@@ -22,7 +22,8 @@ async function withTempDir(testFn) {
 
 function createMocks() {
   const cache = {
-    load: async () => {},
+    clearInMemoryState: vi.fn(),
+    load: vi.fn().mockResolvedValue(undefined),
   };
   const indexer = {
     terminateWorkers: async () => {},
@@ -78,6 +79,11 @@ describe('SetWorkspaceFeature', () => {
         workspaceDir: path.resolve(newWorkspace),
       });
       expect(releaseWorkspaceLock).toHaveBeenCalledWith({ cacheDirectory: oldCache });
+      expect(cache.clearInMemoryState).toHaveBeenCalledTimes(1);
+      expect(cache.load).toHaveBeenCalledTimes(1);
+      expect(cache.clearInMemoryState.mock.invocationCallOrder[0]).toBeLessThan(
+        cache.load.mock.invocationCallOrder[0]
+      );
     });
   });
 

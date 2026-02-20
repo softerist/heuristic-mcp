@@ -916,7 +916,7 @@ async function initialize(workspaceDir) {
         );
       } else {
         console.warn(
-          `[Server] Cache corruption detected while ${context}. This server is secondary read-only and cannot re-index. Reload the IDE window for this workspace or use the primary instance to rebuild the cache.`
+          `[Server] Cache corruption detected while ${context}. This server is secondary read-only and cannot re-index. Restart the MCP client session for this workspace or use the primary instance to rebuild the cache.`
         );
       }
       return true;
@@ -1159,7 +1159,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: 'text',
-              text: `Attached cache for ${normalizedPath}, but it is corrupt. This secondary read-only instance cannot rebuild it. Reload the IDE window for this workspace or run indexing from the primary instance.`,
+              text: `Attached cache for ${normalizedPath}, but it is corrupt. This secondary read-only instance cannot rebuild it. Restart the MCP client session for this workspace or run indexing from the primary instance.`,
             },
           ],
           isError: true,
@@ -1575,16 +1575,19 @@ async function gracefulShutdown(signal) {
   }
 
   if (cache) {
-    if (!workspaceLockAcquired) {
-      console.info('[Server] Secondary/fallback mode: skipping cache save.');
-    } else {
-      cleanupTasks.push(
-        cache
-          .save()
-          .then(() => console.info('[Server] Cache saved'))
-          .catch((err) => console.error(`[Server] Failed to save cache: ${err.message}`))
-      );
-    }
+    cleanupTasks.push(
+      (async () => {
+        if (!workspaceLockAcquired) {
+          console.info('[Server] Secondary/fallback mode: skipping cache save.');
+        } else {
+          await cache.save();
+          console.info('[Server] Cache saved');
+        }
+        if (typeof cache.close === 'function') {
+          await cache.close();
+        }
+      })().catch((err) => console.error(`[Server] Cache shutdown cleanup failed: ${err.message}`))
+    );
   }
 
   await Promise.allSettled(cleanupTasks);
@@ -1594,11 +1597,21 @@ async function gracefulShutdown(signal) {
   setTimeout(() => process.exit(exitCode), 100);
 }
 
+function isLikelyCliEntrypoint(argvPath) {
+  const base = path.basename(argvPath || '').toLowerCase();
+  return (
+    base === 'heuristic-mcp' ||
+    base === 'heuristic-mcp.js' ||
+    base === 'heuristic-mcp.mjs' ||
+    base === 'heuristic-mcp.cjs' ||
+    base === 'heuristic-mcp.cmd'
+  );
+}
+
 const isMain =
   process.argv[1] &&
   (path.resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase() ||
-    process.argv[1].endsWith('heuristic-mcp') ||
-    process.argv[1].endsWith('heuristic-mcp.js')) &&
+    isLikelyCliEntrypoint(process.argv[1])) &&
   !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test');
 
 if (isMain) {

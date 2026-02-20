@@ -167,6 +167,9 @@ export class SetWorkspaceFeature {
 
     if (this.cache && typeof this.cache.load === 'function') {
       try {
+        if (typeof this.cache.clearInMemoryState === 'function') {
+          this.cache.clearInMemoryState();
+        }
         if (this.config.vectorStoreFormat === 'binary') {
           await cleanupStaleBinaryArtifacts(newCacheDir);
         }
