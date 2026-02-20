@@ -1,6 +1,24 @@
 import path from 'path';
 import { dotSimilarity, smartChunk, estimateTokens, getModelTokenLimit } from '../lib/utils.js';
 
+function alignQueryVectorDimension(vector, targetDim) {
+  if (!(vector instanceof Float32Array)) {
+    vector = new Float32Array(vector);
+  }
+  if (!Number.isInteger(targetDim) || targetDim <= 0 || vector.length <= targetDim) {
+    return vector;
+  }
+
+  const sliced = vector.slice(0, targetDim);
+  let mag = 0;
+  for (let i = 0; i < sliced.length; i += 1) mag += sliced[i] * sliced[i];
+  mag = Math.sqrt(mag);
+  if (mag > 0) {
+    for (let i = 0; i < sliced.length; i += 1) sliced[i] /= mag;
+  }
+  return sliced;
+}
+
 export class FindSimilarCode {
   constructor(embedder, cache, config) {
     this.embedder = embedder;
@@ -84,6 +102,7 @@ export class FindSimilarCode {
           } catch {}
         }
       }
+      codeVector = alignQueryVectorDimension(codeVector, this.config.embeddingDimension);
 
       let candidates = vectorStore;
       let usedAnn = false;

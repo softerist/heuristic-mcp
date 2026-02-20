@@ -140,6 +140,41 @@ describe('FindSimilarCode', () => {
     expect(result.results.length).toBe(2);
   });
 
+  it('aligns query vector to embeddingDimension before similarity scoring', async () => {
+    const embedder = makeEmbedder([1, 0, 0]);
+    const vectorStore = [
+      {
+        file: 'C:/repo/a.js',
+        startLine: 1,
+        endLine: 2,
+        content: 'alpha',
+        vector: [1, 0],
+      },
+    ];
+    const cache = {
+      getVectorStore: () => vectorStore,
+      queryAnn: vi.fn().mockResolvedValue(null),
+      getChunkVector: (chunk) => chunk.vector,
+      getChunkContent: (chunk) => chunk.content,
+      ensureLoaded: vi.fn(),
+    };
+    const config = {
+      annEnabled: false,
+      embeddingDimension: 2,
+      searchDirectory: 'C:/repo',
+    };
+    const tool = new FindSimilarCode(embedder, cache, config);
+
+    const result = await tool.execute({
+      code: 'different input',
+      maxResults: 1,
+      minSimilarity: 0,
+    });
+
+    expect(result.results.length).toBe(1);
+    expect(result.results[0].file).toBe('C:/repo/a.js');
+  });
+
   it('formats results with relative paths and code fences', async () => {
     const embedder = makeEmbedder([1, 0]);
     const cache = { getVectorStore: () => [], ensureLoaded: vi.fn() };

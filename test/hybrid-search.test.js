@@ -260,6 +260,38 @@ describe('HybridSearch', () => {
       expect(files).toContain('b.js');
     });
 
+    it('aligns query vector to embeddingDimension before scoring', async () => {
+      const vectorStore = [
+        {
+          file: 'a.js',
+          content: 'alpha',
+          vector: [1, 0],
+          startLine: 1,
+          endLine: 1,
+        },
+      ];
+      const cache = createHybridSearchCacheStub({
+        vectorStore,
+        queryAnn: async () => null,
+      });
+      const config = {
+        annEnabled: false,
+        embeddingDimension: 2,
+        semanticWeight: 1,
+        exactMatchBoost: 0,
+        recencyBoost: 0,
+        callGraphEnabled: false,
+        callGraphBoost: 0,
+        searchDirectory: process.cwd(),
+      };
+      const embedder = async () => ({ data: new Float32Array([1, 0, 0]) });
+      const hybrid = new HybridSearch(embedder, cache, config);
+
+      const { results } = await hybrid.search('alpha', 1);
+      expect(results.length).toBe(1);
+      expect(results[0].file).toBe('a.js');
+    });
+
     it('should fall back when ANN dedupe leaves too few results', async () => {
       const vectorStore = [
         {
