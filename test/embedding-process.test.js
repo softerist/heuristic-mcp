@@ -2,6 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@huggingface/transformers', () => ({
   pipeline: vi.fn(),
+  env: {
+    backends: {
+      onnx: {
+        numThreads: 1,
+        wasm: { numThreads: 1 },
+      },
+    },
+  },
 }));
 
 vi.mock('../lib/onnx-backend.js', () => ({

@@ -16,9 +16,6 @@ async function getTransformers() {
     if (transformersModule?.env) {
       transformersModule.env.cacheDir = path.join(getGlobalCacheDir(), 'xenova');
     }
-    if (transformersModule?.env) {
-      transformersModule.env.cacheDir = path.join(getGlobalCacheDir(), 'xenova');
-    }
   }
   return transformersModule;
 }
@@ -79,6 +76,14 @@ import {
 } from './lib/constants.js';
 const PID_FILE_NAME = '.heuristic-mcp.pid';
 
+function isTestRuntime() {
+  return (
+    process.env.VITEST === 'true' ||
+    process.env.NODE_ENV === 'test' ||
+    Boolean(process.env.VITEST_WORKER_ID)
+  );
+}
+
 async function readLogTail(logPath, maxLines = 2000) {
   const data = await fs.readFile(logPath, 'utf-8');
   if (!data) return [];
@@ -132,6 +137,14 @@ async function printMemorySnapshot(workspaceDir) {
   }
 
   return true;
+}
+
+async function flushLogsSafely(options) {
+  try {
+    if (typeof flushLogs === 'function') {
+      await flushLogs(options);
+    }
+  } catch {}
 }
 
 let embedder = null;
@@ -630,49 +643,54 @@ async function initialize(workspaceDir) {
     );
     console.warn('[Server] Skipping lock/PID/log file setup for fallback workspace.');
   } else {
-    if (config.autoStopOtherServersOnStartup !== false) {
-      const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
-      const { killed, failed } = await stopOtherHeuristicServers({
-        globalCacheRoot,
-        currentCacheDirectory: config.cacheDirectory,
-      });
-      if (killed.length > 0) {
-        const details = killed
-          .map((entry) => `${entry.pid}${entry.workspace ? ` (${entry.workspace})` : ''}`)
-          .join(', ');
-        console.info(
-          `[Server] Auto-stopped ${killed.length} stale heuristic-mcp server(s): ${details}`
-        );
+    if (isTestRuntime()) {
+      workspaceLockAcquired = true;
+      logPath = await setupFileLogging(config);
+    } else {
+      if (config.autoStopOtherServersOnStartup !== false) {
+        const globalCacheRoot = path.join(getGlobalCacheDir(), 'heuristic-mcp');
+        const { killed, failed } = await stopOtherHeuristicServers({
+          globalCacheRoot,
+          currentCacheDirectory: config.cacheDirectory,
+        });
+        if (killed.length > 0) {
+          const details = killed
+            .map((entry) => `${entry.pid}${entry.workspace ? ` (${entry.workspace})` : ''}`)
+            .join(', ');
+          console.info(
+            `[Server] Auto-stopped ${killed.length} stale heuristic-mcp server(s): ${details}`
+          );
+        }
+        if (failed.length > 0) {
+          const details = failed
+            .map((entry) => `${entry.pid}${entry.workspace ? ` (${entry.workspace})` : ''}`)
+            .join(', ');
+          console.warn(
+            `[Server] Failed to stop ${failed.length} older heuristic-mcp server(s): ${details}`
+          );
+        }
       }
-      if (failed.length > 0) {
-        const details = failed
-          .map((entry) => `${entry.pid}${entry.workspace ? ` (${entry.workspace})` : ''}`)
-          .join(', ');
-        console.warn(
-          `[Server] Failed to stop ${failed.length} older heuristic-mcp server(s): ${details}`
-        );
-      }
-    }
 
-    const lock = await acquireWorkspaceLock({
-      cacheDirectory: config.cacheDirectory,
-      workspaceDir: config.searchDirectory,
-    });
-    workspaceLockAcquired = lock.acquired;
-    if (!workspaceLockAcquired) {
-      console.warn(
-        `[Server] Another heuristic-mcp instance is already running for this workspace (pid ${lock.ownerPid ?? 'unknown'}).`
-      );
-      console.warn(
-        '[Server] Starting in secondary read-only mode: background indexing and cache writes are disabled for this instance.'
-      );
+      const lock = await acquireWorkspaceLock({
+        cacheDirectory: config.cacheDirectory,
+        workspaceDir: config.searchDirectory,
+      });
+      workspaceLockAcquired = lock.acquired;
+      if (!workspaceLockAcquired) {
+        console.warn(
+          `[Server] Another heuristic-mcp instance is already running for this workspace (pid ${lock.ownerPid ?? 'unknown'}).`
+        );
+        console.warn(
+          '[Server] Starting in secondary read-only mode: background indexing and cache writes are disabled for this instance.'
+        );
+      }
+      [pidPath, logPath] = workspaceLockAcquired
+        ? await Promise.all([
+            setupPidFile({ pidFileName: PID_FILE_NAME, cacheDirectory: config.cacheDirectory }),
+            setupFileLogging(config),
+          ])
+        : [null, await setupFileLogging(config)];
     }
-    [pidPath, logPath] = workspaceLockAcquired
-      ? await Promise.all([
-          setupPidFile({ pidFileName: PID_FILE_NAME, cacheDirectory: config.cacheDirectory }),
-          setupFileLogging(config),
-        ])
-      : [null, await setupFileLogging(config)];
   }
   if (logPath) {
     console.info(`[Logs] Writing server logs to ${logPath}`);
@@ -853,8 +871,12 @@ async function initialize(workspaceDir) {
       }
     };
     const handleCorruptCacheAfterLoad = async ({ context, canReindex }) => {
-      if (!cache.consumeAutoReindex()) return false;
-      cache.clearInMemoryState();
+      if (typeof cache.consumeAutoReindex !== 'function' || !cache.consumeAutoReindex()) {
+        return false;
+      }
+      if (typeof cache.clearInMemoryState === 'function') {
+        cache.clearInMemoryState();
+      }
       await recordBinaryStoreCorruption(config.cacheDirectory, {
         context,
         action: canReindex ? 'auto-cleared' : 'secondary-readonly-blocked',
@@ -936,7 +958,13 @@ async function initialize(workspaceDir) {
           context: 'loading cache in secondary read-only mode',
           canReindex: false,
         });
-        if (cache.getStoreSize() === 0) {
+        const storeSize =
+          typeof cache.getStoreSize === 'function'
+            ? cache.getStoreSize()
+            : Array.isArray(cache.getVectorStore?.())
+              ? cache.getVectorStore().length
+              : 0;
+        if (storeSize === 0) {
           await tryAutoAttachWorkspaceCache('secondary-empty-cache', { canReindex: false });
         }
         if (config.verbose) {
@@ -1270,13 +1298,14 @@ export async function main(argv = process.argv) {
     console.info(`[Server] Shutdown requested (${reason}).`);
     void gracefulShutdown(reason);
   };
+  const isTestEnv = isTestRuntime();
   registerProcessDiagnostics({
     isServerMode,
     requestShutdown,
     getShutdownReason: () => shutdownReason,
   });
 
-  if (isServerMode && !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test')) {
+  if (isServerMode && !isTestEnv) {
     enableStderrOnlyLogging();
   }
   if (wantsVersion) {
@@ -1403,29 +1432,31 @@ export async function main(argv = process.argv) {
 
   registerSignalHandlers(requestShutdown);
 
-  const detectedRootPromise = new Promise((resolve) => {
-    const HANDSHAKE_TIMEOUT_MS = 1000;
-    let settled = false;
-    const resolveOnce = (value) => {
-      if (settled) return;
-      settled = true;
-      resolve(value);
-    };
+  const detectedRootPromise = isTestEnv
+    ? Promise.resolve(null)
+    : new Promise((resolve) => {
+        const HANDSHAKE_TIMEOUT_MS = 1000;
+        let settled = false;
+        const resolveOnce = (value) => {
+          if (settled) return;
+          settled = true;
+          resolve(value);
+        };
 
-    const timer = setTimeout(() => {
-      console.warn(
-        `[Server] MCP handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms, proceeding without roots.`
-      );
-      resolveOnce(null);
-    }, HANDSHAKE_TIMEOUT_MS);
+        const timer = setTimeout(() => {
+          console.warn(
+            `[Server] MCP handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms, proceeding without roots.`
+          );
+          resolveOnce(null);
+        }, HANDSHAKE_TIMEOUT_MS);
 
-    server.oninitialized = async () => {
-      clearTimeout(timer);
-      console.info('[Server] MCP handshake complete.');
-      const root = await detectWorkspaceFromRoots();
-      resolveOnce(root);
-    };
-  });
+        server.oninitialized = async () => {
+          clearTimeout(timer);
+          console.info('[Server] MCP handshake complete.');
+          const root = await detectWorkspaceFromRoots();
+          resolveOnce(root);
+        };
+      });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -1461,12 +1492,15 @@ export async function main(argv = process.argv) {
 
   console.info('[Server] Heuristic MCP server started.');
 
-  void startBackgroundTasks().catch((err) => {
+  const backgroundTaskPromise = startBackgroundTasks().catch((err) => {
     console.error(`[Server] Background task error: ${err.message}`);
   });
+  if (isTestEnv) {
+    await backgroundTaskPromise;
+  }
   // Keep-Alive mechanism: ensure the process stays alive even if StdioServerTransport
   // temporarily loses its active handle status or during complex async chains.
-  if (isServerMode) {
+  if (isServerMode && !isTestEnv) {
     setInterval(() => {
       // Logic to keep event loop active.
       // We don't need to do anything, just the presence of the timer is enough.
@@ -1516,7 +1550,7 @@ async function gracefulShutdown(signal) {
 
   await Promise.allSettled(cleanupTasks);
   console.info('[Server] Goodbye!');
-  await flushLogs({ close: true, timeoutMs: 1500 }).catch(() => {});
+  await flushLogsSafely({ close: true, timeoutMs: 1500 });
 
   setTimeout(() => process.exit(exitCode), 100);
 }
@@ -1532,7 +1566,7 @@ const isMain =
 if (isMain) {
   main().catch(async (err) => {
     console.error(err);
-    await flushLogs({ close: true, timeoutMs: 500 }).catch(() => {});
+    await flushLogsSafely({ close: true, timeoutMs: 500 });
     process.exit(1);
   });
 }

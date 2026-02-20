@@ -28,6 +28,7 @@ const loggingMock = {
   enableStderrOnlyLogging: vi.fn(),
   setupFileLogging: vi.fn(),
   getLogFilePath: vi.fn(() => 'C:\\cache\\logs\\server.log'),
+  flushLogs: vi.fn().mockResolvedValue(undefined),
 };
 const pipelineMock = vi.fn();
 const registerMock = vi.fn();
@@ -39,10 +40,14 @@ vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
   Server: class {
     constructor() {
       this.handlers = new Map();
+      this.notificationHandlers = new Map();
       lastServer = this;
     }
     setRequestHandler(schema, handler) {
       this.handlers.set(schema, handler);
+    }
+    setNotificationHandler(schema, handler) {
+      this.notificationHandlers.set(schema, handler);
     }
     async connect() {}
   },
@@ -55,7 +60,10 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => {
   listSchema = Symbol('list');
   const listResourcesSchema = Symbol('listResources');
   const readResourceSchema = Symbol('readResource');
+  const RootsListChangedNotificationSchema = Symbol('rootsListChanged');
+  
   return {
+    RootsListChangedNotificationSchema,
     CallToolRequestSchema: callSchema,
     ListToolsRequestSchema: listSchema,
     ListResourcesRequestSchema: listResourcesSchema,
@@ -426,7 +434,9 @@ describe('index.js CLI coverage', () => {
     pipelineMock.mockResolvedValue(() => ({}));
 
     const { main } = await import('../index.js');
-    await main();
+    const mainPromise = main();
+    await vi.runAllTimersAsync();
+    await mainPromise;
 
     const errors = errorSpy.mock.calls.map((call) => call[0]);
     const hasFallback = errors.some(
@@ -447,11 +457,9 @@ describe('index.js CLI coverage', () => {
     pipelineMock.mockResolvedValue(() => ({}));
 
     const { main } = await import('../index.js');
-    await main();
-
+    const mainPromise = main();
     await vi.runAllTimersAsync();
-    await Promise.resolve();
-    await Promise.resolve();
+    await mainPromise;
 
     expect(setupFileWatcherMock).toHaveBeenCalled();
   });
@@ -465,7 +473,9 @@ describe('index.js CLI coverage', () => {
     pipelineMock.mockResolvedValue(() => ({}));
 
     const { main } = await import('../index.js');
-    await main();
+    const mainPromise = main();
+    await vi.runAllTimersAsync();
+    await mainPromise;
 
     const errors = errorSpy.mock.calls.map((call) => call[0]);
     const hasWorkspace = errors.some(
@@ -484,11 +494,9 @@ describe('index.js CLI coverage', () => {
     indexAllMock.mockRejectedValue(new Error('index fail'));
 
     const { main } = await import('../index.js');
-    await main();
-
+    const mainPromise = main();
     await vi.runAllTimersAsync();
-    await Promise.resolve();
-    await Promise.resolve();
+    await mainPromise;
 
     const errors = errorSpy.mock.calls.map((call) => call[0]);
     const hasError = errors.some(
@@ -506,7 +514,9 @@ describe('index.js CLI coverage', () => {
     pipelineMock.mockResolvedValue(() => ({}));
 
     const { main } = await import('../index.js');
-    await main();
+    const mainPromise = main();
+    await vi.runAllTimersAsync();
+    await mainPromise;
 
     const info = [...infoSpy.mock.calls, ...errorSpy.mock.calls].map((call) => call[0]);
     const hasWorkspace = info.some(
@@ -546,7 +556,9 @@ describe('index.js CLI coverage', () => {
     pipelineMock.mockResolvedValue(() => ({}));
 
     const { main } = await import('../index.js');
-    await main();
+    const mainPromise = main();
+    await vi.runAllTimersAsync();
+    await mainPromise;
 
     lastIndexer.watcher = null;
     lastIndexer.terminateWorkers = null;
@@ -574,7 +586,9 @@ describe('index.js CLI coverage', () => {
     pipelineMock.mockResolvedValue(() => ({}));
 
     const { main } = await import('../index.js');
-    await main();
+    const mainPromise = main();
+    await vi.runAllTimersAsync();
+    await mainPromise;
 
     const listHandler = lastServer.handlers.get(listSchema);
     const callHandler = lastServer.handlers.get(callSchema);

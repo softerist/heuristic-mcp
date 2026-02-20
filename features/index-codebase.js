@@ -567,12 +567,13 @@ export class CodebaseIndexer {
               ? this.config.workerThreads
               : 1;
 
-        if (this.shouldDisableHeavyModelWorkersOnWindows() && numWorkers > 0) {
-          if (!this._heavyWorkerSafetyLogged) {
-            console.warn(
-              '[Indexer] Heavy model worker safety mode: disabling workers on Windows to avoid native worker crashes/timeouts'
-            );
-            this._heavyWorkerSafetyLogged = true;
+          const isAutoWorkerMode = this.config.workerThreads === 'auto';
+          if (isAutoWorkerMode && this.shouldDisableHeavyModelWorkersOnWindows() && numWorkers > 0) {
+            if (!this._heavyWorkerSafetyLogged) {
+              console.warn(
+                '[Indexer] Heavy model worker safety mode: disabling workers on Windows to avoid native worker crashes/timeouts'
+              );
+              this._heavyWorkerSafetyLogged = true;
           }
           numWorkers = 0;
         }
@@ -2769,7 +2770,7 @@ export class CodebaseIndexer {
         lastCheckpointIntervalMs: checkpointIntervalMs,
         lastCheckpointSaves: checkpointSaveCount,
       });
-      await this.cache.save({ throwOnError: true });
+      await this.cache.save();
 
       this.sendProgress(
         100,

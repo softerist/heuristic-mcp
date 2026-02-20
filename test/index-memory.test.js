@@ -7,6 +7,7 @@ vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
       this.hybridSearch = null;
     }
     setRequestHandler() {}
+    setNotificationHandler() {}
     connect() {
       return Promise.resolve();
     }
@@ -189,26 +190,28 @@ describe('Index.js Memory Logging', () => {
     const { main } = await import('../index.js');
     const importPromise = main();
 
-    await vi.waitFor(
-      () => {
-        const calls = console.info.mock.calls
-          .map((c) => c[0])
-          .filter((msg) => msg && msg.includes('[Server] Memory (startup)'));
-        if (calls.length === 0) throw new Error('Not reached yet');
-      },
-      { timeout: 1000, interval: 10 }
-    );
+    let attempts = 0;
+    let calls = [];
+    while(attempts < 50) {
+      await vi.advanceTimersByTimeAsync(100);
+      calls = console.info.mock.calls
+        .map((c) => c[0])
+        .filter((msg) => msg && msg.includes('[Server] Memory (startup)'));
+      if (calls.length > 0) break;
+      attempts++;
+    }
+    if (calls.length === 0) throw new Error('Not reached yet');
 
     await vi.advanceTimersByTimeAsync(16000);
     accessResolve();
     await importPromise;
 
-    const calls = console.info.mock.calls
+    const allCalls = console.info.mock.calls
       .map((c) => c[0])
       .filter((msg) => msg && msg.includes('[Server] Memory'));
-    const startupCalls = calls.filter((msg) => msg.includes('Memory (startup)'));
+    const startupCalls = allCalls.filter((msg) => msg.includes('Memory (startup)'));
 
-    expect(calls.length).toBeGreaterThanOrEqual(2);
+    expect(allCalls.length).toBeGreaterThanOrEqual(2);
     expect(startupCalls.length).toBeGreaterThanOrEqual(2);
   });
 });

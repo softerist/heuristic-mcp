@@ -58,6 +58,9 @@ describe('CodebaseIndexer RAM Throttling', () => {
 
   it('should throttle workers when RAM is low', async () => {
     os.cpus.mockReturnValue(Array(16).fill({}));
+    
+    let originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux' });
 
     os.freemem.mockReturnValue(2 * 1024 * 1024 * 1024);
 
@@ -77,5 +80,7 @@ describe('CodebaseIndexer RAM Throttling', () => {
 
     expect(activeWorkers).toBeLessThan(10);
     expect(activeWorkers).toBe(1);
+
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 });
