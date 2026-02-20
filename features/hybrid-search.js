@@ -336,7 +336,7 @@ export class HybridSearch {
             for (let k = 0; k < queryWordCount; k++) {
               if (lowerContent.includes(queryWords[k])) matchedWords++;
             }
-            chunk.score += (matchedWords / queryWordCount) * 0.3;
+            chunk.score += (matchedWords / queryWordCount) * PARTIAL_MATCH_BOOST;
           }
 
           if (chunk.content === undefined) {

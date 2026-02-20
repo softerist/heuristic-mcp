@@ -1559,8 +1559,7 @@ const isMain =
   process.argv[1] &&
   (path.resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase() ||
     process.argv[1].endsWith('heuristic-mcp') ||
-    process.argv[1].endsWith('heuristic-mcp.js') ||
-    path.basename(process.argv[1]) === 'index.js') &&
+    process.argv[1].endsWith('heuristic-mcp.js')) &&
   !(process.env.VITEST === 'true' || process.env.NODE_ENV === 'test');
 
 if (isMain) {

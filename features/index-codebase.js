@@ -567,13 +567,12 @@ export class CodebaseIndexer {
               ? this.config.workerThreads
               : 1;
 
-          const isAutoWorkerMode = this.config.workerThreads === 'auto';
-          if (isAutoWorkerMode && this.shouldDisableHeavyModelWorkersOnWindows() && numWorkers > 0) {
-            if (!this._heavyWorkerSafetyLogged) {
-              console.warn(
-                '[Indexer] Heavy model worker safety mode: disabling workers on Windows to avoid native worker crashes/timeouts'
-              );
-              this._heavyWorkerSafetyLogged = true;
+        if (this.shouldDisableHeavyModelWorkersOnWindows() && numWorkers > 0) {
+          if (!this._heavyWorkerSafetyLogged) {
+            console.warn(
+              '[Indexer] Heavy model worker safety mode: disabling workers on Windows to avoid native worker crashes/timeouts'
+            );
+            this._heavyWorkerSafetyLogged = true;
           }
           numWorkers = 0;
         }
@@ -2770,7 +2769,13 @@ export class CodebaseIndexer {
         lastCheckpointIntervalMs: checkpointIntervalMs,
         lastCheckpointSaves: checkpointSaveCount,
       });
-      await this.cache.save();
+      try {
+        await this.cache.save({ throwOnError: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[Indexer] Final cache save failed after embedding pass: ${message}`);
+        throw error;
+      }
 
       this.sendProgress(
         100,
