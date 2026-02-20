@@ -186,6 +186,7 @@ let rootsCapabilitySupported = null;
 let rootsProbeInFlight = null;
 let lastRootsProbeTime = 0;
 let keepAliveTimer = null;
+let stdioShutdownHandlers = null;
 const ROOTS_PROBE_COOLDOWN_MS = 2000;
 const WORKSPACE_BOUND_TOOL_NAMES = new Set([
   'a_semantic_search',
@@ -248,6 +249,13 @@ function isCrashShutdownReason(reason) {
   return normalized.includes('uncaughtexception') || normalized.includes('unhandledrejection');
 }
 
+function getShutdownExitCode(reason) {
+  const normalized = String(reason || '').trim().toUpperCase();
+  if (normalized === 'SIGINT') return 130;
+  if (normalized === 'SIGTERM') return 143;
+  return isCrashShutdownReason(reason) ? 1 : 0;
+}
+
 function registerProcessDiagnostics({ isServerMode, requestShutdown, getShutdownReason }) {
   if (!isServerMode) return;
 
@@ -284,6 +292,44 @@ function registerProcessDiagnostics({ isServerMode, requestShutdown, getShutdown
   process.on('unhandledRejection', (reason) => {
     handleFatalError('unhandledRejection', reason);
   });
+}
+
+function registerStdioShutdownHandlers(requestShutdown) {
+  if (stdioShutdownHandlers) return;
+
+  const onStdinEnd = () => requestShutdown('stdin-end');
+  const onStdinClose = () => requestShutdown('stdin-close');
+  const onStdoutError = (err) => {
+    if (err?.code === 'EPIPE') {
+      requestShutdown('stdout-epipe');
+    }
+  };
+  const onStderrError = (err) => {
+    if (err?.code === 'EPIPE') {
+      requestShutdown('stderr-epipe');
+    }
+  };
+
+  process.stdin?.on?.('end', onStdinEnd);
+  process.stdin?.on?.('close', onStdinClose);
+  process.stdout?.on?.('error', onStdoutError);
+  process.stderr?.on?.('error', onStderrError);
+
+  stdioShutdownHandlers = {
+    onStdinEnd,
+    onStdinClose,
+    onStdoutError,
+    onStderrError,
+  };
+}
+
+function unregisterStdioShutdownHandlers() {
+  if (!stdioShutdownHandlers) return;
+  process.stdin?.off?.('end', stdioShutdownHandlers.onStdinEnd);
+  process.stdin?.off?.('close', stdioShutdownHandlers.onStdinClose);
+  process.stdout?.off?.('error', stdioShutdownHandlers.onStdoutError);
+  process.stderr?.off?.('error', stdioShutdownHandlers.onStderrError);
+  stdioShutdownHandlers = null;
 }
 
 async function resolveWorkspaceFromEnvValue(rawValue) {
@@ -510,9 +556,10 @@ async function maybeAutoSwitchWorkspaceToPath(
     if (targetNow === currentNow) return;
   }
 
-  autoWorkspaceSwitchPromise = (async () => {
+  const switchPromise = (async () => {
+    const latestWorkspace = normalizePathForCompare(config.searchDirectory);
     console.info(
-      `[Server] Auto-switching workspace from ${currentWorkspace} to ${targetWorkspacePath} (${source || 'auto'})`
+      `[Server] Auto-switching workspace from ${latestWorkspace} to ${targetWorkspacePath} (${source || 'auto'})`
     );
     const result = await setWorkspaceFeatureInstance.execute({
       workspacePath: targetWorkspacePath,
@@ -524,11 +571,14 @@ async function maybeAutoSwitchWorkspaceToPath(
     }
     trustWorkspacePath(targetWorkspacePath);
   })();
+  autoWorkspaceSwitchPromise = switchPromise;
 
   try {
-    await autoWorkspaceSwitchPromise;
+    await switchPromise;
   } finally {
-    autoWorkspaceSwitchPromise = null;
+    if (autoWorkspaceSwitchPromise === switchPromise) {
+      autoWorkspaceSwitchPromise = null;
+    }
   }
 }
 
@@ -1491,18 +1541,7 @@ export async function main(argv = process.argv) {
   await server.connect(transport);
   console.info('[Server] MCP transport connected.');
   if (isServerMode) {
-    process.stdin?.on?.('end', () => requestShutdown('stdin-end'));
-    process.stdin?.on?.('close', () => requestShutdown('stdin-close'));
-    process.stdout?.on?.('error', (err) => {
-      if (err?.code === 'EPIPE') {
-        requestShutdown('stdout-epipe');
-      }
-    });
-    process.stderr?.on?.('error', (err) => {
-      if (err?.code === 'EPIPE') {
-        requestShutdown('stderr-epipe');
-      }
-    });
+    registerStdioShutdownHandlers(requestShutdown);
   }
 
   const detectedRoot = await detectedRootPromise;
@@ -1546,12 +1585,14 @@ export async function main(argv = process.argv) {
 
 async function gracefulShutdown(signal) {
   console.info(`[Server] Received ${signal}, shutting down gracefully...`);
-  const exitCode = isCrashShutdownReason(signal) ? 1 : 0;
+  const exitCode = getShutdownExitCode(signal);
 
   if (keepAliveTimer) {
     clearInterval(keepAliveTimer);
     keepAliveTimer = null;
   }
+
+  unregisterStdioShutdownHandlers();
 
   const cleanupTasks = [];
 

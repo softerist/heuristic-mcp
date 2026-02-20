@@ -600,7 +600,7 @@ describe('index.js CLI coverage', () => {
     await runHandler(listeners.SIGINT);
     await runHandler(listeners.SIGTERM);
 
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(exitSpy).toHaveBeenCalledWith(130);
   });
 
   it('warns when log flush fails during shutdown', async () => {
