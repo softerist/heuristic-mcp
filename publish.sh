@@ -377,6 +377,12 @@ if ! git commit -m "$RELEASE_TYPE(release): v$NEW_VERSION"; then
   exit 1
 fi
 
+echo "[release] Creating git tag v$NEW_VERSION..."
+if ! git tag -a "v$NEW_VERSION" -m "$RELEASE_TYPE(release): v$NEW_VERSION"; then
+  echo "[release] ERROR: git tag failed."
+  exit 1
+fi
+
 echo "[release] Publishing to npm..."
 if [[ -n "$OTP" ]]; then
   if ! npm publish --access public --otp "$OTP"; then
@@ -392,12 +398,12 @@ fi
 
 if [[ "$NO_PUSH" -eq 1 ]]; then
   echo "[release] Skipping git push due to --no-push."
-  echo "[release] SUCCESS: v$NEW_VERSION committed and published."
+  echo "[release] SUCCESS: v$NEW_VERSION committed, tagged, and published."
 else
-  echo "[release] Pushing commit to git remote..."
-  if ! git push; then
+  echo "[release] Pushing commit and tags to git remote..."
+  if ! git push --follow-tags; then
     echo "[release] ERROR: git push failed. Package was published; push manually."
     exit 1
   fi
-  echo "[release] SUCCESS: v$NEW_VERSION committed, published, and pushed."
+  echo "[release] SUCCESS: v$NEW_VERSION committed, tagged, published, and pushed."
 fi

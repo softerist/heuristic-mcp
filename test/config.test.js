@@ -9,6 +9,7 @@ import {
   DEFAULT_CONFIG,
   isNonProjectDirectory,
 } from '../lib/config.js';
+import { getWorkspaceCachePathCandidates } from '../lib/workspace-cache-key.js';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -357,6 +358,7 @@ describe('Configuration Loading', () => {
       process.env.SMART_CODING_AUTO_STOP_OTHER_SERVERS_ON_STARTUP = 'false';
       process.env.SMART_CODING_REQUIRE_TRUSTED_WORKSPACE_SIGNAL_FOR_TOOLS = 'true';
       process.env.SMART_CODING_INDEX_CHECKPOINT_INTERVAL_MS = '2000';
+      process.env.SMART_CODING_SHUTDOWN_INDEX_WAIT_MS = '1500';
       process.env.SMART_CODING_SEMANTIC_WEIGHT = '0.3';
       process.env.SMART_CODING_EXACT_MATCH_BOOST = '2';
       process.env.SMART_CODING_EMBEDDING_MODEL = 'custom-embedder';
@@ -402,6 +404,7 @@ describe('Configuration Loading', () => {
       expect(config.autoStopOtherServersOnStartup).toBe(false);
       expect(config.requireTrustedWorkspaceSignalForTools).toBe(true);
       expect(config.indexCheckpointIntervalMs).toBe(2000);
+      expect(config.shutdownIndexWaitMs).toBe(1500);
       expect(config.semanticWeight).toBe(0.3);
       expect(config.exactMatchBoost).toBe(2);
       expect(config.embeddingModel).toBe('custom-embedder');
@@ -466,6 +469,7 @@ describe('Configuration Loading', () => {
       process.env.SMART_CODING_SEMANTIC_WEIGHT = '-1';
       process.env.SMART_CODING_EXACT_MATCH_BOOST = 'nope';
       process.env.SMART_CODING_INDEX_CHECKPOINT_INTERVAL_MS = '-1';
+      process.env.SMART_CODING_SHUTDOWN_INDEX_WAIT_MS = '-2';
       process.env.SMART_CODING_ANN_MIN_CHUNKS = '-5';
       process.env.SMART_CODING_ANN_MIN_CANDIDATES = '-1';
       process.env.SMART_CODING_ANN_MAX_CANDIDATES = '0';
@@ -485,6 +489,7 @@ describe('Configuration Loading', () => {
       expect(config.semanticWeight).toBe(DEFAULT_CONFIG.semanticWeight);
       expect(config.exactMatchBoost).toBe(DEFAULT_CONFIG.exactMatchBoost);
       expect(config.indexCheckpointIntervalMs).toBe(DEFAULT_CONFIG.indexCheckpointIntervalMs);
+      expect(config.shutdownIndexWaitMs).toBe(DEFAULT_CONFIG.shutdownIndexWaitMs);
       expect(config.annMinChunks).toBe(DEFAULT_CONFIG.annMinChunks);
       expect(config.annMinCandidates).toBe(DEFAULT_CONFIG.annMinCandidates);
       expect(config.annMaxCandidates).toBe(DEFAULT_CONFIG.annMaxCandidates);
@@ -580,6 +585,34 @@ describe('Configuration Loading', () => {
 
       const config = await loadConfig(dir);
       expect(config.cacheDirectory).not.toContain('.smart-coding-cache');
+    });
+  });
+
+  it('uses drive-case compatible cache path when canonical cache path is missing', async () => {
+    await withTempDir(async (dir) => {
+      const originalPlatform = process.platform;
+      const originalLocalAppData = process.env.LOCALAPPDATA;
+      try {
+        Object.defineProperty(process, 'platform', { value: 'win32' });
+        process.env.LOCALAPPDATA = dir;
+
+        const workspaceDir = path.join(dir, 'WorkspaceCase');
+        await fs.mkdir(workspaceDir, { recursive: true });
+        await fs.writeFile(path.join(workspaceDir, 'config.json'), JSON.stringify({ smartIndexing: false }));
+
+        const cachePaths = getWorkspaceCachePathCandidates(workspaceDir, dir);
+        await fs.mkdir(cachePaths.compatDriveCase, { recursive: true });
+
+        const config = await loadConfig(workspaceDir);
+        expect(config.cacheDirectory).toBe(cachePaths.compatDriveCase);
+      } finally {
+        if (originalLocalAppData === undefined) {
+          delete process.env.LOCALAPPDATA;
+        } else {
+          process.env.LOCALAPPDATA = originalLocalAppData;
+        }
+        Object.defineProperty(process, 'platform', { value: originalPlatform });
+      }
     });
   });
 

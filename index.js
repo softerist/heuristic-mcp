@@ -27,7 +27,7 @@ import os from 'os';
 
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
-import { getWorkspaceCachePath } from './lib/workspace-cache-key.js';
+import { getWorkspaceCachePathCandidates } from './lib/workspace-cache-key.js';
 
 const require = createRequire(import.meta.url);
 const packageJson = require('./package.json');
@@ -380,6 +380,32 @@ function normalizePathForCompare(targetPath) {
   if (!targetPath) return '';
   const resolved = path.resolve(targetPath);
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+async function pathExists(targetPath) {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveWorkspaceCacheDirectory(workspacePath, globalCacheRoot) {
+  const candidates = getWorkspaceCachePathCandidates(workspacePath, globalCacheRoot);
+  if (await pathExists(candidates.canonical)) {
+    return { cacheDirectory: candidates.canonical, mode: 'canonical' };
+  }
+  if (
+    candidates.compatDriveCase !== candidates.canonical &&
+    (await pathExists(candidates.compatDriveCase))
+  ) {
+    return { cacheDirectory: candidates.compatDriveCase, mode: 'compat-drivecase' };
+  }
+  if (candidates.legacy !== candidates.canonical && (await pathExists(candidates.legacy))) {
+    return { cacheDirectory: candidates.legacy, mode: 'legacy' };
+  }
+  return { cacheDirectory: candidates.canonical, mode: 'canonical' };
 }
 
 function isProcessAlive(pid) {
@@ -1123,7 +1149,7 @@ server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
   if (newRoot) {
     await maybeAutoSwitchWorkspaceToPath(newRoot, {
       source: 'roots changed',
-      reindex: true,
+      reindex: false,
     });
   }
 });
@@ -1216,7 +1242,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     config.searchDirectory = normalizedPath;
-    config.cacheDirectory = getWorkspaceCachePath(normalizedPath, getGlobalCacheDir());
+    const cacheResolution = await resolveWorkspaceCacheDirectory(normalizedPath, getGlobalCacheDir());
+    config.cacheDirectory = cacheResolution.cacheDirectory;
+    if (config.verbose || cacheResolution.mode !== 'canonical') {
+      console.info(`[Server] Cache resolution mode: ${cacheResolution.mode}`);
+    }
     try {
       await fs.mkdir(config.cacheDirectory, { recursive: true });
       await cache.load();
@@ -1608,6 +1638,31 @@ async function gracefulShutdown(signal) {
   if (keepAliveTimer) {
     clearInterval(keepAliveTimer);
     keepAliveTimer = null;
+  }
+
+  const indexerIsBusy =
+    indexer &&
+    (typeof indexer.isBusy === 'function'
+      ? indexer.isBusy()
+      : Boolean(indexer.isIndexing || indexer.processingWatchEvents));
+  if (indexerIsBusy && typeof indexer.requestGracefulStop === 'function') {
+    const waitMs =
+      Number.isInteger(config?.shutdownIndexWaitMs) && config.shutdownIndexWaitMs >= 0
+        ? config.shutdownIndexWaitMs
+        : 3000;
+    try {
+      indexer.requestGracefulStop(`shutdown:${signal}`);
+      if (typeof indexer.waitForIdle === 'function') {
+        const waitResult = await indexer.waitForIdle(waitMs);
+        if (waitResult?.idle) {
+          console.info('[Server] Shutdown checkpoint outcome: success');
+        } else {
+          console.warn(`[Server] Shutdown checkpoint outcome: timeout (${waitMs}ms)`);
+        }
+      }
+    } catch (err) {
+      console.warn(`[Server] Shutdown checkpoint outcome: failed (${err.message})`);
+    }
   }
 
   const cleanupTasks = [];

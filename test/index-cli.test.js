@@ -12,7 +12,9 @@ let findHandleToolCall;
 let annHandleToolCall;
 let callSchema;
 let listSchema;
+let rootsSchema;
 let logsMock;
+let setWorkspaceExecuteMock;
 const lifecycleMock = {
   registerSignalHandlers: vi.fn(),
   setupPidFile: vi.fn(),
@@ -67,10 +69,10 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => {
   listSchema = Symbol('list');
   const listResourcesSchema = Symbol('listResources');
   const readResourceSchema = Symbol('readResource');
-  const RootsListChangedNotificationSchema = Symbol('rootsListChanged');
+  rootsSchema = Symbol('rootsListChanged');
   
   return {
-    RootsListChangedNotificationSchema,
+    RootsListChangedNotificationSchema: rootsSchema,
     CallToolRequestSchema: callSchema,
     ListToolsRequestSchema: listSchema,
     ListResourcesRequestSchema: listResourcesSchema,
@@ -138,6 +140,15 @@ vi.mock('../features/ann-config.js', () => ({
   getToolDefinition: vi.fn(() => ({ name: 'ann_config' })),
   handleToolCall: (...args) => annHandleToolCall(...args),
 }));
+vi.mock('../features/set-workspace.js', () => ({
+  SetWorkspaceFeature: class {
+    constructor() {
+      this.execute = (...args) => setWorkspaceExecuteMock(...args);
+    }
+  },
+  getToolDefinition: vi.fn(() => ({ name: 'f_set_workspace' })),
+  createHandleToolCall: vi.fn(() => vi.fn()),
+}));
 vi.mock('../features/register.js', () => ({
   register: (...args) => registerMock(...args),
 }));
@@ -186,6 +197,13 @@ describe('index.js CLI coverage', () => {
     clearHandleToolCall = vi.fn();
     findHandleToolCall = vi.fn();
     annHandleToolCall = vi.fn();
+    setWorkspaceExecuteMock = vi.fn().mockResolvedValue({
+      success: true,
+      previousWorkspace: 'C:\\work',
+      newWorkspace: 'C:\\new-work',
+      cacheDirectory: 'C:\\cache\\new',
+      reindexStatus: 'skipped',
+    });
     logsMock = vi.fn();
     registerMock.mockReset();
     stopMock.mockReset();
@@ -789,6 +807,34 @@ describe('index.js CLI coverage', () => {
 
     const unknown = await callHandler({ params: { name: 'unknown_tool' } });
     expect(unknown.content[0].text).toContain('Unknown tool');
+  });
+
+  it('uses reindex=false when handling roots/list_changed notification', async () => {
+    vi.useFakeTimers();
+    process.argv = ['node', 'index.js', '--workspace', 'C:\\work'];
+    configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
+    configMock.loadConfig.mockResolvedValue(baseConfig);
+    fsMock.access.mockResolvedValue(undefined);
+    pipelineMock.mockResolvedValue(() => ({}));
+
+    const { main } = await import('../index.js');
+    const mainPromise = main();
+    await vi.runAllTimersAsync();
+    await mainPromise;
+
+    lastServer.getClientCapabilities = vi.fn().mockReturnValue({ roots: {} });
+    lastServer.listRoots = vi.fn().mockResolvedValue({
+      roots: [{ uri: 'file:///C:/new-work' }],
+    });
+
+    const rootsHandler = lastServer.notificationHandlers.get(rootsSchema);
+    await rootsHandler();
+
+    expect(setWorkspaceExecuteMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reindex: false,
+      })
+    );
   });
 
   it('handles shutdown when cache is not yet initialized', async () => {

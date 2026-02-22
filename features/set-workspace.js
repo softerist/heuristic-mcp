@@ -1,11 +1,41 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { acquireWorkspaceLock, releaseWorkspaceLock } from '../lib/server-lifecycle.js';
-import { getWorkspaceCachePath } from '../lib/workspace-cache-key.js';
+import {
+  getWorkspaceCachePath,
+  getWorkspaceCachePathCandidates,
+} from '../lib/workspace-cache-key.js';
 import { cleanupStaleBinaryArtifacts } from '../lib/vector-store-binary.js';
 
 function getWorkspaceCacheDir(workspacePath, globalCacheDir) {
   return getWorkspaceCachePath(workspacePath, globalCacheDir);
+}
+
+async function pathExists(targetPath) {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveWorkspaceCacheDir(workspacePath, globalCacheDir) {
+  const candidates = getWorkspaceCachePathCandidates(workspacePath, globalCacheDir);
+
+  if (await pathExists(candidates.canonical)) {
+    return { cacheDirectory: candidates.canonical, mode: 'canonical' };
+  }
+  if (
+    candidates.compatDriveCase !== candidates.canonical &&
+    (await pathExists(candidates.compatDriveCase))
+  ) {
+    return { cacheDirectory: candidates.compatDriveCase, mode: 'compat-drivecase' };
+  }
+  if (candidates.legacy !== candidates.canonical && (await pathExists(candidates.legacy))) {
+    return { cacheDirectory: candidates.legacy, mode: 'legacy' };
+  }
+  return { cacheDirectory: candidates.canonical, mode: 'canonical' };
 }
 
 export function getToolDefinition() {
@@ -77,7 +107,11 @@ export class SetWorkspaceFeature {
     this.config.searchDirectory = normalizedPath;
 
     const globalCacheDir = this.getGlobalCacheDir();
-    let newCacheDir = getWorkspaceCacheDir(normalizedPath, globalCacheDir);
+    const cacheResolution = await resolveWorkspaceCacheDir(normalizedPath, globalCacheDir);
+    let newCacheDir = cacheResolution.cacheDirectory;
+    if (this.config.verbose || cacheResolution.mode !== 'canonical') {
+      console.info(`[SetWorkspace] Cache resolution mode: ${cacheResolution.mode}`);
+    }
 
     const legacyPath = path.join(normalizedPath, '.smart-coding-cache');
     try {

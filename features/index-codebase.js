@@ -139,6 +139,9 @@ export class CodebaseIndexer {
     this._lastExplicitGcAt = 0;
     this._lastHighRssRecycleAt = 0;
     this._pendingHighRssRecycleTimer = null;
+    this._gracefulStopRequested = false;
+    this._gracefulStopReason = null;
+    this._idleWaiters = [];
   }
 
   rebuildExcludeMatchers() {
@@ -180,6 +183,46 @@ export class CodebaseIndexer {
       await this.setupFileWatcher();
     } else if (this.config.watchFiles) {
       await this.loadGitignore();
+    }
+  }
+
+  isBusy() {
+    return Boolean(this.isIndexing || this.processingWatchEvents);
+  }
+
+  requestGracefulStop(reason = 'unknown') {
+    const normalizedReason = String(reason || 'unknown');
+    if (this._gracefulStopRequested && this._gracefulStopReason === normalizedReason) return;
+    this._gracefulStopRequested = true;
+    this._gracefulStopReason = normalizedReason;
+    console.info(`[Indexer] Graceful stop requested (${normalizedReason}).`);
+  }
+
+  waitForIdle(timeoutMs = 0) {
+    if (!this.isBusy()) {
+      return Promise.resolve({ idle: true, timedOut: false });
+    }
+
+    return new Promise((resolve) => {
+      const waiter = { resolve, timer: null };
+      if (Number.isFinite(timeoutMs) && timeoutMs >= 0) {
+        waiter.timer = setTimeout(() => {
+          const idx = this._idleWaiters.indexOf(waiter);
+          if (idx >= 0) this._idleWaiters.splice(idx, 1);
+          resolve({ idle: false, timedOut: true });
+        }, timeoutMs);
+        waiter.timer.unref?.();
+      }
+      this._idleWaiters.push(waiter);
+    });
+  }
+
+  notifyIdleWaiters() {
+    if (this.isBusy() || this._idleWaiters.length === 0) return;
+    const pending = this._idleWaiters.splice(0, this._idleWaiters.length);
+    for (const waiter of pending) {
+      if (waiter.timer) clearTimeout(waiter.timer);
+      waiter.resolve({ idle: true, timedOut: false });
     }
   }
 
@@ -2131,6 +2174,8 @@ export class CodebaseIndexer {
     }
 
     this.isIndexing = true;
+    this._gracefulStopRequested = false;
+    this._gracefulStopReason = null;
     let memoryTimer = null;
     const logMemory = (label) => {
       if (!this.config.verbose) return;
@@ -2276,6 +2321,20 @@ export class CodebaseIndexer {
             ? 'full'
             : 'incremental';
       this.currentIndexMode = indexMode;
+      const missingHashCount = filesToProcess.reduce(
+        (count, entry) => count + (entry?.expectedHash ? 0 : 1),
+        0
+      );
+      const indexReason = force
+        ? 'full'
+        : this.cache.getVectorStore().length === 0
+          ? 'initial'
+          : missingHashCount > 0
+            ? 'resume-partial'
+            : 'incremental';
+      console.info(
+        `[Indexer] Index reason: ${indexReason} (changed=${filesToProcess.length}, missingHash=${missingHashCount}, total=${files.length})`
+      );
 
       if (filesToProcess.length === 0) {
         console.info('[Indexer] All files unchanged, nothing to index');
@@ -2370,6 +2429,8 @@ export class CodebaseIndexer {
       const checkpointIntervalMs = this.getIndexCheckpointIntervalMs();
       let lastCheckpointSaveAt = Date.now();
       let checkpointSaveCount = 0;
+      let stoppedEarly = false;
+      let stopCheckpointSaved = false;
 
       console.info(
         `[Indexer] Embedding pass started: ${filesToProcess.length} files using ${this.config.embeddingModel}`
@@ -2731,6 +2792,26 @@ export class CodebaseIndexer {
           );
         }
 
+        if (this._gracefulStopRequested && processedFiles < filesToProcess.length) {
+          const stopReason = this._gracefulStopReason || 'unknown';
+          console.info(
+            `[Indexer] Graceful stop acknowledged at batch boundary (${stopReason}); saving checkpoint...`
+          );
+          try {
+            await this.traceIncrementalMemoryPhase('indexAll.shutdownCheckpointSave', async () => {
+              await this.cache.save({ throwOnError: true });
+            });
+            checkpointSaveCount += 1;
+            lastCheckpointSaveAt = Date.now();
+            stopCheckpointSaved = true;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`[Indexer] Graceful stop checkpoint save failed: ${message}`);
+          }
+          stoppedEarly = true;
+          break;
+        }
+
         allChunks.length = 0;
         filesForWorkers.length = 0;
         fileStats.clear();
@@ -2746,9 +2827,15 @@ export class CodebaseIndexer {
 
       const totalDurationMs = Date.now() - totalStartTime;
       const totalTime = (totalDurationMs / 1000).toFixed(1);
-      console.info(
-        `[Indexer] Embedding pass complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
-      );
+      if (stoppedEarly) {
+        console.info(
+          `[Indexer] Embedding pass stopped early: ${totalChunks} chunks from ${processedFiles}/${filesToProcess.length} files in ${totalTime}s`
+        );
+      } else {
+        console.info(
+          `[Indexer] Embedding pass complete: ${totalChunks} chunks from ${filesToProcess.length} files in ${totalTime}s`
+        );
+      }
 
       this.sendProgress(
         95,
@@ -2761,13 +2848,16 @@ export class CodebaseIndexer {
         lastIndexStartedAt: indexStartedAt,
         lastIndexEndedAt: new Date().toISOString(),
         lastDiscoveredFiles: files.length,
-        lastFilesProcessed: filesToProcess.length,
+        lastFilesProcessed: processedFiles,
         lastIndexMode: indexMode,
+        lastIndexReason: indexReason,
         lastBatchSize: adaptiveBatchSize,
         lastWorkerThreads: resolvedWorkerThreads,
         lastEmbeddingProcessPerBatch: useEmbeddingProcessPerBatch,
         lastCheckpointIntervalMs: checkpointIntervalMs,
         lastCheckpointSaves: checkpointSaveCount,
+        lastStoppedEarly: stoppedEarly,
+        lastShutdownCheckpointSaved: stopCheckpointSaved,
       });
       try {
         await this.cache.save({ throwOnError: true });
@@ -2787,44 +2877,51 @@ export class CodebaseIndexer {
       const totalFiles = new Set(vectorStoreSnapshot.map((v) => v.file)).size;
       const totalChunksCount = vectorStoreSnapshot.length;
 
-      if (this.config.clearCacheAfterIndex) {
-        console.info(
-          '[Indexer] clearCacheAfterIndex enabled; in-memory vectors will be reloaded on next query'
-        );
-        await this.cache.dropInMemoryVectors();
-        if (this.config.verbose) {
-          console.info('[Cache] Cleared in-memory vectors after indexing');
-        }
-      }
-
-      if (this.config.unloadModelAfterIndex) {
-        console.info(
-          '[Indexer] unloadModelAfterIndex enabled; embedding model will be reloaded on next query'
-        );
-        await this.unloadEmbeddingModels();
-      }
-      this.maybeShutdownQueryEmbeddingPool('full index');
-
-      if (this.config.callGraphEnabled) {
-        this.cache.rebuildCallGraph();
-      }
-
-      if (!this.config.clearCacheAfterIndex) {
-        void this.cache.ensureAnnIndex().catch((error) => {
+      if (stoppedEarly) {
+        console.info('[Indexer] Skipping post-index cleanup due graceful stop.');
+      } else {
+        if (this.config.clearCacheAfterIndex) {
+          console.info(
+            '[Indexer] clearCacheAfterIndex enabled; in-memory vectors will be reloaded on next query'
+          );
+          await this.cache.dropInMemoryVectors();
           if (this.config.verbose) {
-            console.warn(`[ANN] Background ANN build failed: ${error.message}`);
+            console.info('[Cache] Cleared in-memory vectors after indexing');
           }
-        });
+        }
+
+        if (this.config.unloadModelAfterIndex) {
+          console.info(
+            '[Indexer] unloadModelAfterIndex enabled; embedding model will be reloaded on next query'
+          );
+          await this.unloadEmbeddingModels();
+        }
+        this.maybeShutdownQueryEmbeddingPool('full index');
+
+        if (this.config.callGraphEnabled) {
+          this.cache.rebuildCallGraph();
+        }
+
+        if (!this.config.clearCacheAfterIndex) {
+          void this.cache.ensureAnnIndex().catch((error) => {
+            if (this.config.verbose) {
+              console.warn(`[ANN] Background ANN build failed: ${error.message}`);
+            }
+          });
+        }
       }
 
       return {
         skipped: false,
-        filesProcessed: filesToProcess.length,
+        filesProcessed: processedFiles,
         chunksCreated: totalChunks,
         totalFiles,
         totalChunks: totalChunksCount,
         duration: totalTime,
-        message: `Indexed ${filesToProcess.length} files (${totalChunks} chunks) in ${totalTime}s`,
+        stoppedEarly,
+        message: stoppedEarly
+          ? `Stopped after ${processedFiles}/${filesToProcess.length} files (${totalChunks} chunks) in ${totalTime}s`
+          : `Indexed ${filesToProcess.length} files (${totalChunks} chunks) in ${totalTime}s`,
       };
     } finally {
       if (memoryTimer) {
@@ -2840,6 +2937,7 @@ export class CodebaseIndexer {
       } catch (error) {
         console.warn(`[Indexer] Failed to apply queued file updates: ${error.message}`);
       }
+      this.notifyIdleWaiters();
     }
   }
 
@@ -2906,6 +3004,7 @@ export class CodebaseIndexer {
       }
     } finally {
       this.processingWatchEvents = false;
+      this.notifyIdleWaiters();
     }
   }
 

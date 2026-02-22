@@ -288,6 +288,10 @@ if (Test-Path 'npm-shrinkwrap.json') { git add npm-shrinkwrap.json }
 git commit -m "$ReleaseType(release): v$newVersion"
 if ($LASTEXITCODE -ne 0) { Fail 'git commit failed.' -Rollback }
 
+Write-Host "[release] Creating git tag v$newVersion..."
+git tag -a "v$newVersion" -m "$ReleaseType(release): v$newVersion"
+if ($LASTEXITCODE -ne 0) { Fail 'git tag failed.' }
+
 Write-Host '[release] Publishing to npm...'
 if ([string]::IsNullOrWhiteSpace($Otp)) {
   npm publish --access public
@@ -302,19 +306,19 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if (-not $NoPush) {
-  Write-Host '[release] Pushing commit to git remote...'
-  git push
+  Write-Host '[release] Pushing commit and tags to git remote...'
+  git push --follow-tags
   if ($LASTEXITCODE -ne 0) {
     Write-Host '[release] ERROR: git push failed. Package was published; push manually.'
     Restore-NpmAuthEnvironment
     Pop-Location
     exit 1
   }
+  Write-Host "[release] SUCCESS: v$newVersion committed, tagged, published, and pushed."
 } else {
   Write-Host '[release] Skipping git push due to -NoPush.'
+  Write-Host "[release] SUCCESS: v$newVersion committed, tagged, and published."
 }
-
-Write-Host "[release] SUCCESS: v$newVersion committed, published, and pushed."
 Restore-NpmAuthEnvironment
 Pop-Location
 exit 0
