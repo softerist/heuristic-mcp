@@ -26,6 +26,7 @@ const lifecycleMock = {
 const configMock = {
   loadConfig: vi.fn(),
   getGlobalCacheDir: vi.fn(),
+  isNonProjectDirectory: vi.fn().mockReturnValue(false),
 };
 const fsMock = {
   access: vi.fn(),
@@ -212,6 +213,8 @@ describe('index.js CLI coverage', () => {
     pipelineMock.mockReset();
     configMock.loadConfig.mockReset();
     configMock.getGlobalCacheDir.mockReset();
+    configMock.isNonProjectDirectory.mockReset();
+    configMock.isNonProjectDirectory.mockReturnValue(false);
     fsMock.access.mockReset();
     fsMock.readFile.mockReset();
     fsMock.rm.mockReset();
