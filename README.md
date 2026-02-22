@@ -319,6 +319,28 @@ The server also attempts this automatically before each tool call when it detect
 
 ---
 
+## Release & CI
+
+Publishing is handled by `publish.sh` (Bash) or `publish.ps1` (PowerShell):
+
+```bash
+./publish.sh          # Interactive: prompts for fix/feat/chore/major
+./publish.sh patch    # Non-interactive: patch bump
+./publish.ps1 -Bump minor -ReleaseType feat
+```
+
+The scripts:
+1. Verify clean git tree and npm auth
+2. Bump version, preflight-check the tarball
+3. Commit, create annotated git tag `v<version>`
+4. Publish to npm, push commit + tag
+
+On tag push, `.github/workflows/release.yml` automatically:
+- Creates a **GitHub Release** with auto-generated release notes
+- Publishes the package to **GitHub Packages** (`npm.pkg.github.com`)
+
+---
+
 ## Troubleshooting
 
 **Server isn't starting**
@@ -380,8 +402,8 @@ node tools/scripts/cache-stats.js --workspace <path>
 
 ---
 
-## Contributing
+## Contributing & Architecture
 
-See `CONTRIBUTING.md` for guidelines.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full module and data-flow reference.
 
 License: MIT

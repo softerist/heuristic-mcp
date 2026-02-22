@@ -9,19 +9,29 @@ heuristic-mcp/
 ├── index.js                    # Main entry point, MCP server setup
 ├── package.json                # Package configuration
 ├── config.jsonc                # Sample configuration
+├── mcp_config.json             # MCP server metadata
 ├── LICENSE                     # MIT License
 ├── README.md                   # Project documentation
-├── ARCHITECTURE.md             # Architecture notes
-├── CONTRIBUTING.md             # Contribution guide
 ├── .gitignore                  # Git ignore rules
+├── .npmignore                  # npm publish ignore rules
+├── publish.sh                  # Release script (Bash)
+├── publish.ps1                 # Release script (PowerShell)
+│
+├── .github/
+│   └── workflows/
+│       └── release.yml         # Auto-create GitHub Release + GitHub Packages on tag push
+│
+├── docs/
+│   └── ARCHITECTURE.md         # This file
 │
 ├── lib/                        # Core libraries
+│   ├── cache-ops.js            # CLI-facing cache clear function
 │   ├── cache-utils.js          # Stale cache detection/cleanup
 │   ├── cache.js                # Embeddings cache management + ANN index
 │   ├── call-graph.js           # Symbol extraction and call graph helpers
 │   ├── cli.js                  # CLI argument parsing helpers
 │   ├── config.js               # Configuration loader and env overrides
-│   ├── constants.js            # Shared constants
+│   ├── constants.js            # Shared constants (env vars, MIME types, patterns)
 │   ├── embed-query-process.js  # Query embedding child-process pool
 │   ├── embedding-process.js    # Child-process embedder runner (isolation)
 │   ├── embedding-worker.js     # Worker-thread embedder runner
@@ -29,45 +39,58 @@ heuristic-mcp/
 │   ├── json-worker.js          # Off-thread JSON parsing
 │   ├── json-writer.js          # Streaming JSON writer
 │   ├── logging.js              # Log file + stderr redirection helpers
+│   ├── memory-logger.js        # RSS/heap memory logging utilities
+│   ├── onnx-backend.js         # Native ONNX runtime detection and configuration
+│   ├── path-utils.js           # Cross-platform path normalization
 │   ├── project-detector.js     # Language/project detection
+│   ├── server-lifecycle.js     # PID files, workspace locks, signal handlers
+│   ├── settings-editor.js      # JSON/JSONC/TOML IDE config file editing
 │   ├── slice-normalize.js      # Vector slicing/normalization helpers
 │   ├── tokenizer.js            # Token estimation and limits
 │   ├── utils.js                # Shared utilities (chunking, similarity)
 │   ├── vector-store-binary.js  # Binary on-disk vector store (mmap-friendly)
-│   └── vector-store-sqlite.js  # SQLite-backed vector store
+│   ├── vector-store-sqlite.js  # SQLite-backed vector store
+│   ├── workspace-cache-key.js  # Deterministic workspace → cache path hashing
+│   └── workspace-env.js        # Workspace path discovery from environment variables
 │
-├── features/                   # Pluggable features
+├── features/                   # Pluggable features (MCP tools + lifecycle)
 │   ├── hybrid-search.js        # Semantic + exact match search
-│   ├── index-codebase.js       # Code indexing feature
+│   ├── index-codebase.js       # Code indexing with checkpointing and graceful stop
 │   ├── clear-cache.js          # Cache management feature
 │   ├── find-similar-code.js    # Similarity search by code snippet
 │   ├── ann-config.js           # ANN configuration tool
 │   ├── package-version.js      # Package registry version lookup
-│   ├── resources.js            # MCP resources listing/reading
+│   ├── resources.js            # MCP resources listing/reading (file URIs)
 │   ├── set-workspace.js        # Runtime workspace switching
-│   ├── lifecycle.js            # CLI lifecycle helpers
-│   └── register.js             # IDE registration logic
+│   ├── lifecycle.js            # CLI lifecycle (--start, --stop, --status, --logs)
+│   └── register.js             # IDE auto-registration logic
 │
-├── scripts/                    # Utility scripts
-│   ├── clear-cache.js          # Cache management utility
+├── scripts/                    # Published runtime scripts (shipped in npm package)
+│   ├── postinstall.js          # Auto-register on install
 │   ├── download-model.js       # Optional model pre-download
-│   └── postinstall.js          # Auto-register on install
+│   ├── mcp-launcher.js         # MCP server launcher entry
+│   └── clear-cache.js          # Cache management utility
 │
-└── tools/                      # Developer-only helpers
-    └── scripts/
-        ├── cache-stats.js      # Cache inspection utility
-        ├── benchmark-search.js # Search/memory benchmarking helper
-        └── manual-search.js    # Manual semantic search helper
+├── tools/                      # Developer-only helpers (not published)
+│   └── scripts/
+│       ├── benchmark-search.js # Search/memory benchmarking
+│       ├── cache-stats.js      # Cache inspection utility
+│       ├── manual-search.js    # Manual semantic search testing
+│       └── stress-primary-mcp.js # MCP server stress testing
+│
+└── test/                       # Vitest test suite (70+ test files)
+    ├── helpers.js              # Shared test fixtures and utilities
+    └── *.test.js               # Unit and integration tests
 ```
 
 ## Module Responsibilities
 
 ### index.js
 
-- MCP server initialization
+- MCP server initialization via `@modelcontextprotocol/sdk`
 - Feature registry and orchestration
 - Tool request routing
-- Global state management (embedder, cache)
+- Global state management (embedder, cache, config)
 
 ### lib/config.js
 
@@ -75,7 +98,7 @@ heuristic-mcp/
 - Provides default configuration values
 - Resolves file paths and cache location
 - Applies `SMART_CODING_*` environment variable overrides
-- Supports namespaced config sections (for example `embedding`, `worker`, `vectorStore`, `memoryCleanup`) with backward-compatible top-level keys
+- Supports namespaced config sections (e.g. `embedding`, `worker`, `vectorStore`, `memoryCleanup`) with backward-compatible top-level keys
 
 ### lib/cache.js
 
@@ -87,10 +110,21 @@ heuristic-mcp/
 - Supports JSON, binary, and SQLite vector store formats
 - Supports memory or disk vector load modes for lower RSS
 
+### lib/cache-ops.js
+
+- Standalone `clearCache()` function used by the CLI (`--clear-cache`)
+- Loads config for a given workspace and removes its cache directory
+
 ### lib/cache-utils.js
 
 - Stale cache detection/cleanup for caches without metadata
 - Uses `progress.json` recency to avoid deleting active indexes
+
+### lib/onnx-backend.js
+
+- Detects native `onnxruntime-node` availability and version compatibility
+- Configures execution providers (CPU), thread counts, and WASM fallback
+- Patches `InferenceSession.create` to inject thread options
 
 ### lib/embedding-process.js
 
@@ -101,6 +135,47 @@ heuristic-mcp/
 
 - Worker-thread embedding path for concurrency
 - Cooperates with worker circuit breaker logic in indexing
+
+### lib/embed-query-process.js
+
+- Dedicated child-process pool for query embedding
+- Ensures search queries don't block or interfere with indexing workers
+
+### lib/server-lifecycle.js
+
+- PID file management (write, read, cleanup on exit)
+- Workspace lock acquisition/release with retry and stale lock removal
+- Signal handler registration (SIGINT, SIGTERM)
+- Cross-instance coordination: stop other running heuristic-mcp servers
+
+### lib/settings-editor.js
+
+- Comment-preserving JSON/JSONC parser and editor
+- TOML section parser and editor
+- Upserts MCP server entries into IDE config files
+- Format-aware: respects existing indentation and newline style
+
+### lib/workspace-cache-key.js
+
+- Generates deterministic MD5-based cache directory names from workspace paths
+- Handles Windows case-insensitive path normalization
+- Supports legacy, drive-letter-compat, and canonical key formats for migration
+
+### lib/workspace-env.js
+
+- Discovers workspace path from environment variables (`CODEX_WORKSPACE`, `WORKSPACE_FOLDER`, etc.)
+- Supports dynamic prefix-based discovery for new IDE integrations
+- Scores and prioritizes candidate env vars by specificity
+
+### lib/path-utils.js
+
+- Cross-platform path normalization (forward slashes, lowercase on Windows)
+- `isPathInside()` containment check for workspace boundary enforcement
+
+### lib/memory-logger.js
+
+- `logMemory()` — logs RSS and heap usage
+- `startMemoryLogger()` — periodic memory logging on an interval
 
 ### lib/ignore-patterns.js
 
@@ -131,9 +206,9 @@ heuristic-mcp/
 
 ### lib/utils.js
 
-- **dotSimilarity()** - Vector similarity calculation
-- **hashContent()** - MD5 hashing for change detection
-- **smartChunk()** - Language-aware code chunking
+- **dotSimilarity()** — Vector similarity calculation
+- **hashContent()** — MD5 hashing for change detection
+- **smartChunk()** — Language-aware code chunking
 
 ### lib/call-graph.js
 
@@ -151,7 +226,8 @@ heuristic-mcp/
 
 - **CodebaseIndexer** class
 - File discovery via glob patterns
-- Incremental indexing
+- Incremental indexing with checkpoint-save support
+- Graceful stop (`requestGracefulStop`) for interruptible indexing
 - Optional file watcher for real-time updates
 - Progress tracking via `progress.json`
 - MCP tool: `b_index_codebase`
@@ -181,8 +257,45 @@ heuristic-mcp/
 
 ### features/package-version.js
 
-- Registry-aware package version lookup
+- Registry-aware package version lookup (npm, PyPI, crates.io, Maven, Go, Gems, NuGet, Packagist, Hex, pub.dev, Homebrew, Conda)
 - MCP tool: `e_check_package_version`
+
+### features/resources.js
+
+- MCP resources protocol implementation
+- Lists workspace files as `file://` URIs with MIME types
+- Reads file content within workspace boundary
+
+### features/lifecycle.js
+
+- CLI entrypoint for `--start`, `--stop`, `--status`, `--logs`, `--clear-cache`, `--version`
+- IDE config discovery: Antigravity, Cursor, VS Code, Windsurf, Warp, Claude Desktop, Codex
+- Server status reporting: PID, workspace, cache stats, indexing progress, binary store telemetry
+- Calls `settings-editor.js` and `server-lifecycle.js` for config editing and process management
+
+### features/register.js
+
+- Auto-registration during `postinstall`
+- Detects installed IDEs and writes/updates their MCP config files
+
+## CI/CD & Release
+
+### publish.sh / publish.ps1
+
+Cross-platform release scripts that:
+1. Prompt for release intent (fix/feat/chore/major/prerelease) or accept CLI args
+2. Verify clean git tree and npm auth
+3. Bump version via `npm version --no-git-tag-version`
+4. Preflight check: validate `npm pack` includes required runtime files
+5. Commit, create annotated git tag `v<version>`
+6. Publish to npm
+7. Push commit + tag (`git push --follow-tags`)
+
+### .github/workflows/release.yml
+
+Triggered on `v*` tag push:
+- **release** job: creates a GitHub Release with auto-generated release notes
+- **publish-github-packages** job: publishes the package to GitHub Packages (`npm.pkg.github.com`)
 
 ## Configuration Flow
 
@@ -198,17 +311,19 @@ heuristic-mcp/
 ```
 User code files
     ↓
-exclude patterns and smart indexing
+exclude patterns and smart indexing (ignore-patterns.js, project-detector.js)
     ↓
-smartChunk() - split into chunks
+smartChunk() — split into chunks (utils.js)
     ↓
-embedder - generate vectors (worker pool, child process, or main thread)
+embedder — generate vectors (worker pool, child process, or main thread)
     ↓
-EmbeddingsCache - store in memory + disk
+EmbeddingsCache — store in memory + disk (cache.js, vector-store-*.js)
     ↓
-ANN index (optional) - build/load from cache
+ANN index (optional) — build/load from cache
     ↓
-memory cleanup policy - optional model/vector release
+checkpoint save — persist progress periodically (index-codebase.js)
+    ↓
+memory cleanup policy — optional model/vector release
 ```
 
 ### Search Flow
@@ -216,17 +331,17 @@ memory cleanup policy - optional model/vector release
 ```
 User query
     ↓
-embedder - query to vector (main thread or query child process)
+embedder — query to vector (main thread or query child process)
     ↓
 ANN candidate search (optional)
     ↓
-dotSimilarity() - score candidates
+dotSimilarity() — score candidates
     ↓
 exact match + recency + call-graph boosts
     ↓
-sort and filter - top N results
+sort and filter — top N results
     ↓
-format output - markdown with code blocks
+format output — markdown with code blocks
 ```
 
 ## Performance Considerations
@@ -238,6 +353,7 @@ format output - markdown with code blocks
 - **File Changes**: Incremental updates via file watcher (if enabled)
 - **Binary/SQLite Store**: Optional on-disk vector/content storage to reduce JS heap usage
 - **Disk Vector Mode**: `vectorStore.vectorStoreLoadMode=disk` streams vectors to lower steady-state RSS
+- **Checkpoint Saves**: Indexing progress is checkpointed to disk so interrupted runs can resume
 
 ### Memory Usage
 
@@ -253,3 +369,5 @@ Approximate memory usage:
 - Reduce `chunkSize` for large codebases
 - Disable `watchFiles` if not needed
 - Use `excludePatterns` aggressively
+- Use `memoryCleanup.unloadModelAfterIndex=true` (default) to free ~500MB-1GB after indexing
+- Use `vectorStore.vectorStoreLoadMode=disk` and `memoryCleanup.clearCacheAfterIndex=true` for minimal RSS
