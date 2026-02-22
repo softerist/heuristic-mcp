@@ -242,7 +242,17 @@ function formatCrashDetail(detail) {
 }
 
 function isBrokenPipeError(detail) {
-  return Boolean(detail && typeof detail === 'object' && detail.code === 'EPIPE');
+  if (!detail) return false;
+  if (typeof detail === 'string') {
+    return /(?:^|[\s:])EPIPE(?:[\s:]|$)|broken pipe/i.test(detail);
+  }
+  if (typeof detail === 'object') {
+    if (detail.code === 'EPIPE') return true;
+    if (typeof detail.message === 'string') {
+      return /(?:^|[\s:])EPIPE(?:[\s:]|$)|broken pipe/i.test(detail.message);
+    }
+  }
+  return false;
 }
 
 function isCrashShutdownReason(reason) {
@@ -1590,8 +1600,6 @@ async function gracefulShutdown(signal) {
     keepAliveTimer = null;
   }
 
-  unregisterStdioShutdownHandlers();
-
   const cleanupTasks = [];
 
   if (indexer && indexer.watcher) {
@@ -1639,6 +1647,8 @@ async function gracefulShutdown(signal) {
 
   await Promise.allSettled(cleanupTasks);
   console.info('[Server] Goodbye!');
+
+  unregisterStdioShutdownHandlers();
   await flushLogsSafely({ close: true, timeoutMs: 1500 });
 
   setTimeout(() => process.exit(exitCode), 100);

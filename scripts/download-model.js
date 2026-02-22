@@ -9,15 +9,11 @@ async function downloadModel() {
     const transformers = await import('@huggingface/transformers');
     const { pipeline, env } = transformers;
 
-    // Force cache directory to global location
     env.cacheDir = globalCacheDir;
 
     console.info(`[Model Setup] Pre-caching model to: ${globalCacheDir}`);
-    // Check if network is available by pinging HF (simple check)
-    // Actually, pipeline() will fail fast if network is down
     console.info(`[Model Setup] Downloading 'jinaai/jina-embeddings-v2-base-code'...`);
 
-    // This will download the model to the cache directory
     await pipeline('feature-extraction', 'jinaai/jina-embeddings-v2-base-code');
 
     console.info(`[Model Setup] ✅ Model cached successfully!`);
@@ -36,7 +32,6 @@ async function downloadModel() {
       '[Model Setup] This is okay! The server will attempt to download it when started.'
     );
     console.warn(`[Model Setup] Error details: ${error.message}`);
-    // Don't fail the install, just warn
   }
 }
 

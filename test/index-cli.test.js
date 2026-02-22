@@ -663,6 +663,36 @@ describe('index.js CLI coverage', () => {
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
+  it('treats uncaught broken-pipe message without code as graceful stdio shutdown', async () => {
+    vi.useFakeTimers();
+    process.argv = ['node', 'index.js', '--workspace', 'C:\\work'];
+    configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
+    configMock.loadConfig.mockResolvedValue(baseConfig);
+    fsMock.access.mockResolvedValue(undefined);
+    pipelineMock.mockResolvedValue(() => ({}));
+
+    const { main } = await import('../index.js');
+    const mainPromise = main();
+    await vi.runAllTimersAsync();
+    await mainPromise;
+
+    listeners.uncaughtException(new Error('EPIPE: broken pipe, write'));
+    await vi.runAllTimersAsync();
+
+    const errorMessages = errorSpy.mock.calls.map((call) => call[0]);
+    const infoMessages = infoSpy.mock.calls.map((call) => call[0]);
+    const hasFatal = errorMessages.some(
+      (message) => typeof message === 'string' && message.includes('Fatal uncaughtException')
+    );
+    const requestedGraceful = infoMessages.some(
+      (message) => typeof message === 'string' && message.includes('Shutdown requested (stdio-epipe)')
+    );
+
+    expect(hasFatal).toBe(false);
+    expect(requestedGraceful).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
   it('requests graceful shutdown on stderr EPIPE transport errors', async () => {
     vi.useFakeTimers();
     process.argv = ['node', 'index.js', '--workspace', 'C:\\work'];
