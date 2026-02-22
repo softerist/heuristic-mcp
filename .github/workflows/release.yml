@@ -41,3 +41,30 @@ jobs:
             [View on npm](https://www.npmjs.com/package/@softerist/heuristic-mcp/v/${{ steps.meta.outputs.version }})
           generate_release_notes: true
           make_latest: true
+
+  publish-github-packages:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@softerist'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish to GitHub Packages
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
