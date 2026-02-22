@@ -1,20 +1,49 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 
 process.env.SMART_CODING_UNLOAD_MODEL_AFTER_SEARCH = 'false';
 
-const workspaceDir = path.join(process.cwd(), 'test', 'fixtures', 'mcp-workspace');
+const EXAMPLE_JS = `export function alpha() {
+  const hint = 'MCP_SEARCH_UNIQUE_TOKEN_12345';
+  return hint;
+}
+
+export function beta() {
+  return 'other content';
+}
+`;
+
+const CONFIG_JSONC = `{
+  "searchDirectory": ".",
+  "enableCache": false,
+  "watchFiles": false,
+  "smartIndexing": false,
+  "annEnabled": false,
+  "preloadEmbeddingModel": false,
+  "callGraphEnabled": false,
+  "chunkSize": 4,
+  "chunkOverlap": 0,
+  "maxResults": 3,
+}
+`;
 
 describe('mcp client search', () => {
   let client;
   let clientTransport;
   let serverTransport;
+  let workspaceDir;
 
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
+
+    workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'heuristic-mcp-search-'));
+    await fs.writeFile(path.join(workspaceDir, 'example.js'), EXAMPLE_JS);
+    await fs.writeFile(path.join(workspaceDir, 'config.jsonc'), CONFIG_JSONC);
 
     [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -55,6 +84,9 @@ describe('mcp client search', () => {
   afterEach(async () => {
     if (client) {
       await client.close();
+    }
+    if (workspaceDir) {
+      await fs.rm(workspaceDir, { recursive: true, force: true }).catch(() => {});
     }
   });
 
