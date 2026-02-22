@@ -633,6 +633,23 @@ describe('index.js CLI coverage', () => {
     expect(warned).toBe(true);
   });
 
+  it('does not register process lifecycle spam logs by default', async () => {
+    vi.useFakeTimers();
+    process.argv = ['node', 'index.js', '--workspace', 'C:\\work'];
+    configMock.getGlobalCacheDir.mockReturnValue('C:\\cache-root');
+    configMock.loadConfig.mockResolvedValue(baseConfig);
+    fsMock.access.mockResolvedValue(undefined);
+    pipelineMock.mockResolvedValue(() => ({}));
+
+    const { main } = await import('../index.js');
+    const mainPromise = main();
+    await vi.runAllTimersAsync();
+    await mainPromise;
+
+    expect(listeners.beforeExit).toBeUndefined();
+    expect(listeners.exit).toBeUndefined();
+  });
+
   it('treats uncaught EPIPE as graceful stdio shutdown', async () => {
     vi.useFakeTimers();
     process.argv = ['node', 'index.js', '--workspace', 'C:\\work'];

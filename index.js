@@ -260,6 +260,11 @@ function isCrashShutdownReason(reason) {
   return normalized.includes('uncaughtexception') || normalized.includes('unhandledrejection');
 }
 
+function shouldLogProcessLifecycle() {
+  const value = String(process.env.HEURISTIC_MCP_PROCESS_LIFECYCLE || '').trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+}
+
 function getShutdownExitCode(reason) {
   const normalized = String(reason || '').trim().toUpperCase();
   if (normalized === 'SIGINT') return 130;
@@ -270,15 +275,20 @@ function getShutdownExitCode(reason) {
 function registerProcessDiagnostics({ isServerMode, requestShutdown, getShutdownReason }) {
   if (!isServerMode) return;
 
-  process.on('beforeExit', (code) => {
-    const reason = getShutdownReason() || 'natural';
-    console.info(`[Server] Process beforeExit (code=${code}, reason=${reason}).`);
-  });
+  if (shouldLogProcessLifecycle()) {
+    let beforeExitLogged = false;
+    process.on('beforeExit', (code) => {
+      if (beforeExitLogged) return;
+      beforeExitLogged = true;
+      const reason = getShutdownReason() || 'natural';
+      console.info(`[Server] Process beforeExit (code=${code}, reason=${reason}).`);
+    });
 
-  process.on('exit', (code) => {
-    const reason = getShutdownReason() || 'natural';
-    console.info(`[Server] Process exit (code=${code}, reason=${reason}).`);
-  });
+    process.on('exit', (code) => {
+      const reason = getShutdownReason() || 'natural';
+      console.info(`[Server] Process exit (code=${code}, reason=${reason}).`);
+    });
+  }
 
   let fatalHandled = false;
   const handleFatalError = (reason, detail) => {
