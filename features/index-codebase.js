@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 import { smartChunk, hashContent } from '../lib/utils.js';
 import { extractCallData } from '../lib/call-graph.js';
 import { forceShutdownEmbeddingPool, isEmbeddingPoolActive } from '../lib/embed-query-process.js';
+import { normalizePathKey } from '../lib/path-utils.js';
 
 import ignore from 'ignore';
 
@@ -29,6 +30,10 @@ function isTestEnv() {
 function normalizePath(value) {
   if (typeof value !== 'string') return '';
   return value.split(path.sep).join('/');
+}
+
+function toFileKey(value) {
+  return normalizePathKey(value);
 }
 
 function globToRegExp(pattern) {
@@ -2149,7 +2154,14 @@ export class CodebaseIndexer {
       if (this.server && this.server.hybridSearch && this.server.hybridSearch.fileModTimes) {
         for (const stat of fileStats) {
           if (stat && stat.file && typeof stat.mtimeMs === 'number') {
-            this.server.hybridSearch.fileModTimes.set(stat.file, stat.mtimeMs);
+            if (typeof this.server.hybridSearch.setFileModTime === 'function') {
+              this.server.hybridSearch.setFileModTime(stat.file, stat.mtimeMs);
+            } else {
+              const key = toFileKey(stat.file);
+              if (key) {
+                this.server.hybridSearch.fileModTimes.set(key, stat.mtimeMs);
+              }
+            }
           }
         }
       }
@@ -2233,7 +2245,16 @@ export class CodebaseIndexer {
 
       this.sendProgress(5, 100, `Discovered ${files.length} files`);
 
-      const currentFilesSet = new Set(files);
+      const currentFileKeySet = new Set();
+      const currentFilePathByKey = new Map();
+      for (const file of files) {
+        const key = toFileKey(file);
+        if (!key) continue;
+        currentFileKeySet.add(key);
+        if (!currentFilePathByKey.has(key)) {
+          currentFilePathByKey.set(key, file);
+        }
+      }
 
       if (!force) {
         const cachedFiles =
@@ -2241,7 +2262,8 @@ export class CodebaseIndexer {
         let prunedCount = 0;
 
         for (const cachedFile of cachedFiles) {
-          if (!currentFilesSet.has(cachedFile)) {
+          const cachedKey = toFileKey(cachedFile);
+          if (!cachedKey || !currentFileKeySet.has(cachedKey)) {
             this.cache.removeFileFromStore(cachedFile);
             this.cache.deleteFileHash(cachedFile);
             prunedCount++;
@@ -2254,26 +2276,48 @@ export class CodebaseIndexer {
           }
         }
 
-        const prunedCallGraph = this.cache.pruneCallGraphData(currentFilesSet);
+        const prunedCallGraph = this.cache.pruneCallGraphData(currentFileKeySet);
         if (prunedCallGraph > 0 && this.config.verbose) {
           console.info(`[Indexer] Pruned ${prunedCallGraph} call-graph entries`);
         }
       }
 
       const filesToProcess = await this.preFilterFiles(files);
-      const filesToProcessSet = new Set(filesToProcess.map((entry) => entry.file));
-      const filesToProcessByFile = new Map(filesToProcess.map((entry) => [entry.file, entry]));
+      const filesToProcessKeys = new Set();
+      const filesToProcessByKey = new Map();
+      for (const entry of filesToProcess) {
+        const key = toFileKey(entry?.file);
+        if (!key) continue;
+        filesToProcessKeys.add(key);
+        if (!filesToProcessByKey.has(key)) {
+          filesToProcessByKey.set(key, entry);
+        }
+      }
 
       if (this.config.callGraphEnabled && this.cache.getVectorStore().length > 0) {
-        const cachedFiles = new Set(this.cache.getVectorStore().map((c) => c.file));
-        const callDataFiles = new Set(this.cache.getFileCallDataKeys());
+        const cachedFileKeys = new Set();
+        for (const chunk of this.cache.getVectorStore()) {
+          const key = toFileKey(chunk?.file);
+          if (key) cachedFileKeys.add(key);
+        }
+        const callDataFiles = new Set();
+        for (const file of this.cache.getFileCallDataKeys()) {
+          const key = toFileKey(file);
+          if (key) callDataFiles.add(key);
+        }
 
         const missingCallData = [];
-        for (const file of cachedFiles) {
-          if (!callDataFiles.has(file) && currentFilesSet.has(file)) {
-            missingCallData.push(file);
-            const existing = filesToProcessByFile.get(file);
-            if (existing) existing.force = true;
+        for (const key of cachedFileKeys) {
+          if (!callDataFiles.has(key) && currentFileKeySet.has(key)) {
+            const existing = filesToProcessByKey.get(key);
+            if (existing) {
+              existing.force = true;
+              continue;
+            }
+            const concretePath = currentFilePathByKey.get(key);
+            if (concretePath) {
+              missingCallData.push({ key, file: concretePath });
+            }
           }
         }
 
@@ -2285,7 +2329,7 @@ export class CodebaseIndexer {
           for (let i = 0; i < missingCallData.length; i += BATCH_SIZE) {
             const batch = missingCallData.slice(i, i + BATCH_SIZE);
             const results = await Promise.all(
-              batch.map(async (file) => {
+              batch.map(async ({ file }) => {
                 try {
                   const stats = await fs.stat(file);
                   if (!stats || typeof stats.isDirectory !== 'function') {
@@ -2304,9 +2348,15 @@ export class CodebaseIndexer {
 
             for (const result of results) {
               if (!result) continue;
-              if (!filesToProcessSet.has(result.file)) {
+              const key = toFileKey(result.file);
+              if (!key) continue;
+              if (!filesToProcessKeys.has(key)) {
                 filesToProcess.push(result);
-                filesToProcessSet.add(result.file);
+                filesToProcessKeys.add(key);
+                filesToProcessByKey.set(key, result);
+              } else {
+                const existing = filesToProcessByKey.get(key);
+                if (existing) existing.force = existing.force || result.force === true;
               }
             }
           }

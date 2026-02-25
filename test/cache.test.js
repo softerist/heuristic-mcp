@@ -4,6 +4,13 @@ import path from 'path';
 import os from 'os';
 import { EmbeddingsCache } from '../lib/cache.js';
 import { loadConfig } from '../lib/config.js';
+import { normalizePathKey } from '../lib/path-utils.js';
+
+const ORIGINAL_PLATFORM = process.platform;
+
+function setPlatform(value) {
+  Object.defineProperty(process, 'platform', { value });
+}
 
 let lastHnswInstance = null;
 class FakeHnsw {
@@ -76,6 +83,7 @@ describe('EmbeddingsCache', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    setPlatform(ORIGINAL_PLATFORM);
   });
 
   it('should cover all lines', async () => {
@@ -170,7 +178,11 @@ describe('EmbeddingsCache', () => {
 
       const hashFile = path.join(dir, 'file-hashes.json');
       const raw = JSON.parse(await fs.readFile(hashFile, 'utf-8'));
-      expect(raw[filePath]).toEqual({ hash: 'hash-meta', mtimeMs: 1234, size: 4567 });
+      expect(raw[normalizePathKey(filePath)]).toEqual({
+        hash: 'hash-meta',
+        mtimeMs: 1234,
+        size: 4567,
+      });
 
       const reloaded = new EmbeddingsCache(config);
       await reloaded.load();
@@ -696,6 +708,105 @@ describe('EmbeddingsCache', () => {
         expect.stringContaining('Failed to remove call-graph cache')
       );
       rmSpy.mockRestore();
+
+      await cache.close();
+    });
+  });
+
+  it('normalizes file hash and call-data keys on Windows path variants', async () => {
+    await withTempDir(async (dir) => {
+      setPlatform('win32');
+      const config = await createConfig(dir);
+      const cache = new EmbeddingsCache(config);
+
+      const fileUpper = 'F:\\Git\\Repo\\src\\A.js';
+      const fileLower = 'f:/git/repo/src/a.js';
+
+      cache.setFileHash(fileUpper, 'hash-a', { mtimeMs: 100, size: 10 });
+      expect(cache.getFileHash(fileLower)).toBe('hash-a');
+
+      cache.setFileCallData(fileUpper, { defs: ['A'], calls: [] });
+      expect(cache.hasFileCallData(fileLower)).toBe(true);
+
+      cache.vectorStore = [
+        { file: fileUpper, vector: [1, 0], _index: 0 },
+        { file: 'F:\\Git\\Repo\\src\\B.js', vector: [0, 1], _index: 1 },
+      ];
+
+      await cache.removeFileFromStore(fileLower);
+
+      expect(cache.getVectorStore()).toHaveLength(1);
+      expect(cache.getVectorStore()[0].file).toContain('B.js');
+      expect(cache.getFileHash(fileUpper)).toBeUndefined();
+      expect(cache.getFileCallData(fileUpper)).toBeUndefined();
+
+      await cache.close();
+    });
+  });
+
+  it('migrates duplicate case-variant hash and call-graph keys on load', async () => {
+    await withTempDir(async (dir) => {
+      setPlatform('win32');
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const config = await createConfig(dir);
+      config.verbose = true;
+      const cache = new EmbeddingsCache(config);
+
+      const fileUpper = 'F:\\Git\\Repo\\src\\A.js';
+      const fileLower = 'f:/git/repo/src/a.js';
+      const canonical = normalizePathKey(fileUpper);
+
+      const meta = { version: 1, embeddingModel: config.embeddingModel };
+      const cacheData = [{ file: fileUpper, vector: [1, 2] }];
+      const hashData = {
+        [fileUpper]: { hash: 'older', mtimeMs: 100, size: 10 },
+        [fileLower]: { hash: 'newer', mtimeMs: 100, size: 50 },
+      };
+      const callGraphData = {
+        [fileUpper]: { defs: ['old'], calls: [] },
+        [fileLower]: { defs: ['new'], calls: [] },
+      };
+
+      await fs.writeFile(path.join(dir, 'meta.json'), JSON.stringify(meta));
+      await fs.writeFile(path.join(dir, 'embeddings.json'), JSON.stringify(cacheData));
+      await fs.writeFile(path.join(dir, 'file-hashes.json'), JSON.stringify(hashData));
+      await fs.writeFile(path.join(dir, 'call-graph.json'), JSON.stringify(callGraphData));
+
+      await cache.load();
+
+      expect(cache.getFileHash(fileUpper)).toBe('newer');
+      expect(cache.getFileHashKeys()).toEqual([canonical]);
+      expect(cache.getFileCallData(fileUpper)).toEqual({ defs: ['new'], calls: [] });
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Normalized path-key aliases on load')
+      );
+
+      await cache.save();
+      const savedHashes = JSON.parse(await fs.readFile(path.join(dir, 'file-hashes.json'), 'utf-8'));
+      const savedCallGraph = JSON.parse(
+        await fs.readFile(path.join(dir, 'call-graph.json'), 'utf-8')
+      );
+      expect(Object.keys(savedHashes)).toEqual([canonical]);
+      expect(Object.keys(savedCallGraph)).toEqual([canonical]);
+
+      infoSpy.mockRestore();
+      await cache.close();
+    });
+  });
+
+  it('keeps Linux file identity case-sensitive', async () => {
+    await withTempDir(async (dir) => {
+      setPlatform('linux');
+      const config = await createConfig(dir);
+      const cache = new EmbeddingsCache(config);
+
+      cache.setFileHash('/tmp/Repo/Foo.js', 'hash-foo');
+      cache.setFileCallData('/tmp/Repo/Foo.js', { defs: [], calls: [] });
+
+      expect(cache.getFileHash('/tmp/Repo/Foo.js')).toBe('hash-foo');
+      expect(cache.getFileHash('/tmp/repo/foo.js')).toBeUndefined();
+      expect(cache.hasFileCallData('/tmp/Repo/Foo.js')).toBe(true);
+      expect(cache.hasFileCallData('/tmp/repo/foo.js')).toBe(false);
 
       await cache.close();
     });

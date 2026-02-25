@@ -2,6 +2,13 @@ import { describe, it, expect, afterAll, afterEach, vi } from 'vitest';
 import { createTestFixtures, cleanupFixtures, waitFor } from './helpers.js';
 import fs from 'fs/promises';
 import path from 'path';
+import { normalizePathKey } from '../lib/path-utils.js';
+
+const ORIGINAL_PLATFORM = process.platform;
+
+function setPlatform(value) {
+  Object.defineProperty(process, 'platform', { value });
+}
 
 describe('Reindex false-positive prevention', () => {
   let fixtures;
@@ -12,6 +19,7 @@ describe('Reindex false-positive prevention', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    setPlatform(ORIGINAL_PLATFORM);
   });
 
   it('returns 0 changed files when revisiting a fully-indexed workspace', async () => {
@@ -29,6 +37,37 @@ describe('Reindex false-positive prevention', () => {
     expect(preFilterSpy).toHaveBeenCalled();
     const filesToProcess = await preFilterSpy.mock.results[0].value;
     expect(filesToProcess).toHaveLength(0);
+  });
+
+  it('keeps incremental detection stable across Windows-style path case variants', async () => {
+    fixtures = await createTestFixtures({ workerThreads: 0 });
+    fixtures.config.verbose = true;
+
+    await fixtures.indexer.indexAll();
+    const discovered = await fixtures.indexer.discoverFiles();
+    const canonicalToReal = new Map(discovered.map((file) => [normalizePathKey(file), file]));
+    const caseVariantFiles = discovered.map((file) => {
+      const segments = file.split(path.sep);
+      return segments.map((segment) => segment.toUpperCase()).join(path.sep);
+    });
+
+    setPlatform('win32');
+    const realStat = fs.stat.bind(fs);
+    const statSpy = vi.spyOn(fs, 'stat').mockImplementation(async (filePath) => {
+      const resolved = canonicalToReal.get(normalizePathKey(String(filePath))) ?? filePath;
+      return realStat(resolved);
+    });
+    vi.spyOn(fixtures.indexer, 'discoverFiles').mockResolvedValue(caseVariantFiles);
+    const preFilterSpy = vi.spyOn(fixtures.indexer, 'preFilterFiles');
+
+    const result = await fixtures.indexer.indexAll();
+
+    expect(preFilterSpy).toHaveBeenCalled();
+    const filesToProcess = await preFilterSpy.mock.results[0].value;
+    expect(filesToProcess).toHaveLength(0);
+    expect(result.filesProcessed).toBe(0);
+
+    statSpy.mockRestore();
   });
 
   it('detects newly added files after full index', async () => {
@@ -58,7 +97,7 @@ describe('Reindex false-positive prevention', () => {
     const allFiles = await fixtures.indexer.discoverFiles();
 
     const fileToForget = allFiles[0];
-    fixtures.cache.fileHashes.delete(fileToForget);
+    fixtures.cache.deleteFileHash(fileToForget);
 
     const preFilterSpy = vi.spyOn(fixtures.indexer, 'preFilterFiles');
     await fixtures.indexer.indexAll();

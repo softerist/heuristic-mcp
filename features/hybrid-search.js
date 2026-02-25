@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import { dotSimilarity } from '../lib/utils.js';
 import { extractSymbolsFromContent } from '../lib/call-graph.js';
 import { embedQueryInChildProcess } from '../lib/embed-query-process.js';
+import { normalizePathKey } from '../lib/path-utils.js';
 import {
   STAT_CONCURRENCY_LIMIT,
   SEARCH_BATCH_SIZE,
@@ -27,6 +28,10 @@ function alignQueryVectorDimension(vector, targetDim) {
   return sliced;
 }
 
+function toFileKey(file) {
+  return normalizePathKey(file);
+}
+
 export class HybridSearch {
   constructor(embedder, cache, config) {
     this.embedder = embedder;
@@ -34,6 +39,13 @@ export class HybridSearch {
     this.config = config;
     this.fileModTimes = new Map();
     this._lastAccess = new Map();
+  }
+
+  setFileModTime(file, mtimeMs) {
+    const key = toFileKey(file);
+    if (!key) return;
+    this.fileModTimes.set(key, mtimeMs);
+    this._lastAccess.set(key, Date.now());
   }
 
   async getChunkContent(chunkOrIndex) {
@@ -54,20 +66,28 @@ export class HybridSearch {
   }
 
   async populateFileModTimes(files) {
-    const uniqueFiles = new Set(files);
+    const uniqueFilesByKey = new Map();
+    for (const file of files) {
+      const key = toFileKey(file);
+      if (!key) continue;
+      if (!uniqueFilesByKey.has(key)) {
+        uniqueFilesByKey.set(key, file);
+      }
+    }
     const missing = [];
+    const now = Date.now();
 
-    for (const file of uniqueFiles) {
-      if (!this.fileModTimes.has(file)) {
+    for (const [key, file] of uniqueFilesByKey) {
+      if (!this.fileModTimes.has(key)) {
         const meta = this.cache.getFileMeta(file);
         if (meta && typeof meta.mtimeMs === 'number') {
-          this.fileModTimes.set(file, meta.mtimeMs);
-          this._lastAccess.set(file, Date.now());
+          this.fileModTimes.set(key, meta.mtimeMs);
+          this._lastAccess.set(key, now);
         } else {
-          missing.push(file);
+          missing.push({ key, file });
         }
       } else {
-        this._lastAccess.set(file, Date.now());
+        this._lastAccess.set(key, now);
       }
     }
 
@@ -79,13 +99,15 @@ export class HybridSearch {
 
     const worker = async (startIdx) => {
       for (let i = startIdx; i < missing.length; i += workerCount) {
-        const file = missing[i];
+        const item = missing[i];
+        if (!item) continue;
+        const { key, file } = item;
         try {
           const stats = await fs.stat(file);
-          this.fileModTimes.set(file, stats.mtimeMs);
-          this._lastAccess.set(file, Date.now());
+          this.fileModTimes.set(key, stats.mtimeMs);
+          this._lastAccess.set(key, Date.now());
         } catch {
-          this.fileModTimes.set(file, null);
+          this.fileModTimes.set(key, null);
         }
       }
     };
@@ -109,7 +131,10 @@ export class HybridSearch {
   }
 
   clearFileModTime(file) {
-    this.fileModTimes.delete(file);
+    const key = toFileKey(file);
+    if (!key) return;
+    this.fileModTimes.delete(key);
+    this._lastAccess.delete(key);
   }
 
   async search(query, maxResults) {
@@ -259,11 +284,11 @@ export class HybridSearch {
           await this.populateFileModTimes(candidates.map((chunk) => chunk.file));
         } else {
           for (const chunk of candidates) {
-            if (!this.fileModTimes.has(chunk.file)) {
-              const meta = this.cache.getFileMeta(chunk.file);
-              if (meta && typeof meta.mtimeMs === 'number') {
-                this.fileModTimes.set(chunk.file, meta.mtimeMs);
-              }
+            const chunkKey = toFileKey(chunk.file);
+            if (!chunkKey || this.fileModTimes.has(chunkKey)) continue;
+            const meta = this.cache.getFileMeta(chunk.file);
+            if (meta && typeof meta.mtimeMs === 'number') {
+              this.setFileModTime(chunk.file, meta.mtimeMs);
             }
           }
         }
@@ -323,7 +348,8 @@ export class HybridSearch {
           }
 
           if (recencyBoostEnabled) {
-            const mtime = this.fileModTimes.get(chunkInfo.file);
+            const chunkKey = toFileKey(chunkInfo.file);
+            const mtime = chunkKey ? this.fileModTimes.get(chunkKey) : undefined;
             if (typeof mtime === 'number') {
               const ageMs = now - mtime;
               const recencyFactor = Math.max(0, 1 - ageMs / recencyDecayMs);
@@ -380,7 +406,9 @@ export class HybridSearch {
           const relatedFiles = await this.cache.getRelatedFiles(Array.from(symbolsFromTop));
 
           for (const chunk of scoredChunks) {
-            const proximity = relatedFiles.get(chunk.file);
+            const chunkKey = toFileKey(chunk.file);
+            const proximity =
+              relatedFiles.get(chunk.file) ?? (chunkKey ? relatedFiles.get(chunkKey) : undefined);
             if (proximity) {
               chunk.score += proximity * this.config.callGraphBoost;
             }
